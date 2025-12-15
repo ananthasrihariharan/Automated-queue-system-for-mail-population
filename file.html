@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    </head>
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const dropZone = document.getElementById('dropZone');
+            const fileInput = document.getElementById('fileInput');
+            const fileCountText = document.getElementById('fileCountText');
+            const uploadBtn = document.getElementById('uploadBtn');
+            const maxFiles = 3;
+            let selectedFiles = [];
+
+            const updateFileCount = () => {
+                fileCountText.textContent = `${selectedFiles.length} / ${maxFiles} files selected`;
+                uploadBtn.disabled = selectedFiles.length < maxFiles ;
+            };
+
+            const handleFiles = (files) => {
+                for (let i = 0; i < files.length; i++) {
+                    if (selectedFiles.length < maxFiles) {
+                        selectedFiles.push(files[i]);
+                    } else {
+                        alert(`You can only select up to ${maxFiles} files.`);
+                        break;
+                    }
+                }
+                updateFileCount();
+            };
+
+            dropZone.addEventListener('click', () => {
+                fileInput.click();
+            });
+
+            dropZone.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                dropZone.classList.add('dragover');
+            });
+
+            dropZone.addEventListener('dragleave', () => {
+                dropZone.classList.remove('dragover');
+            });
+
+            dropZone.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropZone.classList.remove('dragover');
+                handleFiles(e.dataTransfer.files);
+            });
+
+            fileInput.addEventListener('change', (e) => {
+                handleFiles(e.target.files);
+                fileInput.value = ''; // Clear the input
+            });
+
+            uploadBtn.addEventListener('click', () => {
+                alert(`Uploading ${selectedFiles.length} files...`);
+                // Implement actual upload logic here
+            });
+
+            updateFileCount();
+        });
+</script>
+    <style>
+        #dropZone {
+            width: 300px;
+            height: 150px;
+            border: 2px dashed #ccc;
+            border-radius: 10px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            cursor: pointer;
+            margin-bottom: 10px;
+        }
+        #dropZone.dragover {
+            border-color: #000;
+            background-color: #f0f0f0;
+        }
+        #uploadBtn {
+            padding: 10px 20px;
+            font-size: 16px;
+        }
+    </style>
+<body>
+    <div id="dropZone">
+  Drag & Drop files here or click to select
+</div>
+
+<input type="file" id="fileInput" multiple hidden />
+
+<p id="fileCountText">0 / 3 files selected</p>
+<button id="uploadBtn" disabled>Upload</button>
+
+</body>
+</html>
