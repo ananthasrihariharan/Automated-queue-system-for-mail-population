@@ -18,6 +18,12 @@ const submit = async () => {
   if (res.data.user.role === 'CASHIER') {
     navigate('/cashier')
   }
+  if (res.data.user.role === 'DISPATCH') {
+  navigate('/dispatch')
+}
+if (res.data.user.role === 'PREPRESS') {
+  navigate('/prepress')
+}
 }
 
 
@@ -32,6 +38,7 @@ const submit = async () => {
           onChange={(e) => setPhone(e.target.value)}
         />
         <button
+        type="button"
           className="bg-black text-white w-full p-2"
           onClick={submit}
         >

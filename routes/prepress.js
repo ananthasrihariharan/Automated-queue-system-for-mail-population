@@ -5,65 +5,111 @@ const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 
 const Job = require('../models/Job')
-const User = require('../models/User')
 
 /**
- * CREATE JOB (PREPRESS)
+ * GET PREPRESS JOBS (LAST 30 DAYS)
+ * Role: PREPRESS
  */
-router.post(
+router.get(
   '/jobs',
   auth,
   authorize('PREPRESS'),
   async (req, res) => {
     try {
-      const {
-        jobId,
-        customerId,
-        totalItems,
-        itemScreenshots = []
-      } = req.body
+      const last30Days = new Date(
+        Date.now() - 30 * 24 * 60 * 60 * 1000
+      )
 
-      // basic validation
-      if (!jobId || !customerId || !totalItems) {
+      const jobs = await Job.find(
+        {
+          createdBy: req.user._id,          // 🔒 ownership filter
+          createdAt: { $gte: last30Days }
+        },
+        {
+          _id: 0,
+          jobId: 1,
+          customerName: 1,
+          totalItems: 1,
+          itemScreenshots: 1,
+          packingPreference: 1,
+          paymentStatus: 1,
+          createdAt: 1
+        }
+      ).sort({ createdAt: -1 })
+
+
+      res.json(jobs)
+    } catch (err) {
+      res.status(500).json({ message: 'Server error' })
+    }
+  }
+)
+
+/**
+ * CREATE JOB
+ * Role: PREPRESS
+ */
+const upload = require('../middleware/upload')
+
+const fs = require('fs')
+const path = require('path')
+
+router.post(
+  '/jobs',
+  auth,
+  authorize('PREPRESS'),
+  upload.array('screenshots'),
+  async (req, res) => {
+    try {
+      const { jobId, customerName, totalItems } = req.body
+      const files = req.files || []
+
+      console.log('Received Job Creation Request:', { body: req.body, filesCount: files.length });
+
+      if (!jobId || !customerName || !totalItems) {
+        console.log('Missing fields validation failed');
+        return res.status(400).json({ message: 'Missing fields' })
+      }
+
+      if (files.length !== Number(totalItems)) {
         return res.status(400).json({
-          message: 'jobId, customerId and totalItems are required'
+          message: `Upload exactly ${totalItems} screenshots`
         })
       }
 
-      // check duplicate job
-      const existingJob = await Job.findOne({ jobId })
-      if (existingJob) {
-        return res.status(409).json({
-          message: 'Job ID already exists'
-        })
+      const exists = await Job.findOne({ jobId })
+      if (exists) {
+        return res.status(400).json({ message: 'Job ID already exists' })
       }
 
-      // validate customer
-      const customer = await User.findById(customerId)
-      if (!customer || customer.role !== 'CUSTOMER') {
-        return res.status(400).json({
-          message: 'Invalid customer'
-        })
+      // ✅ Now move files into job-specific folder
+      const jobDir = `uploads/jobs/${jobId}`
+      if (!fs.existsSync(jobDir)) {
+        fs.mkdirSync(jobDir, { recursive: true })
       }
 
-      // create job
+      const imagePaths = []
+
+      files.forEach((file) => {
+        const newPath = path.join(jobDir, path.basename(file.path))
+        fs.renameSync(file.path, newPath)
+        imagePaths.push(newPath)
+      })
+
       const job = await Job.create({
         jobId,
-        customerId,
-        customerName: customer.name,
-        totalItems,
-        itemScreenshots,
+        customerName,
+        totalItems: Number(totalItems),
+        itemScreenshots: imagePaths,
+        packingPreference: req.body.packingPreference,
+        paymentStatus: 'UNPAID',
         createdBy: req.user._id
       })
 
-      return res.status(201).json({
-        message: 'Job created successfully',
-        job
-      })
-
+      res.status(201).json(job)
     } catch (err) {
-      console.error(err)
-      return res.status(500).json({ message: 'Server error' })
+      console.error('CREATE JOB ERROR:', err)
+      res.status(500).json({ message: err.message })
     }
   }
 )

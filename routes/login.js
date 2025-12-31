@@ -8,6 +8,7 @@ const User = require('../models/User')
  * Description: Authenticate user using phone number and return JWT token
  * Access: Public
  */
+
 router.post('/', async (req, res) => {
   try {
     const { phone } = req.body
@@ -47,6 +48,7 @@ router.post('/', async (req, res) => {
         role: user.role
       }
     })
+    res.cookie('token', token)
   } catch (error) {
     console.error('Login error:', error)
     return res.status(500).json({
@@ -54,5 +56,6 @@ router.post('/', async (req, res) => {
     })
   }
 })
+
 
 module.exports = router
