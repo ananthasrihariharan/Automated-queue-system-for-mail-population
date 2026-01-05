@@ -4,8 +4,9 @@ const connectDB = async () => {
     try {
         console.log("Attempting to connect to MongoDB at:", process.env.MONGO_URI);
         await mongoose.connect(process.env.MONGO_URI, {
-            serverSelectionTimeoutMS: 5000 // Timeout after 5s if DB not found
+            serverSelectionTimeoutMS: 5000
         })
+        console.log("Mongoose connect call returned");
         console.log("MongoDB connected successfully")
     } catch (error) {
         console.error("MONGO DB connection error:", error.message);

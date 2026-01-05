@@ -2,17 +2,17 @@ import { useState } from 'react'
 
 export function useAuth() {
   const [user, setUser] = useState(
-    JSON.parse(sessionStorage.getItem('user') || 'null')
+    JSON.parse(localStorage.getItem('user') || 'null')
   )
 
   const login = (token: string, userData: any) => {
-    sessionStorage.setItem('token', token)
-    sessionStorage.setItem('user', JSON.stringify(userData))
+    localStorage.setItem('token', token)
+    localStorage.setItem('user', JSON.stringify(userData))
     setUser(userData)
   }
 
   const logout = () => {
-    sessionStorage.clear()
+    localStorage.clear()
     setUser(null)
   }
 

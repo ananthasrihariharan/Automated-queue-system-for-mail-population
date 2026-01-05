@@ -1,0 +1,202 @@
+/* ===== Page Layout ===== */
+.create-job-page {
+    min-height: 100vh;
+    background: #f8fafc;
+    padding: 1.5rem;
+}
+
+@media (min-width: 640px) {
+    .create-job-page {
+        padding: 3rem;
+    }
+}
+
+.create-job-container {
+    max-width: 64rem;
+    margin: 0 auto;
+}
+
+/* ===== Header ===== */
+.create-job-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.header-icon {
+    background: #0f172a;
+    padding: 0.75rem;
+    border-radius: 1rem;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.15);
+}
+
+.header-title h1 {
+    font-size: 1.5rem;
+    font-weight: 900;
+    text-transform: uppercase;
+    letter-spacing: -0.06em;
+}
+
+.header-title span {
+    font-size: 10px;
+    letter-spacing: 0.3em;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+/* ===== Card ===== */
+.create-job-card {
+    background: #ffffff;
+    border-radius: 3rem;
+    border: 1px solid #f1f5f9;
+    box-shadow: 0 40px 100px rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+.create-job-form {
+    padding: 3rem;
+}
+
+/* ===== Form Grid ===== */
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+}
+
+@media (min-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
+/* ===== Inputs ===== */
+.form-group label {
+    display: block;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.3em;
+    color: #94a3b8;
+    margin-bottom: 0.5rem;
+    text-transform: uppercase;
+}
+
+.form-input {
+    width: 100%;
+    padding: 1rem;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    background: #f8fafc;
+    font-weight: 700;
+    color: #0f172a;
+    transition: all 0.2s ease;
+}
+
+.form-input:focus {
+    outline: none;
+    background: #ffffff;
+    border-color: #0f172a;
+    box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.05);
+}
+
+.form-input.big {
+    font-size: 1.5rem;
+    font-weight: 900;
+}
+
+/* ===== File Upload ===== */
+.file-drop {
+    border: 2px dashed #cbd5f5;
+    border-radius: 2.5rem;
+    padding: 3rem;
+    height: 100%;
+    min-height: 400px;
+    background: rgba(248, 250, 252, 0.6);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.file-drop:focus {
+    outline: none;
+    border-color: #0f172a;
+    background: #f1f5f9;
+    box-shadow: 0 0 0 4px rgba(15, 23, 42, 0.05);
+}
+
+.file-preview {
+    margin-top: 1.5rem;
+}
+
+.file-count {
+    font-size: 12px;
+    font-weight: 900;
+}
+
+.file-count.ok {
+    color: #059669;
+}
+
+.file-count.warn {
+    color: #d97706;
+}
+
+.file-tags {
+    display: flex;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+    max-height: 8rem;
+    overflow-y: auto;
+}
+
+.file-tag {
+    background: #0f172a;
+    color: #ffffff;
+    font-size: 9px;
+    font-weight: 900;
+    padding: 0.4rem 0.75rem;
+    border-radius: 999px;
+}
+
+/* ===== Submit ===== */
+.submit-section {
+    margin-top: 2rem;
+    padding-top: 2rem;
+    border-top: 1px solid #f1f5f9;
+}
+
+.submit-btn {
+    width: 100%;
+    padding: 1.25rem;
+    background: #0f172a;
+    color: #ffffff;
+    border-radius: 1.25rem;
+    font-size: 10px;
+    font-weight: 900;
+    letter-spacing: 0.2em;
+    text-transform: uppercase;
+    box-shadow: 0 10px 25px rgba(15, 23, 42, 0.2);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border: none;
+}
+
+.submit-btn:hover {
+    transform: translateY(-2px);
+}
+
+.submit-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}

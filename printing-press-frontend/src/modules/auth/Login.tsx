@@ -11,20 +11,24 @@ export default function Login() {
 
   const navigate = useNavigate()
 
-const submit = async () => {
-  const res = await api.post(endpoints.login, { phone })
-  login(res.data.token, res.data.user)
+  const submit = async () => {
+    const res = await api.post(endpoints.login, { phone })
+    login(res.data.token, res.data.user)
 
-  if (res.data.user.role === 'CASHIER') {
-    navigate('/cashier')
+    const userRoles = res.data.user.roles || []
+
+    if (userRoles.includes('ADMIN')) {
+      navigate('/admin')
+    } else if (userRoles.includes('PREPRESS')) {
+      navigate('/prepress')
+    } else if (userRoles.includes('CASHIER')) {
+      navigate('/cashier')
+    } else if (userRoles.includes('DISPATCH')) {
+      navigate('/dispatch')
+    } else {
+      navigate('/')
+    }
   }
-  if (res.data.user.role === 'DISPATCH') {
-  navigate('/dispatch')
-}
-if (res.data.user.role === 'PREPRESS') {
-  navigate('/prepress')
-}
-}
 
 
   return (
@@ -38,7 +42,7 @@ if (res.data.user.role === 'PREPRESS') {
           onChange={(e) => setPhone(e.target.value)}
         />
         <button
-        type="button"
+          type="button"
           className="bg-black text-white w-full p-2"
           onClick={submit}
         >

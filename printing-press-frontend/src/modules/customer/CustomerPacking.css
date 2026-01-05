@@ -1,0 +1,234 @@
+/* =========================
+   PAGE LAYOUT
+========================= */
+.packing-page {
+    padding: 1.5rem;
+    background: #ffffff;
+    min-height: 100vh;
+}
+
+.packing-container {
+    max-width: 64rem;
+    margin: 0 auto;
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 2rem;
+}
+
+@media (min-width: 1024px) {
+    .packing-container {
+        grid-template-columns: 1.2fr 0.8fr;
+    }
+}
+
+/* =========================
+   HEADER
+========================= */
+.packing-header {
+    margin-bottom: 2rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #6b7280;
+    text-decoration: none;
+    margin-bottom: 1rem;
+    cursor: pointer;
+}
+
+.back-link:hover {
+    color: #000000;
+}
+
+/* =========================
+   SECTIONS
+========================= */
+.packing-section {
+    background: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.section-title {
+    font-size: 0.75rem;
+    font-weight: 700;
+    color: #6b7280;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 1rem;
+    display: block;
+}
+
+/* =========================
+   STRATEGY SELECT
+========================= */
+.strategy-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.strategy-card {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    text-align: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    background: #ffffff;
+}
+
+.strategy-card.active {
+    border-color: #000000;
+    background: #f9fafb;
+}
+
+.strategy-card-title {
+    display: block;
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #000000;
+}
+
+/* =========================
+   ITEM GRID
+========================= */
+.item-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
+    gap: 0.75rem;
+}
+
+.item-node {
+    aspect-ratio: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.375rem;
+    background: #ffffff;
+    font-weight: 700;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.item-node.selected {
+    background: #000000;
+    color: #ffffff;
+    border-color: #000000;
+}
+
+.item-node.assigned {
+    background: #f3f4f6;
+    color: #9ca3af;
+    cursor: not-allowed;
+}
+
+/* =========================
+   RECEIVER FORM
+========================= */
+.receiver-form {
+    margin-top: 1.5rem;
+}
+
+.form-input-group {
+    margin-bottom: 1rem;
+}
+
+.form-label {
+    display: block;
+    font-size: 0.75rem;
+    font-weight: 600;
+    color: #6b7280;
+    margin-bottom: 0.5rem;
+}
+
+.form-input {
+    width: 100%;
+    padding: 0.5rem 0.75rem;
+    border: 1px solid #d1d5db;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    outline: none;
+}
+
+.form-input:focus {
+    border-color: #000000;
+}
+
+/* =========================
+   PARCEL CARDS
+========================= */
+.parcel-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.parcel-item {
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.parcel-info h5 {
+    font-size: 0.875rem;
+    font-weight: 700;
+    margin-bottom: 0.25rem;
+}
+
+.parcel-info p {
+    font-size: 0.75rem;
+    color: #6b7280;
+}
+
+/* =========================
+   BUTTONS
+========================= */
+.btn-primary {
+    background: #000000;
+    color: #ffffff;
+    padding: 0.75rem 1.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.875rem;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+    transition: background 0.2s ease;
+    width: 100%;
+}
+
+.btn-primary:hover {
+    background: #1f2937;
+}
+
+.btn-primary:disabled {
+    background: #e5e7eb;
+    cursor: not-allowed;
+}
+
+.btn-danger-outline {
+    background: none;
+    border: 1px solid #fee2e2;
+    color: #ef4444;
+    padding: 0.25rem 0.5rem;
+    border-radius: 0.375rem;
+    font-size: 0.75rem;
+    cursor: pointer;
+}
+
+.btn-danger-outline:hover {
+    background: #fef2f2;
+}

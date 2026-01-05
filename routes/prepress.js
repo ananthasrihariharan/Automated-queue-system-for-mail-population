@@ -5,6 +5,8 @@ const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 
 const Job = require('../models/Job')
+const Customer = require('../models/Customer')
+const { generateInitialPassword } = require('../utils/password')
 
 /**
  * GET PREPRESS JOBS (LAST 30 DAYS)
@@ -46,6 +48,24 @@ router.get(
 )
 
 /**
+ * GET CUSTOMER BY PHONE
+ * Role: PREPRESS
+ */
+router.get(
+  '/customer/by-phone/:phone',
+  auth,
+  authorize('PREPRESS'),
+  async (req, res) => {
+    try {
+      const customer = await Customer.findOne({ phone: req.params.phone })
+      res.json(customer || null)
+    } catch (err) {
+      res.status(500).json({ message: 'Server error' })
+    }
+  }
+)
+
+/**
  * CREATE JOB
  * Role: PREPRESS
  */
@@ -61,12 +81,12 @@ router.post(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      const { jobId, customerName, totalItems } = req.body
+      const { jobId, customerName, customerPhone, totalItems } = req.body
       const files = req.files || []
 
       console.log('Received Job Creation Request:', { body: req.body, filesCount: files.length });
 
-      if (!jobId || !customerName || !totalItems) {
+      if (!jobId || !customerName || !customerPhone || !totalItems) {
         console.log('Missing fields validation failed');
         return res.status(400).json({ message: 'Missing fields' })
       }
@@ -80,6 +100,16 @@ router.post(
       const exists = await Job.findOne({ jobId })
       if (exists) {
         return res.status(400).json({ message: 'Job ID already exists' })
+      }
+
+      // ✅ Find or Create Customer
+      let customer = await Customer.findOne({ phone: customerPhone })
+      if (!customer) {
+        customer = await Customer.create({
+          name: customerName,
+          phone: customerPhone,
+          password: generateInitialPassword(customerName, customerPhone)
+        })
       }
 
       // ✅ Now move files into job-specific folder
@@ -98,7 +128,9 @@ router.post(
 
       const job = await Job.create({
         jobId,
-        customerName,
+        customerId: customer._id,
+        customerName: customer.name,
+        customerPhone: customer.phone,
         totalItems: Number(totalItems),
         itemScreenshots: imagePaths,
         packingPreference: req.body.packingPreference,

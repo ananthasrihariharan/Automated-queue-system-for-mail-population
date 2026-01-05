@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
+import './PrepressDashboard.css'
 
 type Job = {
   jobId: string
@@ -9,7 +10,6 @@ type Job = {
   createdAt: string
   itemScreenshots: string[]
 }
-
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
 
@@ -28,82 +28,78 @@ export default function PrepressDashboard() {
     loadJobs()
   }, [])
 
-  if (loading) return <div className="p-6">Loading...</div>
+  if (loading) return <div className="prepress-page">Loading...</div>
 
   return (
-    <div className="p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-2xl font-bold">Prepress Dashboard</h1>
-        <a
-          href="/prepress/create"
-          className="bg-black text-white px-4 py-2 rounded"
-        >
+    <div className="prepress-page">
+      <div className="prepress-header">
+        <h1>Prepress Dashboard</h1>
+        <a href="/prepress/create" className="create-job-btn">
           + Create Job
         </a>
       </div>
 
       {/* Preview Modal */}
       {previewJob && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
-          <div className="bg-white rounded-lg p-6 max-w-2xl w-full max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-start mb-4">
-              <h2 className="text-xl font-bold">Job Details: {previewJob.jobId}</h2>
-              <button
-                onClick={() => setPreviewJob(null)}
-                className="text-gray-500 hover:text-black text-xl font-bold"
-              >
+        <div className="modal-overlay">
+          <div className="modal">
+            <div className="modal-header">
+              <h2>Job Details: {previewJob.jobId}</h2>
+              <button className="close-btn" onClick={() => setPreviewJob(null)}>
                 &times;
               </button>
             </div>
 
-            <div className="grid grid-cols-2 gap-4 mb-6">
+            <div className="job-info-grid">
               <div>
-                <p className="text-sm text-gray-500">Customer</p>
-                <p className="font-medium">{previewJob.customerName}</p>
+                <p>Customer</p>
+                <span>{previewJob.customerName}</span>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Total Items</p>
-                <p className="font-medium">{previewJob.totalItems}</p>
+                <p>Total Items</p>
+                <span>{previewJob.totalItems}</span>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Created At</p>
-                <p className="font-medium">{new Date(previewJob.createdAt).toLocaleString()}</p>
+                <p>Created At</p>
+                <span>{new Date(previewJob.createdAt).toLocaleString()}</span>
               </div>
               <div>
-                <p className="text-sm text-gray-500">Payment Status</p>
-                <span className={`px-2 py-1 rounded text-xs font-semibold ${previewJob.paymentStatus === 'PAID' ? 'bg-green-100 text-green-800' :
-                  previewJob.paymentStatus === 'ADMIN_APPROVED' ? 'bg-blue-100 text-blue-800' :
-                    'bg-red-100 text-red-800'
-                  }`}>
+                <p>Payment Status</p>
+                <span
+                  className={`badge ${previewJob.paymentStatus === 'PAID'
+                      ? 'badge-paid'
+                      : previewJob.paymentStatus === 'ADMIN_APPROVED'
+                        ? 'badge-admin'
+                        : 'badge-unpaid'
+                    }`}
+                >
                   {previewJob.paymentStatus}
                 </span>
               </div>
             </div>
 
             <div>
-              <h3 className="font-bold mb-2">Item Screenshots ({previewJob.itemScreenshots.length})</h3>
+              <h3 style={{ fontWeight: 'bold', marginBottom: '0.5rem' }}>
+                Item Screenshots ({previewJob.itemScreenshots.length})
+              </h3>
               {previewJob.itemScreenshots.length > 0 ? (
-                <div className="grid grid-cols-2 bg-gray-50 p-4 rounded gap-4">
+                <div className="screenshots-grid">
                   {previewJob.itemScreenshots.map((path, idx) => (
-                    <div key={idx} className="border rounded overflow-hidden bg-white">
+                    <div key={idx} className="screenshot-item">
                       <img
                         src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
                         alt={`Item ${idx + 1}`}
-                        className="w-full h-auto object-contain"
                       />
                     </div>
                   ))}
                 </div>
               ) : (
-                <p className="text-gray-500 italic">No screenshots uploaded.</p>
+                <p style={{ color: '#6b7280', fontStyle: 'italic' }}>No screenshots uploaded.</p>
               )}
             </div>
 
-            <div className="mt-6 flex justify-end">
-              <button
-                onClick={() => setPreviewJob(null)}
-                className="bg-gray-200 text-gray-800 px-4 py-2 rounded hover:bg-gray-300"
-              >
+            <div className="modal-footer">
+              <button className="close-footer-btn" onClick={() => setPreviewJob(null)}>
                 Close
               </button>
             </div>
@@ -111,33 +107,28 @@ export default function PrepressDashboard() {
         </div>
       )}
 
-      <table className="w-full border">
-        <thead className="bg-gray-100">
+      <table className="jobs-table">
+        <thead>
           <tr>
-            <th className="border p-2">Job ID</th>
-            <th className="border p-2">Customer</th>
-            <th className="border p-2">Items</th>
-            <th className="border p-2">Payment</th>
-            <th className="border p-2">Created</th>
-            <th className="border p-2">Actions</th>
+            <th>Job ID</th>
+            <th>Customer</th>
+            <th>Items</th>
+            <th>Payment</th>
+            <th>Created</th>
+            <th>Actions</th>
           </tr>
         </thead>
 
         <tbody>
           {jobs.map((job) => (
             <tr key={job.jobId}>
-              <td className="border p-2">{job.jobId}</td>
-              <td className="border p-2">{job.customerName}</td>
-              <td className="border p-2">{job.totalItems}</td>
-              <td className="border p-2">{job.paymentStatus}</td>
-              <td className="border p-2">
-                {new Date(job.createdAt).toLocaleDateString()}
-              </td>
-              <td className="border p-2 text-center">
-                <button
-                  className="text-blue-600 underline"
-                  onClick={() => setPreviewJob(job)}
-                >
+              <td>{job.jobId}</td>
+              <td>{job.customerName}</td>
+              <td>{job.totalItems}</td>
+              <td>{job.paymentStatus}</td>
+              <td>{new Date(job.createdAt).toLocaleDateString()}</td>
+              <td style={{ textAlign: 'center' }}>
+                <button className="view-btn" onClick={() => setPreviewJob(job)}>
                   View
                 </button>
               </td>

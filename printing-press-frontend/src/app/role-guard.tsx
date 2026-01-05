@@ -13,9 +13,17 @@ export const RoleGuard = ({ allowed, children }: RoleGuardProps) => {
         return <Navigate to="/login" replace />
     }
 
-    if (!allowed.includes(user.role)) {
-        return <Navigate to="/" replace />
+    const userRoles = user.roles || []
+
+    // Admin override
+    if (userRoles.includes('ADMIN')) {
+        return <>{children}</>
     }
+
+    if (!allowed.some(role => userRoles.includes(role))) {
+        return <Navigate to="/unauthorized" replace />
+    }
+
 
     return <>{children}</>
 }

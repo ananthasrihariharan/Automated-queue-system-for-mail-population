@@ -1,61 +1,80 @@
 const express = require('express')
 const router = express.Router()
 const jwt = require('jsonwebtoken')
+
 const User = require('../models/User')
 
-/**
- * LOGIN
- * Description: Authenticate user using phone number and return JWT token
- * Access: Public
- */
+const bcrypt = require('bcryptjs')
 
 router.post('/', async (req, res) => {
   try {
-    const { phone } = req.body
+    const { phone, password } = req.body
 
-    if (!phone) {
-      return res.status(400).json({
-        message: 'Phone number is required'
-      })
+    if (!phone || !password) {
+      return res.status(400).json({ message: 'Phone and password required' })
     }
 
-    const user = await User.findOne({
-      phone,
-      isActive: true
-    })
+    let user = await User.findOne({ phone, isActive: true }).select('+password')
+    let isCustomer = false
 
     if (!user) {
-      return res.status(401).json({
-        message: 'User not found or inactive'
-      })
+      const Customer = require('../models/Customer')
+      user = await Customer.findOne({ phone }).select('+password')
+      if (user) isCustomer = true
+    }
+
+    if (!user) {
+      return res.status(401).json({ message: 'Invalid credentials' })
+    }
+
+    if (!user.password) {
+      return res.status(401).json({ message: 'Password not set for this account. Please contact support.' })
+    }
+
+    const isMatch = await bcrypt.compare(password, user.password)
+    if (!isMatch) {
+      return res.status(401).json({ message: 'Invalid credentials' })
+    }
+
+    // Recover roles from legacy 'role' field if 'roles' array is empty
+    let roles = []
+    if (isCustomer) {
+      roles = ['CUSTOMER']
+    } else {
+      roles = user.roles || []
+      if (roles.length === 0 && user.role) {
+        roles = [user.role.trim().toUpperCase()]
+      }
+    }
+
+    if (roles.length === 0) {
+      return res.status(401).json({ message: 'No roles assigned to this user' })
+    }
+
+    const payload = { roles: roles }
+    if (isCustomer) {
+      payload.customerId = user._id
+    } else {
+      payload.userId = user._id
     }
 
     const token = jwt.sign(
-      {
-        userId: user._id,
-        role: user.role
-      },
+      payload,
       process.env.JWT_SECRET,
       { expiresIn: '1d' }
     )
 
-    return res.status(200).json({
-      message: 'Login successful',
+    res.json({
       token,
       user: {
-        id: user._id,
         name: user.name,
-        role: user.role
+        roles: roles
       }
     })
-    res.cookie('token', token)
-  } catch (error) {
-    console.error('Login error:', error)
-    return res.status(500).json({
-      message: 'Internal server error'
-    })
+  } catch (err) {
+    console.error('LOGIN ERROR:', err)
+    res.status(500).json({ message: 'Server error' })
   }
 })
-
 
 module.exports = router
