@@ -1,10 +1,12 @@
 import React, { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
+import { useAuth } from '../../hooks/useAuth'
 import './CreateJob.css'
 
 export default function CreateJob() {
     const navigate = useNavigate()
+    const { logout } = useAuth()
     const [loading, setLoading] = useState(false)
 
     const [formData, setFormData] = useState({
@@ -16,6 +18,8 @@ export default function CreateJob() {
     const [customerName, setCustomerName] = useState('')
     const [files, setFiles] = useState<File[]>([])
     const [isDragging, setIsDragging] = useState(false)
+
+    const [viewImage, setViewImage] = useState<string | null>(null)
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
@@ -87,13 +91,22 @@ export default function CreateJob() {
                             <span>Quick Entry</span>
                         </div>
                     </div>
-                    <button
-                        type="button"
-                        onClick={() => navigate('/prepress')}
-                        className="text-[10px] font-black text-slate-400 uppercase tracking-widest hover:text-slate-900 transition-colors"
-                    >
-                        Cancel
-                    </button>
+                    <div className="flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => navigate('/prepress')}
+                            className="btn-outline"
+                        >
+                            Back
+                        </button>
+                        <button
+                            type="button"
+                            onClick={() => { logout(); navigate('/login'); }}
+                            className="logout-btn"
+                        >
+                            Logout
+                        </button>
+                    </div>
                 </div>
 
                 {/* Card */}
@@ -157,14 +170,6 @@ export default function CreateJob() {
                                 <div className="form-group">
                                     <label>Item Screenshots</label>
                                 </div>
-                                <input
-                                    type="file" multiple accept="image/*" className="hidden" id="file-drop"
-                                    onChange={(e) => {
-                                        const selected = Array.from(e.target.files || [])
-                                        const remaining = formData.totalItems - files.length
-                                        setFiles(prev => [...prev, ...selected.slice(0, remaining)])
-                                    }}
-                                />
                                 <div
                                     onPaste={handlePaste}
                                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
@@ -192,15 +197,21 @@ export default function CreateJob() {
                                     {files.length > 0 && (
                                         <div className="flex flex-wrap gap-2 mt-6 justify-center">
                                             {files.map((file, index) => (
-                                                <div key={index} className="relative group" onDoubleClick={(e) => e.stopPropagation()}>
+                                                <div
+                                                    key={index}
+                                                    className="thumbnail-wrapper"
+                                                    onDoubleClick={(e) => e.stopPropagation()}
+                                                    onClick={(e) => {
+                                                        e.stopPropagation()
+                                                        setViewImage(URL.createObjectURL(file))
+                                                    }}
+                                                >
                                                     <img
                                                         src={URL.createObjectURL(file)}
                                                         alt={`Item ${index + 1}`}
-                                                        className="w-12 h-12 object-cover rounded-lg border-2 border-white shadow-sm transition-transform group-hover:scale-105"
+                                                        className="thumbnail-img"
                                                     />
-                                                    <span className="absolute -top-1.5 -right-1.5 bg-black text-white text-[8px] font-black w-4 h-4 flex items-center justify-center rounded-full border border-white shadow-sm">
-                                                        {index + 1}
-                                                    </span>
+
                                                     <button
                                                         type="button"
                                                         onClick={(e) => {
@@ -208,9 +219,9 @@ export default function CreateJob() {
                                                             e.stopPropagation();
                                                             setFiles(prev => prev.filter((_, i) => i !== index));
                                                         }}
-                                                        className="absolute -bottom-1 -left-1 bg-red-500 text-white text-[7px] font-black px-1 py-0.5 rounded-sm opacity-0 group-hover:opacity-100 transition-opacity"
+                                                        className="thumbnail-delete-btn"
                                                     >
-                                                        DEL
+                                                        ×
                                                     </button>
                                                 </div>
                                             ))}
@@ -230,7 +241,8 @@ export default function CreateJob() {
                             <button
                                 type="submit"
                                 disabled={loading || files.length !== formData.totalItems}
-                                className="submit-btn"
+                                className="btn-primary"
+                                style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
                             >
                                 {loading && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block mr-2"></div>}
                                 Create Job Entry
@@ -239,6 +251,31 @@ export default function CreateJob() {
                     </form>
                 </div>
             </div>
+
+            {/* Lightbox Modal */}
+            {viewImage && (
+                <div
+                    className="lightbox-modal"
+                    onClick={() => setViewImage(null)}
+                >
+                    <div className="lightbox-content">
+                        <img
+                            src={viewImage}
+                            alt="Preview"
+                            className="lightbox-img"
+                        />
+                        <button
+                            className="lightbox-close-btn"
+                            onClick={() => setViewImage(null)}
+                        >
+                            <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     )
 }
+

@@ -116,105 +116,118 @@ export default function CustomerPacking() {
         {/* Left Col */}
         <div>
           <header className="packing-header">
-            <div onClick={() => navigate('/customer/dashboard')} className="back-link">
+            <button onClick={() => navigate('/customer/dashboard')} className="btn-outline" style={{ marginBottom: '1rem' }}>
               &larr; Back to Dashboard
-            </div>
+            </button>
             <h1 style={{ fontSize: '1.5rem', fontWeight: 900 }}>Organize Layout</h1>
             <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Job ID: #{job.jobId}</p>
           </header>
 
-          <section className="packing-section">
-            <span className="section-title">Select Packing Mode</span>
-            <div className="strategy-grid">
-              <div
-                className={`strategy-card ${packing === 'SINGLE' ? 'active' : ''}`}
-                onClick={() => { setPacking('SINGLE'); setParcels([]); }}
-              >
-                <span className="strategy-card-title">Single Parcel</span>
-              </div>
-              <div
-                className={`strategy-card ${packing === 'MULTIPLE' ? 'active' : ''}`}
-                onClick={() => setPacking('MULTIPLE')}
-              >
-                <span className="strategy-card-title">Multiple Parcels</span>
+          {job.jobStatus === 'PACKED' ? (
+            <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '0.5rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
+              <h3 style={{ color: '#1e40af', fontWeight: 700, fontSize: '1.125rem', marginBottom: '0.5rem' }}>Job is Packed</h3>
+              <p style={{ color: '#1e3a8a', fontSize: '0.875rem' }}>
+                This job has been processed and is ready for collection. The packing details are now locked.
+              </p>
+              <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #dbeafe' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Selected Mode</span>
+                <p style={{ fontSize: '1rem', fontWeight: 600, color: '#0f172a' }}>{packing === 'SINGLE' ? 'Single Parcel' : 'Multiple Parcels'}</p>
               </div>
             </div>
-
-            {packing === 'MULTIPLE' && (
-              <div>
-                <span className="section-title">Select Items for Group</span>
-                <div className="item-grid" style={{ marginBottom: '1.5rem' }}>
-                  {Array.from({ length: job.totalItems }, (_, i) => i + 1).map(i => {
-                    const isAssigned = assignedItems.includes(i)
-                    const isSelected = selectedItems.includes(i)
-                    return (
-                      <div
-                        key={i}
-                        className={`item-node ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''}`}
-                        onClick={() => !isAssigned && toggleItem(i)}
-                      >
-                        {i}
-                      </div>
-                    )
-                  })}
+          ) : (
+            <section className="packing-section">
+              <span className="section-title">Select Packing Mode</span>
+              <div className="strategy-grid">
+                <div
+                  className={`strategy-card ${packing === 'SINGLE' ? 'active' : ''}`}
+                  onClick={() => { setPacking('SINGLE'); setParcels([]); }}
+                >
+                  <span className="strategy-card-title">Single Parcel</span>
                 </div>
+                <div
+                  className={`strategy-card ${packing === 'MULTIPLE' ? 'active' : ''}`}
+                  onClick={() => setPacking('MULTIPLE')}
+                >
+                  <span className="strategy-card-title">Multiple Parcels</span>
+                </div>
+              </div>
 
-                <div className="receiver-form">
-                  <span className="section-title">Receiver Details</span>
-                  <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-                    <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>
-                      <input type="radio" checked={receiverType === 'SELF'} onChange={() => setReceiverType('SELF')} /> Self
-                    </label>
-                    <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>
-                      <input type="radio" checked={receiverType === 'OTHER'} onChange={() => setReceiverType('OTHER')} /> Other
-                    </label>
+              {packing === 'MULTIPLE' && (
+                <div>
+                  <span className="section-title">Select Items for Group</span>
+                  <div className="item-grid" style={{ marginBottom: '1.5rem' }}>
+                    {Array.from({ length: job.totalItems }, (_, i) => i + 1).map(i => {
+                      const isAssigned = assignedItems.includes(i)
+                      const isSelected = selectedItems.includes(i)
+                      return (
+                        <div
+                          key={i}
+                          className={`item-node ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''}`}
+                          onClick={() => !isAssigned && toggleItem(i)}
+                        >
+                          {i}
+                        </div>
+                      )
+                    })}
                   </div>
 
-                  {receiverType === 'OTHER' && (
-                    <div className="strategy-grid">
-                      <div className="form-input-group">
-                        <span className="form-label">Name</span>
-                        <input
-                          className="form-input"
-                          value={receiverName}
-                          onChange={e => setReceiverName(e.target.value)}
-                        />
-                      </div>
-                      <div className="form-input-group">
-                        <span className="form-label">Phone</span>
-                        <input
-                          className="form-input"
-                          value={receiverPhone}
-                          onChange={e => setReceiverPhone(e.target.value)}
-                        />
-                      </div>
+                  <div className="receiver-form">
+                    <span className="section-title">Receiver Details</span>
+                    <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
+                      <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                        <input type="radio" checked={receiverType === 'SELF'} onChange={() => setReceiverType('SELF')} /> Self
+                      </label>
+                      <label style={{ fontSize: '0.875rem', fontWeight: 600 }}>
+                        <input type="radio" checked={receiverType === 'OTHER'} onChange={() => setReceiverType('OTHER')} /> Other
+                      </label>
                     </div>
-                  )}
 
+                    {receiverType === 'OTHER' && (
+                      <div className="strategy-grid">
+                        <div className="form-input-group">
+                          <span className="form-label">Name</span>
+                          <input
+                            className="form-input"
+                            value={receiverName}
+                            onChange={e => setReceiverName(e.target.value)}
+                          />
+                        </div>
+                        <div className="form-input-group">
+                          <span className="form-label">Phone</span>
+                          <input
+                            className="form-input"
+                            value={receiverPhone}
+                            onChange={e => setReceiverPhone(e.target.value)}
+                          />
+                        </div>
+                      </div>
+                    )}
+
+                    <button
+                      className="btn-primary"
+                      onClick={addParcel}
+                      disabled={selectedItems.length === 0}
+                    >
+                      Create Parcel Segment
+                    </button>
+                  </div>
+                </div>
+              )}
+
+              {packing && (
+                <div style={{ marginTop: '2rem' }}>
                   <button
                     className="btn-primary"
-                    onClick={addParcel}
-                    disabled={selectedItems.length === 0}
+                    onClick={submitPacking}
+                    disabled={loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)}
+                    style={{ background: (loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)) ? '#e5e7eb' : '#000000' }}
                   >
-                    Create Parcel Segment
+                    {loading ? 'Submitting...' : 'Confirm Strategy'}
                   </button>
                 </div>
-              </div>
-            )}
-
-            {packing && (
-              <div style={{ marginTop: '2rem' }}>
-                <button
-                  className="btn-primary"
-                  onClick={submitPacking}
-                  disabled={loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)}
-                  style={{ background: (loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)) ? '#e5e7eb' : '#000000' }}
-                >
-                  {loading ? 'Submitting...' : 'Confirm Strategy'}
-                </button>
-              </div>
-            )}
-          </section>
+              )}
+            </section>
+          )}
         </div>
 
         {/* Right Col */}

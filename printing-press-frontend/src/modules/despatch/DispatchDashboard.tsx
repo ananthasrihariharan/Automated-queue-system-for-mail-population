@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from 'react'
 import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
+import ModuleNavigation from '../../components/ModuleNavigation'
 import './DispatchDashboard.css'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
@@ -15,12 +16,14 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
     return initial
   })
   const [isSubmitting, setIsSubmitting] = useState(false)
+  const [viewImage, setViewImage] = useState<string | null>(null)
+
   const { user } = useAuth()
 
   const isAdmin = user?.roles?.includes('ADMIN')
   const isApproved = job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED'
 
-  const rackOptions = ['A1', 'A2', 'A3', 'B1', 'B2', 'B3', 'C1', 'C2', 'C3', 'D1', 'D2', 'D3']
+  const rackOptions = ['R1', 'R2', 'R3', 'R4', 'CB-VC', 'CB-SM', 'CB-SP', 'OUT PARCEL']
 
   const handlePack = async (parcelNo: number) => {
     const rack = parcelRacks[parcelNo]
@@ -65,132 +68,176 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   }
 
   return (
-    <div className="dispatch-modal-overlay">
-      <div className="dispatch-modal">
-        <div className="dispatch-modal-header">
-          <div>
-            <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>Job #{job.jobId}</h2>
-            <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Customer: {job.customerName}</p>
-          </div>
-          <button className="close-btn" onClick={onClose}>&times;</button>
-        </div>
-
-        <div className="dispatch-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1rem' }}>
-          {!isApproved && (
-            <div style={{ background: '#fee2e2', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1.5rem', fontSize: '0.875rem', border: '1px solid #fecaca' }}>
-              <strong style={{ color: '#991b1b' }}>Payment Required</strong>
-              <p style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.25rem' }}>
-                {isAdmin ? 'Admin override enabled.' : 'Wait for payment confirmation before dispatch.'}
-              </p>
+    <>
+      <div className="dispatch-modal-overlay">
+        <div className="dispatch-modal">
+          <div className="dispatch-modal-header">
+            <div>
+              <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>Job #{job.jobId}</h2>
+              <p style={{ fontSize: '0.75rem', color: '#6b7280', marginTop: '0.25rem' }}>Customer: {job.customerName}</p>
             </div>
-          )}
+            <button className="close-btn" onClick={onClose}>&times;</button>
+          </div>
 
-          <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
-            {(job.parcels?.length > 0 ? job.parcels : [{ parcelNo: 1, status: 'PENDING', itemIndexes: Array.from({ length: job.totalItems || 0 }, (_, i) => i + 1) }]).map((p: any) => {
-              const isPacked = p.status === 'PACKED'
-              const isOut = p.status === 'DISPATCHED'
-              const items = p.itemIndexes || []
+          <div className="dispatch-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1rem' }}>
+            {!isApproved && (
+              <div style={{ background: '#fee2e2', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1.5rem', fontSize: '0.875rem', border: '1px solid #fecaca' }}>
+                <strong style={{ color: '#991b1b' }}>Payment Required</strong>
+                <p style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.25rem' }}>
+                  {isAdmin ? 'Admin override enabled.' : 'Wait for payment confirmation before dispatch.'}
+                </p>
+              </div>
+            )}
 
-              return (
-                <div key={p.parcelNo} className="parcel-card" style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', background: '#ffffff' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid #f3f4f6', paddingBottom: '0.5rem' }}>
-                    <div>
-                      <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.875rem' }}>Parcel {p.parcelNo}</span>
-                      <span className={`status-badge ${isOut ? 'status-dispatched' : isPacked ? 'status-packed' : 'status-pending'}`} style={{ marginLeft: '0.5rem' }}>
-                        {p.status || 'PENDING'}
-                      </span>
-                    </div>
-                    <div style={{ textAlign: 'right' }}>
-                      <p style={{ fontSize: '0.75rem', fontWeight: 700 }}>{p.receiverName || job.customerName}</p>
-                      <p style={{ fontSize: '0.625rem', color: '#6b7280' }}>{p.receiverPhone || job.customerPhone || 'N/A'}</p>
-                    </div>
-                  </div>
+            <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+              {(job.parcels?.length > 0 ? job.parcels : [{ parcelNo: 1, status: 'PENDING', itemIndexes: Array.from({ length: job.totalItems || 0 }, (_, i) => i + 1) }]).map((p: any) => {
+                const isPacked = p.status === 'PACKED'
+                const isOut = p.status === 'DISPATCHED'
+                const items = p.itemIndexes || []
 
-                  <div style={{ marginBottom: '1rem' }}>
-                    <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Included Items ({items.length})</p>
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: '0.5rem' }}>
-                      {items.map((idx: number) => {
-                        const imgPath = job.itemScreenshots?.[idx - 1]
-                        return (
-                          <div key={idx} style={{ position: 'relative' }}>
-                            <div style={{ width: '50px', height: '50px', border: '1px solid #e5e7eb', borderRadius: '0.25rem', overflow: 'hidden', background: '#f9fafb' }}>
-                              {imgPath ? (
-                                <img src={`${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}`} style={{ width: '100%', height: '100%', objectFit: 'cover' }} alt={`Item ${idx}`} />
-                              ) : (
-                                <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', color: '#d1d5db' }}>N/A</div>
-                              )}
-                            </div>
-                            <span style={{ position: 'absolute', bottom: '-2px', right: '-2px', background: '#000', color: '#fff', fontSize: '0.5rem', padding: '0 2px', borderRadius: '2px', fontWeight: 700 }}>{idx}</span>
-                          </div>
-                        )
-                      })}
-                    </div>
-                  </div>
-
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-                    <div style={{ flex: 1 }}>
-                      <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Rack Location</label>
-                      <div style={{ display: 'flex', gap: '0.25rem' }}>
-                        <select
-                          className="form-input"
-                          style={{ padding: '0.25rem', fontSize: '0.75rem' }}
-                          value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
-                          onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                        >
-                          <option value="">Select Rack</option>
-                          {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                          {!rackOptions.includes(parcelRacks[p.parcelNo]) && parcelRacks[p.parcelNo] && <option value={parcelRacks[p.parcelNo]}>{parcelRacks[p.parcelNo]}</option>}
-                        </select>
-                        <input
-                          className="form-input"
-                          style={{ padding: '0.25rem', fontSize: '0.75rem', width: '60px' }}
-                          placeholder="Custom"
-                          value={parcelRacks[p.parcelNo] || ''}
-                          onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                        />
+                return (
+                  <div key={p.parcelNo} className="parcel-card" style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', background: '#ffffff' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid #f3f4f6', paddingBottom: '0.5rem' }}>
+                      <div>
+                        <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.875rem' }}>Parcel {p.parcelNo}</span>
+                        <span className={`status-badge ${isOut ? 'status-dispatched' : isPacked ? 'status-packed' : 'status-pending'}`} style={{ marginLeft: '0.5rem' }}>
+                          {p.status || 'PENDING'}
+                        </span>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <p style={{ fontSize: '0.75rem', fontWeight: 700 }}>{p.receiverName || job.customerName}</p>
+                        <p style={{ fontSize: '0.625rem', color: '#6b7280' }}>{p.receiverPhone || job.customerPhone || 'N/A'}</p>
                       </div>
                     </div>
 
-                    <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                      {!isOut && (
-                        <button
-                          disabled={isSubmitting}
-                          onClick={() => handlePack(p.parcelNo)}
-                          className="manage-btn"
-                          style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: isPacked ? '#f3f4f6' : '#000', color: isPacked ? '#000' : '#fff' }}
-                        >
-                          {isPacked ? 'Packed ✅' : 'Pack'}
-                        </button>
-                      )}
-                      {isPacked && (
-                        <button
-                          disabled={isSubmitting || (!isApproved && !isAdmin)}
-                          onClick={() => handleDispatch(p.parcelNo)}
-                          className="manage-btn"
-                          style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: (isApproved || isAdmin) ? '#10b981' : '#e5e7eb', color: '#fff', border: 'none' }}
-                        >
-                          Dispatch
-                        </button>
-                      )}
+                    <div style={{ marginBottom: '1rem' }}>
+                      <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Included Items ({items.length})</p>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: '0.5rem' }}>
+                        {items.map((idx: number) => {
+                          const imgPath = job.itemScreenshots?.[idx - 1]
+                          const fullUrl = imgPath ? `${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}` : null
+
+                          return (
+                            <div key={idx} style={{ position: 'relative' }}>
+                              <div
+                                style={{
+                                  width: '50px',
+                                  height: '50px',
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '0.25rem',
+                                  overflow: 'hidden',
+                                  background: '#f9fafb',
+                                  cursor: fullUrl ? 'pointer' : 'default'
+                                }}
+                                onClick={() => fullUrl && setViewImage(fullUrl)}
+                              >
+                                {fullUrl ? (
+                                  <img
+                                    src={fullUrl}
+                                    style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                    alt={`Item ${idx}`}
+                                  />
+                                ) : (
+                                  <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', color: '#d1d5db' }}>N/A</div>
+                                )}
+                              </div>
+                              <span style={{ position: 'absolute', bottom: '-2px', right: '-2px', background: '#000', color: '#fff', fontSize: '0.5rem', padding: '0 2px', borderRadius: '2px', fontWeight: 700 }}>{idx}</span>
+                            </div>
+                          )
+                        })}
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Rack Location</label>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <select
+                            className="form-input"
+                            style={{ padding: '0.25rem', fontSize: '0.75rem' }}
+                            value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
+                            onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
+                          >
+                            <option value="">Select Rack</option>
+                            {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                            {!rackOptions.includes(parcelRacks[p.parcelNo]) && parcelRacks[p.parcelNo] && <option value={parcelRacks[p.parcelNo]}>{parcelRacks[p.parcelNo]}</option>}
+                          </select>
+                          <input
+                            className="form-input"
+                            style={{ padding: '0.25rem', fontSize: '0.75rem', width: '60px' }}
+                            placeholder="Custom"
+                            value={parcelRacks[p.parcelNo] || ''}
+                            onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
+                          />
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
+                        {!isOut && (
+                          <button
+                            disabled={isSubmitting}
+                            onClick={() => handlePack(p.parcelNo)}
+                            className="manage-btn"
+                            style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: isPacked ? '#f3f4f6' : '#000', color: isPacked ? '#000' : '#fff' }}
+                          >
+                            {isPacked ? 'Packed ✅' : 'Pack'}
+                          </button>
+                        )}
+                        {isPacked && (
+                          <button
+                            disabled={isSubmitting || (!isApproved && !isAdmin)}
+                            onClick={() => handleDispatch(p.parcelNo)}
+                            className="manage-btn"
+                            style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: (isApproved || isAdmin) ? '#10b981' : '#e5e7eb', color: '#fff', border: 'none' }}
+                          >
+                            Dispatch
+                          </button>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              )
-            })}
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="dispatch-modal-footer" style={{ padding: '1rem', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
+            <button className="logout-btn" onClick={onClose} style={{ margin: 0 }}>Close</button>
           </div>
         </div>
-
-        <div className="dispatch-modal-footer" style={{ padding: '1rem', borderTop: '1px solid #e5e7eb', textAlign: 'right' }}>
-          <button className="logout-btn" onClick={onClose} style={{ margin: 0 }}>Close</button>
-        </div>
       </div>
-    </div>
+
+      {/* Lightbox Modal */}
+      {viewImage && (
+        <div
+          className="lightbox-modal"
+          onClick={() => setViewImage(null)}
+        >
+          <div className="lightbox-content">
+            <img
+              src={viewImage}
+              alt="Preview"
+              className="lightbox-img"
+            />
+            <button
+              className="lightbox-close-btn"
+              onClick={() => setViewImage(null)}
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
+    </>
   )
 }
 
+
 export default function DispatchDashboard() {
   const [jobs, setJobs] = useState<any[]>([])
-  const [selectedJob, setSelectedJob] = useState<any>(null)
+  const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
@@ -221,6 +268,11 @@ export default function DispatchDashboard() {
         job.customerName.toLowerCase().includes(query)
     })
   }, [jobs, searchQuery])
+
+  const selectedJob = useMemo(() =>
+    jobs.find(j => j.jobId === selectedJobId),
+    [jobs, selectedJobId]
+  )
 
   if (loading) return <div className="dispatch-loading"><div className="dispatch-spinner"></div></div>
 
@@ -253,6 +305,7 @@ export default function DispatchDashboard() {
             value={searchQuery}
             onChange={e => setSearchQuery(e.target.value)}
           />
+          <ModuleNavigation />
           <button
             onClick={() => { logout(); navigate('/login'); }}
             className="logout-btn"
@@ -267,6 +320,7 @@ export default function DispatchDashboard() {
           <tr>
             <th>Job ID</th>
             <th>Customer</th>
+            <th>Submitted By</th>
             <th>Packing</th>
             <th>Payment</th>
             {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
@@ -284,9 +338,10 @@ export default function DispatchDashboard() {
           ) : (
             filteredJobs.map(job => {
               return (
-                <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJob(job)}>
+                <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
                   <td>{job.jobId}</td>
                   <td>{job.customerName}</td>
+                  <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
                   <td>{job.packingPreference || 'SINGLE'}</td>
                   <td>
                     <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
@@ -307,7 +362,13 @@ export default function DispatchDashboard() {
                   )}
                   {viewMode === 'active' && (
                     <td>
-                      <button className="manage-btn">
+                      <button
+                        className="btn-primary"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setSelectedJobId(job.jobId);
+                        }}
+                      >
                         Manage
                       </button>
                     </td>
@@ -322,7 +383,7 @@ export default function DispatchDashboard() {
       {selectedJob && (
         <DispatchParcels
           job={selectedJob}
-          onClose={() => setSelectedJob(null)}
+          onClose={() => setSelectedJobId(null)}
           onDispatched={loadJobs}
         />
       )}

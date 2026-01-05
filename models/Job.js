@@ -45,6 +45,8 @@ const JobSchema = new mongoose.Schema(
       default: 'CREATED'
     },
 
+    dispatchedAt: Date,
+
     rackLocation: {
       type: String
     },
@@ -59,6 +61,14 @@ const JobSchema = new mongoose.Schema(
     },
     adminApprovedAt: {
       type: Date
+    },
+    paymentHandledBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    dispatchedBy: {
+      type: mongoose.Schema.Types.ObjectId, // Top-level final dispatch user
+      ref: 'User'
     },
     parcels: [
       {

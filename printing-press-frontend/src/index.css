@@ -144,6 +144,13 @@ h6 {
   letter-spacing: -0.04em;
 }
 
+.btn-danger-outline {
+  @apply btn-outline text-red-500 border-red-200 hover:bg-red-50 hover:border-red-500 hover:text-red-600;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
 /* Glassmorphism */
 .glass {
   background: rgba(255, 255, 255, 0.7);
@@ -152,9 +159,100 @@ h6 {
   border: 1px solid rgba(255, 255, 255, 0.3);
 }
 
-/* Premium Button Base */
-.btn-premium {
-  @apply transition-all duration-300 active:scale-95 disabled:opacity-50 disabled:pointer-events-none;
+/* Premium Button System */
+.btn-primary {
+  background: #000000;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background: #1f2937;
+  transform: translateY(-1px);
+}
+
+.btn-primary:disabled {
+  background: #e5e7eb;
+  color: #9ca3af;
+  cursor: not-allowed;
+}
+
+.btn-secondary {
+  background: #f3f4f6;
+  color: #1f2937;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid #e5e7eb;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-secondary:hover:not(:disabled) {
+  background: #e5e7eb;
+}
+
+.btn-outline {
+  background: transparent;
+  color: #374151;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: 1px solid #d1d5db;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-outline:hover:not(:disabled) {
+  border-color: #000000;
+  color: #000000;
+}
+
+.btn-danger {
+  background: #ef4444;
+  color: #ffffff;
+  padding: 0.5rem 1rem;
+  border-radius: 0.375rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-danger:hover:not(:disabled) {
+  background: #dc2626;
+}
+
+.logout-btn {
+  padding: 0.5rem 1rem;
+  border: 1px solid #fee2e2;
+  background: #fff;
+  color: #ef4444;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logout-btn:hover {
+  background: #fee2e2;
+  color: #b91c1c;
 }
 
 /* Alignment & Layout Fixes */

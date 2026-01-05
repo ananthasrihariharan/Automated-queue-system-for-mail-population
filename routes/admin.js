@@ -58,6 +58,9 @@ router.get(
           adminApprovalNote: 1
         }
       ).sort({ createdAt: -1 })
+        .populate('createdBy', 'name')
+        .populate('paymentHandledBy', 'name')
+        .populate('dispatchedBy', 'name')
 
       res.json(jobs)
     } catch (err) {

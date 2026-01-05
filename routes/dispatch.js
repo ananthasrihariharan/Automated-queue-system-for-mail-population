@@ -48,6 +48,7 @@ router.get(
                     itemScreenshots: 1
                 }
             ).sort({ createdAt: -1 })
+                .populate('createdBy', 'name')
 
             res.json(jobs)
         } catch (err) {
@@ -231,6 +232,7 @@ router.patch(
             if (allDispatched) {
                 job.jobStatus = 'DISPATCHED'
                 job.dispatchedAt = new Date()
+                job.dispatchedBy = req.user._id
             }
 
             await job.save()
@@ -270,6 +272,7 @@ router.post(
 
             job.jobStatus = 'DISPATCHED'
             job.dispatchedAt = new Date()
+            job.dispatchedBy = req.user._id
             job.rackLocation = rackLocation
 
             // Also mark first parcel as dispatched if SINGLE

@@ -200,3 +200,154 @@
     cursor: not-allowed;
     transform: none;
 }
+
+/* ===== Thumbnails & Lightbox ===== */
+/* ===== Thumbnails & Lightbox ===== */
+.thumbnail-img {
+    width: 50px !important;
+    height: 50px !important;
+    object-fit: cover;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.25rem;
+    box-shadow: none;
+}
+
+.thumbnail-wrapper {
+    position: relative;
+    cursor: pointer;
+    /* Create stacking context */
+    z-index: 1;
+}
+
+.thumbnail-wrapper:hover .thumbnail-img {
+    border-color: #000;
+}
+
+/* Delete button positioning for small thumbnail */
+.thumbnail-delete-btn {
+    position: absolute;
+    top: -5px;
+    right: -5px;
+    background: #ef4444;
+    /* red-500 */
+    color: white;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: bold;
+    border: 1px solid white;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+    opacity: 0;
+    transition: opacity 0.2s;
+    z-index: 10;
+}
+
+.thumbnail-wrapper:hover .thumbnail-delete-btn {
+    opacity: 1;
+}
+
+/* Lightbox - Matching DispatchDashboard */
+.lightbox-modal {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.85);
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+}
+
+.lightbox-content {
+    position: relative;
+    max-width: 100%;
+    max-height: 100%;
+}
+
+.lightbox-img {
+    max-width: 100%;
+    max-height: 90vh;
+    border-radius: 0.5rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+}
+
+.lightbox-close-btn {
+    position: absolute;
+    top: -3rem;
+    right: 0;
+    background: transparent;
+    border: none;
+    color: white;
+    cursor: pointer;
+    padding: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.lightbox-close-btn svg {
+    width: 2rem;
+    height: 2rem;
+}
+
+.lightbox-img {
+    max-width: 100%;
+    max-height: 90vh;
+    object-fit: contain;
+    border-radius: 0.5rem;
+}
+
+.lightbox-close-btn {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 255, 255, 0.2);
+    color: white;
+    width: 3rem;
+    height: 3rem;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    z-index: 60;
+}
+
+.lightbox-close-btn:hover {
+    background: rgba(0, 0, 0, 0.8);
+    transform: scale(1.1);
+    border-color: white;
+}
+
+.thumbnail-wrapper {
+    position: relative;
+    cursor: pointer;
+    /* Create stacking context */
+    z-index: 1;
+}
+
+.thumbnail-overlay {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.2s;
+    border-radius: 0.5rem;
+    /* Ensure clicks pass through to wrapper, though we want the wrapper to catch them. 
+       This prevents the overlay from somehow blocking the delete button if they overlap */
+    pointer-events: none;
+    z-index: 5;
+}
+
+.thumbnail-wrapper:hover .thumbnail-overlay {
+    opacity: 1;
+}

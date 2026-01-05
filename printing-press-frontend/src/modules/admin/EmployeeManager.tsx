@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
+import './AdminDashboard.css'
 
 const ALL_ROLES = ['ADMIN', 'PREPRESS', 'CASHIER', 'DISPATCH']
 
@@ -64,32 +65,33 @@ export default function EmployeeManager() {
 
   return (
     <div>
-      <h2 className="text-xl font-bold mb-4">Employees</h2>
-
       {/* CREATE EMPLOYEE */}
-      <div className="border p-4 mb-6">
-        <h3 className="font-semibold mb-2">Add Employee</h3>
+      <div className="employee-form-container">
+        <h3 className="employee-form-title">Add Employee</h3>
 
-        <div className="flex gap-3 mb-3">
+        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
           <input
-            className="border p-2"
+            className="form-input"
+            style={{ flex: 1 }}
             placeholder="Name"
             value={name}
             onChange={e => setName(e.target.value)}
           />
           <input
-            className="border p-2"
+            className="form-input"
+            style={{ flex: 1 }}
             placeholder="Phone"
             value={phone}
             onChange={e => setPhone(e.target.value)}
           />
         </div>
 
-        <div className="flex gap-4 mb-3">
+        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem' }}>
           {ALL_ROLES.map(role => (
-            <label key={role} className="flex items-center gap-1">
+            <label key={role} className="checkbox-label">
               <input
                 type="checkbox"
+                className="checkbox-input"
                 checked={roles.includes(role)}
                 onChange={() => toggleRole(role)}
               />
@@ -99,7 +101,7 @@ export default function EmployeeManager() {
         </div>
 
         <button
-          className="bg-black text-white px-4 py-2"
+          className="btn-primary"
           onClick={createUser}
         >
           Add Employee
@@ -107,53 +109,60 @@ export default function EmployeeManager() {
       </div>
 
       {/* EMPLOYEE LIST */}
-      <table className="w-full border">
-        <thead className="bg-gray-100">
+      <table className="admin-table">
+        <thead>
           <tr>
-            <th className="border p-2">Name</th>
-            <th className="border p-2">Phone</th>
-            <th className="border p-2">Roles</th>
-            <th className="border p-2">Status</th>
-            <th className="border p-2">Actions</th>
+            <th>Name</th>
+            <th>Phone</th>
+            <th>Roles</th>
+            <th>Status</th>
+            <th>Actions</th>
           </tr>
         </thead>
 
         <tbody>
           {users.map(user => (
-            <tr key={user._id}>
-              <td className="border p-2">{user.name}</td>
-              <td className="border p-2">{user.phone}</td>
+            <tr key={user._id} className="admin-row">
+              <td style={{ fontWeight: 600 }}>{user.name}</td>
+              <td>{user.phone}</td>
 
-              <td className="border p-2">
-                {ALL_ROLES.map(role => (
-                  <label
-                    key={role}
-                    className="flex items-center gap-1"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={user.roles.includes(role)}
-                      onChange={() =>
-                        updateRoles(
-                          user._id,
-                          user.roles.includes(role)
-                            ? user.roles.filter(r => r !== role)
-                            : [...user.roles, role]
-                        )
-                      }
-                    />
-                    {role}
-                  </label>
-                ))}
+              <td>
+                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                  {ALL_ROLES.map(role => (
+                    <label
+                      key={role}
+                      className="checkbox-label"
+                      style={{ fontSize: '0.75rem' }}
+                    >
+                      <input
+                        type="checkbox"
+                        className="checkbox-input"
+                        style={{ width: '0.8rem', height: '0.8rem' }}
+                        checked={user.roles.includes(role)}
+                        onChange={() =>
+                          updateRoles(
+                            user._id,
+                            user.roles.includes(role)
+                              ? user.roles.filter(r => r !== role)
+                              : [...user.roles, role]
+                          )
+                        }
+                      />
+                      {role}
+                    </label>
+                  ))}
+                </div>
               </td>
 
-              <td className="border p-2">
-                {user.isActive ? 'Active' : 'Inactive'}
+              <td>
+                <span className={`status-badge ${user.isActive ? 'status-paid' : 'status-unpaid'}`}>
+                  {user.isActive ? 'Active' : 'Inactive'}
+                </span>
               </td>
 
-              <td className="border p-2">
+              <td>
                 <button
-                  className="underline"
+                  className="action-link"
                   onClick={() =>
                     toggleActive(user._id, !user.isActive)
                   }

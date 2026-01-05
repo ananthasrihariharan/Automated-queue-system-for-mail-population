@@ -81,7 +81,15 @@ router.post(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      const { jobId, customerName, customerPhone, totalItems } = req.body
+      let { jobId, customerName, customerPhone, totalItems } = req.body
+
+      // ✅ Auto-Append Date Suffix (DDMMYY)
+      const date = new Date()
+      const day = String(date.getDate()).padStart(2, '0')
+      const month = String(date.getMonth() + 1).padStart(2, '0')
+      const year = String(date.getFullYear()).slice(-2)
+      jobId = `${jobId}-${day}${month}${year}`
+
       const files = req.files || []
 
       console.log('Received Job Creation Request:', { body: req.body, filesCount: files.length });

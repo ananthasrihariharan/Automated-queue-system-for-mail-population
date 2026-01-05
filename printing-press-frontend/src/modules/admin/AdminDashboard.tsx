@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
 import EmployeeManager from './EmployeeManager'
+import { useNavigate } from 'react-router-dom'
+import { useAuth } from '../../hooks/useAuth'
+import ModuleNavigation from '../../components/ModuleNavigation'
+import './AdminDashboard.css'
 
 type Job = {
   jobId: string
@@ -8,9 +12,14 @@ type Job = {
   paymentStatus: string
   jobStatus: string
   adminApprovalNote?: string
+  createdBy?: { name: string }
+  paymentHandledBy?: { name: string }
+  dispatchedBy?: { name: string }
 }
 
 export default function AdminDashboard() {
+  const navigate = useNavigate()
+  const { logout } = useAuth()
   const [activeTab, setActiveTab] = useState<'jobs' | 'employees'>('jobs')
   const [jobs, setJobs] = useState<Job[]>([])
   const [note, setNote] = useState<Record<string, string>>({})
@@ -34,58 +43,73 @@ export default function AdminDashboard() {
   }, [activeTab])
 
   return (
-    <div className="p-6">
-      <h1 className="text-2xl font-bold mb-4">Admin Dashboard</h1>
+    <div className="admin-page">
+      <div className="admin-navbar">
+        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
+          <h1 style={{ fontWeight: 900, fontSize: '1.5rem', textTransform: 'uppercase', letterSpacing: '-0.05em' }}>Admin</h1>
+          <div className="dashboard-tabs" style={{ marginBottom: 0 }}>
+            <button
+              onClick={() => setActiveTab('jobs')}
+              className={`dashboard-tab ${activeTab === 'jobs' ? 'active' : ''}`}
+            >
+              Jobs
+            </button>
+            <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
+            <button
+              onClick={() => setActiveTab('employees')}
+              className={`dashboard-tab ${activeTab === 'employees' ? 'active' : ''}`}
+            >
+              Employees
+            </button>
+          </div>
+        </div>
 
-      {/* TABS */}
-      <div className="flex gap-4 mb-6">
-        <button
-          onClick={() => setActiveTab('jobs')}
-          className={`px-4 py-2 border ${
-            activeTab === 'jobs'
-              ? 'bg-black text-white'
-              : 'bg-white'
-          }`}
-        >
-          Jobs
-        </button>
-
-        <button
-          onClick={() => setActiveTab('employees')}
-          className={`px-4 py-2 border ${
-            activeTab === 'employees'
-              ? 'bg-black text-white'
-              : 'bg-white'
-          }`}
-        >
-          Employees
-        </button>
+        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <ModuleNavigation />
+          <button
+            onClick={() => { logout(); navigate('/login'); }}
+            className="logout-btn"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* TAB CONTENT */}
       {activeTab === 'jobs' && (
-        <table className="w-full border">
-          <thead className="bg-gray-100">
+        <table className="admin-table">
+          <thead>
             <tr>
-              <th className="border p-2">Job ID</th>
-              <th className="border p-2">Customer</th>
-              <th className="border p-2">Payment</th>
-              <th className="border p-2">Admin Note</th>
-              <th className="border p-2">Action</th>
+              <th>Job ID</th>
+              <th>Customer</th>
+              <th>Submitted By</th>
+              <th>Payment By</th>
+              <th>Dispatched By</th>
+              <th>Payment</th>
+              <th>Admin Note</th>
+              <th>Action</th>
             </tr>
           </thead>
 
           <tbody>
             {jobs.map((job) => (
-              <tr key={job.jobId}>
-                <td className="border p-2">{job.jobId}</td>
-                <td className="border p-2">{job.customerName}</td>
-                <td className="border p-2">{job.paymentStatus}</td>
+              <tr key={job.jobId} className="admin-row">
+                <td>{job.jobId}</td>
+                <td>{job.customerName}</td>
+                <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
+                <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.paymentHandledBy?.name || '—'}</td>
+                <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.dispatchedBy?.name || '—'}</td>
+                <td>
+                  <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
+                    {job.paymentStatus}
+                  </span>
+                </td>
 
-                <td className="border p-2">
+                <td>
                   {job.paymentStatus === 'UNPAID' ? (
                     <input
-                      className="border p-1 w-full"
+                      className="form-input"
+                      style={{ width: '100%' }}
                       placeholder="Approval note"
                       onChange={(e) =>
                         setNote({
@@ -95,14 +119,16 @@ export default function AdminDashboard() {
                       }
                     />
                   ) : (
-                    job.adminApprovalNote || '—'
+                    <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
+                      {job.adminApprovalNote || '—'}
+                    </span>
                   )}
                 </td>
 
-                <td className="border p-2 text-center">
+                <td style={{ textAlign: 'center' }}>
                   {job.paymentStatus === 'UNPAID' ? (
                     <button
-                      className="bg-purple-600 text-white px-3 py-1 rounded"
+                      className="btn-primary"
                       onClick={() => approve(job.jobId)}
                     >
                       Approve Dispatch

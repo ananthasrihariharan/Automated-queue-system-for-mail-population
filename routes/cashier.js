@@ -20,14 +20,14 @@ router.get(
 
       const jobs = await Job.find({
         createdAt: { $gte: last30Days }
-      },{
+      }, {
         _id: 0,
         jobId: 1,
         customerName: 1,
-        paymentStatus:1
+        paymentStatus: 1
 
       }
-    ).sort({ createdAt: -1 })
+      ).sort({ createdAt: -1 })
 
       res.json(jobs)
     } catch (err) {
@@ -59,7 +59,8 @@ router.patch(
       }
 
       job.paymentStatus = 'PAID'
-     // job.paymentMode = paymentMode || 'CASH'
+      job.paymentHandledBy = req.user._id
+      // job.paymentMode = paymentMode || 'CASH'
       await job.save()
 
       res.json({

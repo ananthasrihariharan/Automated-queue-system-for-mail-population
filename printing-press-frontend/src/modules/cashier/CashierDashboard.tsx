@@ -3,6 +3,7 @@ import { api } from '../../services/api'
 import { endpoints } from '../../services/endpoints'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
+import ModuleNavigation from '../../components/ModuleNavigation'
 import './CashierDashboard.css'
 
 type Job = {
@@ -62,12 +63,16 @@ export default function CashierDashboard() {
               <h1 className="cashier-title">Cashier</h1>
             </div>
           </div>
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            className="btn-outline"
-          >
-            Logout
-          </button>
+
+          <div className="flex items-center">
+            <ModuleNavigation />
+            <button
+              onClick={() => { logout(); navigate('/login'); }}
+              className="logout-btn ml-2"
+            >
+              Logout
+            </button>
+          </div>
         </nav>
 
         <main>

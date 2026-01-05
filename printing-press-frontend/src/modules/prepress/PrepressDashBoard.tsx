@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
+import { useAuth } from '../../hooks/useAuth'
+import ModuleNavigation from '../../components/ModuleNavigation'
 import './PrepressDashboard.css'
 
 type Job = {
@@ -18,6 +21,9 @@ export default function PrepressDashboard() {
   const [loading, setLoading] = useState(true)
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
 
+  const { logout } = useAuth()
+  const navigate = useNavigate()
+
   const loadJobs = async () => {
     const res = await api.get('/api/prepress/jobs')
     setJobs(res.data)
@@ -33,10 +39,22 @@ export default function PrepressDashboard() {
   return (
     <div className="prepress-page">
       <div className="prepress-header">
-        <h1>Prepress Dashboard</h1>
-        <a href="/prepress/create" className="create-job-btn">
-          + Create Job
-        </a>
+        <div className="flex items-center gap-4">
+          <h1>Prepress Dashboard</h1>
+          <a href="/prepress/create" className="btn-primary">
+            + Create Job
+          </a>
+        </div>
+
+        <div className="flex items-center gap-4">
+          <ModuleNavigation />
+          <button
+            onClick={() => { logout(); navigate('/login'); }}
+            className="logout-btn ml-2"
+          >
+            Logout
+          </button>
+        </div>
       </div>
 
       {/* Preview Modal */}
@@ -67,10 +85,10 @@ export default function PrepressDashboard() {
                 <p>Payment Status</p>
                 <span
                   className={`badge ${previewJob.paymentStatus === 'PAID'
-                      ? 'badge-paid'
-                      : previewJob.paymentStatus === 'ADMIN_APPROVED'
-                        ? 'badge-admin'
-                        : 'badge-unpaid'
+                    ? 'badge-paid'
+                    : previewJob.paymentStatus === 'ADMIN_APPROVED'
+                      ? 'badge-admin'
+                      : 'badge-unpaid'
                     }`}
                 >
                   {previewJob.paymentStatus}
@@ -99,7 +117,7 @@ export default function PrepressDashboard() {
             </div>
 
             <div className="modal-footer">
-              <button className="close-footer-btn" onClick={() => setPreviewJob(null)}>
+              <button className="btn-secondary" onClick={() => setPreviewJob(null)}>
                 Close
               </button>
             </div>
@@ -128,7 +146,7 @@ export default function PrepressDashboard() {
               <td>{job.paymentStatus}</td>
               <td>{new Date(job.createdAt).toLocaleDateString()}</td>
               <td style={{ textAlign: 'center' }}>
-                <button className="view-btn" onClick={() => setPreviewJob(job)}>
+                <button className="btn-secondary" onClick={() => setPreviewJob(job)}>
                   View
                 </button>
               </td>

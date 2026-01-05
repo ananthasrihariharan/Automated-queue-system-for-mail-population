@@ -116,45 +116,9 @@
 }
 
 /* =========================
-   BUTTONS
+   BUTTONS (Functionality moved to Global index.css)
 ========================= */
-.btn-primary {
-    background: #000000;
-    color: #ffffff;
-    padding: 0.5rem 1rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    border: none;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    text-transform: uppercase;
-    letter-spacing: 0.05em;
-}
-
-.btn-primary:hover {
-    background: #1f2937;
-}
-
-.btn-primary:active {
-    transform: translateY(1px);
-}
-
-.btn-outline {
-    background: #ffffff;
-    color: #000000;
-    padding: 0.5rem 1rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 700;
-    border: 1px solid #e5e7eb;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.btn-outline:hover {
-    background: #f9fafb;
-}
+/* .btn-primary and .btn-outline removed to inherit global styles */
 
 /* =========================
    EMPTY STATE
