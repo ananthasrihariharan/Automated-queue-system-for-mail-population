@@ -45,7 +45,10 @@ router.get(
                     jobStatus: 1,
                     dispatchedAt: 1,
                     rackLocation: 1,
-                    itemScreenshots: 1
+                    itemScreenshots: 1,
+                    packingMode: 1,
+                    packingOverride: 1,
+                    totalItems: 1
                 }
             ).sort({ createdAt: -1 })
                 .populate('createdBy', 'name')
@@ -77,6 +80,58 @@ router.patch(
             await job.save()
 
             res.json({ message: 'Approval requested from admin' })
+        } catch (err) {
+            res.status(500).json({ message: 'Server error' })
+        }
+    }
+)
+
+/**
+ * REORGANIZE PARCELS (Logical Split by Staff)
+ */
+router.patch(
+    '/jobs/:jobId/reorganize',
+    auth,
+    authorize('DISPATCH', 'ADMIN'),
+    async (req, res) => {
+        try {
+            const { parcels, packingMode, overrideReason } = req.body
+            const job = await Job.findOne({ jobId: req.params.jobId })
+            if (!job) return res.status(404).json({ message: 'Job not found' })
+
+            // Validate all items are covered
+            const allItems = [...new Set(parcels.flatMap(p => p.itemIndexes))]
+            if (allItems.length !== job.totalItems) {
+                return res.status(400).json({ message: 'All items must be assigned to parcels' })
+            }
+
+            // Check for override
+            if (packingMode !== job.packingPreference) {
+                job.packingOverride = {
+                    overridden: true,
+                    reason: overrideReason,
+                    overriddenBy: req.user._id,
+                    overriddenAt: new Date()
+                }
+            }
+
+            job.parcels = parcels
+            job.packingMode = packingMode
+
+            // Re-evaluate job status based on new parcels
+            const allPacked = job.parcels.length > 0 && job.parcels.every(p => p.status === 'PACKED' || p.status === 'DISPATCHED')
+            const allDispatched = job.parcels.length > 0 && job.parcels.every(p => p.status === 'DISPATCHED')
+
+            if (allDispatched) {
+                job.jobStatus = 'DISPATCHED'
+            } else if (allPacked) {
+                job.jobStatus = 'PACKED'
+            } else {
+                job.jobStatus = 'PENDING'
+            }
+
+            await job.save()
+            res.json({ message: 'Parcels reorganized successfully', job })
         } catch (err) {
             res.status(500).json({ message: 'Server error' })
         }
@@ -131,9 +186,16 @@ router.patch(
             }
 
             await job.save()
+
+            // Check if all parcels are now PACKED (or DISPATCHED)
+            const allPacked = job.parcels.length > 0 && job.parcels.every(p => p.status === 'PACKED' || p.status === 'DISPATCHED')
+            if (allPacked && job.jobStatus !== 'DISPATCHED') {
+                job.jobStatus = 'PACKED'
+                await job.save()
+            }
+
             res.json({ message: 'Parcel packed and rack saved', parcel: activeParcel, jobStatus: job.jobStatus })
         } catch (err) {
-            console.error('PACK ERROR:', err)
             res.status(500).json({ message: 'Server error' })
         }
     }
@@ -238,7 +300,6 @@ router.patch(
             await job.save()
             res.json({ message: 'Parcel dispatched', parcelNo, jobStatus: job.jobStatus })
         } catch (err) {
-            console.error('DISPATCH ERROR:', err)
             res.status(500).json({ message: 'Server error' })
         }
     }

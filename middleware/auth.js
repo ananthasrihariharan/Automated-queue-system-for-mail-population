@@ -22,7 +22,6 @@ module.exports = async function (req, res, next) {
       user.roles = [user.role.trim().toUpperCase()]
     }
 
-    console.log('Auth Middleware - User:', { name: user.name, roles: user.roles })
 
     req.user = user
     next()

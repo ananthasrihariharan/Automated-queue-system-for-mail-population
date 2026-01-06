@@ -92,10 +92,8 @@ router.post(
 
       const files = req.files || []
 
-      console.log('Received Job Creation Request:', { body: req.body, filesCount: files.length });
 
       if (!jobId || !customerName || !customerPhone || !totalItems) {
-        console.log('Missing fields validation failed');
         return res.status(400).json({ message: 'Missing fields' })
       }
 

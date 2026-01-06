@@ -5,13 +5,14 @@ import { useAuth } from '../../hooks/useAuth'
 import './CustomerDashboard.css'
 
 function StatusBadge({ status }: { status: string }) {
-    const statusClass = status === 'PENDING' ? 'status-pending' :
-        status === 'PACKED' ? 'status-packed' :
-            status === 'DISPATCHED' ? 'status-dispatched' : ''
+    const normalizedStatus = status === 'CREATED' ? 'PENDING' : status
+    const statusClass = normalizedStatus === 'PENDING' ? 'status-pending' :
+        normalizedStatus === 'PACKED' ? 'status-packed' :
+            normalizedStatus === 'DISPATCHED' ? 'status-dispatched' : ''
 
     return (
         <span className={`status-badge ${statusClass}`}>
-            {status}
+            {normalizedStatus}
         </span>
     )
 }
@@ -19,6 +20,7 @@ function StatusBadge({ status }: { status: string }) {
 function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
     const isOut = job.jobStatus === 'DISPATCHED'
     const progress = job.jobStatus === 'DISPATCHED' ? 100 : job.jobStatus === 'PACKED' ? 66 : 33
+    const mode = job.packingMode || job.packingPreference || 'SINGLE'
 
     return (
         <div className="job-card" onClick={onClick}>
@@ -40,7 +42,7 @@ function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
                 <div style={{ width: '1px', background: '#e5e7eb' }}></div>
                 <div>
                     <span className="stats-card-label">Mode</span>
-                    <span style={{ fontWeight: 700 }}>{job.packingPreference || 'SINGLE'}</span>
+                    <span style={{ fontWeight: 700 }}>{mode}</span>
                 </div>
             </div>
 
@@ -91,7 +93,7 @@ export default function CustomerDashboard() {
 
     const stats = useMemo(() => {
         const total = jobs.length
-        const inProgress = jobs.filter(j => j.jobStatus === 'PENDING' || j.jobStatus === 'PACKED').length
+        const inProgress = jobs.filter(j => j.jobStatus !== 'DISPATCHED').length
         const completed = jobs.filter(j => j.jobStatus === 'DISPATCHED').length
         return { total, inProgress, completed }
     }, [jobs])

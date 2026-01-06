@@ -123,7 +123,7 @@ export default function CustomerPacking() {
             <p style={{ color: '#6b7280', fontSize: '0.875rem' }}>Job ID: #{job.jobId}</p>
           </header>
 
-          {job.jobStatus === 'PACKED' ? (
+          {job.jobStatus === 'PACKED' || job.parcels?.some((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED') ? (
             <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '0.5rem', padding: '1.5rem', marginBottom: '1.5rem' }}>
               <h3 style={{ color: '#1e40af', fontWeight: 700, fontSize: '1.125rem', marginBottom: '0.5rem' }}>Job is Packed</h3>
               <p style={{ color: '#1e3a8a', fontSize: '0.875rem' }}>

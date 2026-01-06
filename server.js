@@ -1,18 +1,7 @@
 const express = require("express");
 const cors = require("cors");
-console.log("Modules required...");
-const jwt = require('jsonwebtoken')
-console.log("jsonwebtoken required");
-const User = require('./models/User')
-console.log("User model required");
-const Job = require('./models/Job')
-console.log("Job model required");
-const auth = require('./middleware/auth')
-const upload = require('./middleware/upload')
-const connectDB = require("./config/db");
-
 require("dotenv").config();
-console.log("Dotenv config loaded. MONGO_URI:", process.env.MONGO_URI);
+const connectDB = require("./config/db");
 
 const app = express();
 app.use(cors({
@@ -51,7 +40,6 @@ app.use('/api/admin', adminUserRoutes)
 app.use('/api/dispatch', dispatchRoutes)
 
 // Connect to MongoDB
-console.log("Connecting to DB...");
 connectDB();
 
 const PORT = 5000

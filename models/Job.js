@@ -32,17 +32,30 @@ const JobSchema = new mongoose.Schema(
       enum: ['SINGLE', 'MULTIPLE'],
       default: 'SINGLE'
     },
+    packingMode: {
+      type: String,
+      enum: ['SINGLE', 'MULTIPLE', 'MIXED'],
+      default: null
+    },
+    packingOverride: {
+      overridden: { type: Boolean, default: false },
+      reason: String,
+      overriddenBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
+      overriddenAt: Date
+    },
 
     paymentStatus: {
       type: String,
       enum: ['UNPAID', 'PAID', 'ADMIN_APPROVED'],
-      default: 'UNPAID'
+      default: 'UNPAID',
+      index: true
     },
 
     jobStatus: {
       type: String,
-      enum: ['CREATED', 'DISPATCHED'],
-      default: 'CREATED'
+      enum: ['PENDING', 'CREATED', 'PACKED', 'DISPATCHED'],
+      default: 'PENDING',
+      index: true
     },
 
     dispatchedAt: Date,
@@ -96,7 +109,8 @@ const JobSchema = new mongoose.Schema(
     customerId: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Customer',
-      required: true
+      required: true,
+      index: true
     },
 
     customerPhone: {
@@ -115,5 +129,25 @@ const JobSchema = new mongoose.Schema(
     timestamps: true
   }
 )
+
+JobSchema.pre('save', function (next) {
+  if (this.parcels && this.parcels.length > 0) {
+    const allDispatched = this.parcels.every(p => p.status === 'DISPATCHED')
+    const anyPackedOrDispatched = this.parcels.some(p => p.status === 'PACKED' || p.status === 'DISPATCHED')
+    const allPackedOrDispatched = this.parcels.every(p => p.status === 'PACKED' || p.status === 'DISPATCHED')
+
+    if (allDispatched) {
+      this.jobStatus = 'DISPATCHED'
+    } else if (allPackedOrDispatched) {
+      this.jobStatus = 'PACKED'
+    } else if (this.jobStatus !== 'CREATED' && this.jobStatus !== 'PENDING') {
+      // If none of the above, but was previously PACKED/DISPATCHED, revert to PENDING
+      this.jobStatus = 'PENDING'
+    }
+  } else if (this.jobStatus !== 'CREATED') {
+    this.jobStatus = 'PENDING'
+  }
+  next()
+})
 
 module.exports = mongoose.model('Job', JobSchema)

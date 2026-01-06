@@ -33,7 +33,7 @@ router.get(
  * SAVE CUSTOMER PACKING DECISION
  * No auth, no role
  */
-router.post('/jobs/:jobId/packing', async (req, res) => {
+router.post('/jobs/:jobId/packing', customerAuth, async (req, res) => {
   try {
     const { packingPreference, parcels } = req.body
 
