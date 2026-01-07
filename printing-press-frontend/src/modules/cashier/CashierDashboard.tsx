@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
 import { endpoints } from '../../services/endpoints'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './CashierDashboard.css'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchCashierJobs } from '../../services/api'
 
 type Job = {
   jobId: string
@@ -13,33 +14,25 @@ type Job = {
 }
 
 export default function CashierDashboard() {
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
+  const { data: jobs = [], isLoading: loading } = useQuery<Job[]>({
+    queryKey: ['cashier-jobs'],
+    queryFn: fetchCashierJobs,
+    refetchInterval: 5000,
+  })
+
   const { logout } = useAuth()
   const navigate = useNavigate()
-
-  const loadJobs = async () => {
-    try {
-      const res = await api.get(endpoints.cashierJobs)
-      setJobs(res.data)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const markPaid = async (jobId: string) => {
     if (!window.confirm(`Mark Job #${jobId} as PAID?`)) return
     try {
       await api.patch(endpoints.markPaid(jobId))
-      loadJobs()
+      queryClient.invalidateQueries({ queryKey: ['cashier-jobs'] })
     } catch (err) {
       alert('Failed to update payment status')
     }
   }
-
-  useEffect(() => {
-    loadJobs()
-  }, [])
 
   if (loading) {
     return (

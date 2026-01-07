@@ -1,10 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './PrepressDashboard.css'
-
+import { useQuery } from '@tanstack/react-query'
+import { fetchPrepressJobs } from '../../services/api'
 type Job = {
   jobId: string
   customerName: string
@@ -14,27 +14,25 @@ type Job = {
   itemScreenshots: string[]
 }
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 export default function PrepressDashboard() {
-  const [jobs, setJobs] = useState<Job[]>([])
-  const [loading, setLoading] = useState(true)
+  const {
+    data: jobs = [],
+    isLoading,
+  } = useQuery<Job[]>({
+    queryKey: ['prepress-jobs'],
+    queryFn: fetchPrepressJobs,
+    refetchInterval: 5000,
+  })
+
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
 
   const { logout } = useAuth()
   const navigate = useNavigate()
 
-  const loadJobs = async () => {
-    const res = await api.get('/api/prepress/jobs')
-    setJobs(res.data)
-    setLoading(false)
-  }
-
-  useEffect(() => {
-    loadJobs()
-  }, [])
-
-  if (loading) return <div className="prepress-page">Loading...</div>
+  if (isLoading) return <div className="prepress-page">Loading...</div>
 
   return (
     <div className="prepress-page">

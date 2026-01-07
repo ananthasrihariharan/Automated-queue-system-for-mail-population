@@ -57,36 +57,66 @@ router.get(
 )
 
 /**
- * ACTIVATE / DEACTIVATE EMPLOYEE
+ * UPDATE EMPLOYEE (GENERAL)
+ * Role: ADMIN
  */
 router.patch(
-  '/users/:id/status',
+  '/users/:id',
   auth,
   authorize('ADMIN'),
   async (req, res) => {
-    const { isActive } = req.body
+    try {
+      const { name, phone, roles, isActive } = req.body
+      const updateData = {}
 
-    await User.findByIdAndUpdate(req.params.id, { isActive })
-    res.json({ message: 'Status updated' })
+      if (name !== undefined) updateData.name = name
+      if (phone !== undefined) updateData.phone = phone
+      if (roles !== undefined) {
+        if (!Array.isArray(roles) || roles.length === 0) {
+          return res.status(400).json({ message: 'Roles array must not be empty' })
+        }
+        updateData.roles = roles
+      }
+      if (isActive !== undefined) updateData.isActive = isActive
+
+      const user = await User.findByIdAndUpdate(
+        req.params.id,
+        { $set: updateData },
+        { new: true, runValidators: true }
+      )
+
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' })
+      }
+
+      res.json(user)
+    } catch (err) {
+      if (err.code === 11000) {
+        return res.status(400).json({ message: 'Phone number already in use' })
+      }
+      res.status(500).json({ message: 'Server error' })
+    }
   }
 )
 
 /**
- * UPDATE EMPLOYEE ROLES
+ * DELETE EMPLOYEE
+ * Role: ADMIN
  */
-router.patch(
-  '/users/:id/roles',
+router.delete(
+  '/users/:id',
   auth,
   authorize('ADMIN'),
   async (req, res) => {
-    const { roles } = req.body
-
-    if (!roles || !Array.isArray(roles) || roles.length === 0) {
-      return res.status(400).json({ message: 'Roles array is required' })
+    try {
+      const user = await User.findByIdAndDelete(req.params.id)
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' })
+      }
+      res.json({ message: 'User deleted successfully' })
+    } catch (err) {
+      res.status(500).json({ message: 'Server error' })
     }
-
-    await User.findByIdAndUpdate(req.params.id, { roles })
-    res.json({ message: 'Roles updated' })
   }
 )
 

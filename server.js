@@ -2,47 +2,72 @@ const express = require("express");
 const cors = require("cors");
 require("dotenv").config();
 const connectDB = require("./config/db");
+const path = require("path");
 
 const app = express();
+
+/* =======================
+   CORS (LAN SAFE)
+======================= */
 app.use(cors({
-    origin: 'http://localhost:5173',
-    methods: ['GET', 'POST', 'PATCH', 'PUT', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization']
+    origin: true, // allow all LAN devices
+    credentials: true,
 }));
+
 app.use(express.json());
 
-// DEBUG LOGGING MIDDLEWARE
+/* =======================
+   DEBUG LOGGING
+======================= */
 app.use((req, res, next) => {
-    const start = Date.now()
-    res.on('finish', () => {
-        const duration = Date.now() - start
-        console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`)
-    })
-    next()
-})
+    const start = Date.now();
+    res.on("finish", () => {
+        console.log(`${req.method} ${req.originalUrl} ${res.statusCode} ${Date.now() - start}ms`);
+    });
+    next();
+});
 
-app.use('/uploads', express.static('uploads'));
-const prepressRoutes = require('./routes/prepress')
-const customerRoutes = require('./routes/customer')
-const loginRoutes = require('./routes/login')
-const cashierRoutes = require('./routes/cashier')
-const adminRoutes = require('./routes/admin')
-const dispatchRoutes = require('./routes/dispatch')
-const adminUserRoutes = require('./routes/admin-users')
-const customerAuthRoutes = require('./routes/customer-auth')
-app.use('/api/prepress', prepressRoutes)
-app.use('/api/customer', customerRoutes)
-app.use('/api/customer-auth', customerAuthRoutes)
-app.use('/api/login', loginRoutes)
-app.use('/api/cashier', cashierRoutes)
-app.use('/api/admin', adminRoutes)
-app.use('/api/admin', adminUserRoutes)
-app.use('/api/dispatch', dispatchRoutes)
+/* =======================
+   STATIC FILES
+======================= */
 
-// Connect to MongoDB
+// uploads (images)
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+
+// ✅ SERVE REACT BUILD (THIS IS THE KEY)
+app.use(
+    express.static(
+        path.join(__dirname, "printing-press-frontend", "dist")
+    )
+);
+
+/* =======================
+   API ROUTES
+======================= */
+app.use("/api/prepress", require("./routes/prepress"));
+app.use("/api/customer", require("./routes/customer"));
+app.use("/api/customer-auth", require("./routes/customer-auth"));
+app.use("/api/login", require("./routes/login"));
+app.use("/api/cashier", require("./routes/cashier"));
+app.use("/api/admin", require("./routes/admin"));
+app.use("/api/admin", require("./routes/admin-users"));
+app.use("/api/dispatch", require("./routes/dispatch"));
+
+/* =======================
+   SPA FALLBACK
+======================= */
+app.get("*", (req, res) => {
+    res.sendFile(
+        path.join(__dirname, "printing-press-frontend", "dist", "index.html")
+    );
+});
+
+/* =======================
+   START SERVER
+======================= */
 connectDB();
 
-const PORT = 5000
-app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`)
-})
+const PORT = 5000;
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${PORT}`);
+});

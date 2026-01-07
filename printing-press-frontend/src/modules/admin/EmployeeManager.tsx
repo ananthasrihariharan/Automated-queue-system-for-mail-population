@@ -18,9 +18,18 @@ export default function EmployeeManager() {
   const [phone, setPhone] = useState('')
   const [roles, setRoles] = useState<string[]>([])
 
+  // Edit states
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editName, setEditName] = useState('')
+  const [editPhone, setEditPhone] = useState('')
+
   const loadUsers = async () => {
-    const res = await api.get('/api/admin/users')
-    setUsers(res.data)
+    try {
+      const res = await api.get('/api/admin/users')
+      setUsers(res.data)
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to load users')
+    }
   }
 
   useEffect(() => {
@@ -41,26 +50,48 @@ export default function EmployeeManager() {
       return
     }
 
-    await api.post('/api/admin/users', {
-      name,
-      phone,
-      roles
-    })
+    try {
+      await api.post('/api/admin/users', {
+        name,
+        phone,
+        roles,
+        password: `${name.split(' ')[0]}@${phone.slice(-5)}` // Default password
+      })
 
-    setName('')
-    setPhone('')
-    setRoles([])
-    loadUsers()
+      setName('')
+      setPhone('')
+      setRoles([])
+      loadUsers()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Failed to create user')
+    }
   }
 
-  const updateRoles = async (id: string, roles: string[]) => {
-    await api.patch(`/api/admin/users/${id}/roles`, { roles })
-    loadUsers()
+  const handleUpdate = async (id: string, data: Partial<User>) => {
+    try {
+      await api.patch(`/api/admin/users/${id}`, data)
+      setEditingId(null)
+      loadUsers()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Update failed')
+    }
   }
 
-  const toggleActive = async (id: string, isActive: boolean) => {
-    await api.patch(`/api/admin/users/${id}/status`, { isActive })
-    loadUsers()
+  const startEdit = (user: User) => {
+    setEditingId(user._id)
+    setEditName(user.name)
+    setEditPhone(user.phone)
+  }
+
+  const handleDelete = async (user: User) => {
+    if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE employee "${user.name}"? This action cannot be undone.`)) return
+
+    try {
+      await api.delete(`/api/admin/users/${user._id}`)
+      loadUsers()
+    } catch (err: any) {
+      alert(err.response?.data?.message || 'Delete failed')
+    }
   }
 
   return (
@@ -121,57 +152,124 @@ export default function EmployeeManager() {
         </thead>
 
         <tbody>
-          {users.map(user => (
-            <tr key={user._id} className="admin-row">
-              <td style={{ fontWeight: 600 }}>{user.name}</td>
-              <td>{user.phone}</td>
+          {users.map(user => {
+            const isEditing = editingId === user._id
 
-              <td>
-                <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                  {ALL_ROLES.map(role => (
-                    <label
-                      key={role}
-                      className="checkbox-label"
-                      style={{ fontSize: '0.75rem' }}
-                    >
-                      <input
-                        type="checkbox"
-                        className="checkbox-input"
-                        style={{ width: '0.8rem', height: '0.8rem' }}
-                        checked={user.roles.includes(role)}
-                        onChange={() =>
-                          updateRoles(
-                            user._id,
-                            user.roles.includes(role)
-                              ? user.roles.filter(r => r !== role)
-                              : [...user.roles, role]
-                          )
-                        }
-                      />
-                      {role}
-                    </label>
-                  ))}
-                </div>
-              </td>
+            return (
+              <tr key={user._id} className="admin-row">
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="form-input"
+                      style={{ padding: '0.25rem', fontSize: '0.875rem' }}
+                      value={editName}
+                      onChange={e => setEditName(e.target.value)}
+                    />
+                  ) : (
+                    <span style={{ fontWeight: 600 }}>{user.name}</span>
+                  )}
+                </td>
+                <td>
+                  {isEditing ? (
+                    <input
+                      className="form-input"
+                      style={{ padding: '0.25rem', fontSize: '0.875rem' }}
+                      value={editPhone}
+                      onChange={e => setEditPhone(e.target.value)}
+                    />
+                  ) : (
+                    user.phone
+                  )}
+                </td>
 
-              <td>
-                <span className={`status-badge ${user.isActive ? 'status-paid' : 'status-unpaid'}`}>
-                  {user.isActive ? 'Active' : 'Inactive'}
-                </span>
-              </td>
+                <td>
+                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
+                    {ALL_ROLES.map(role => (
+                      <label
+                        key={role}
+                        className="checkbox-label"
+                        style={{ fontSize: '0.75rem' }}
+                      >
+                        <input
+                          type="checkbox"
+                          className="checkbox-input"
+                          style={{ width: '0.8rem', height: '0.8rem' }}
+                          checked={user.roles.includes(role)}
+                          onChange={() =>
+                            handleUpdate(
+                              user._id,
+                              {
+                                roles: user.roles.includes(role)
+                                  ? user.roles.filter(r => r !== role)
+                                  : [...user.roles, role]
+                              }
+                            )
+                          }
+                        />
+                        {role}
+                      </label>
+                    ))}
+                  </div>
+                </td>
 
-              <td>
-                <button
-                  className="action-link"
-                  onClick={() =>
-                    toggleActive(user._id, !user.isActive)
-                  }
-                >
-                  {user.isActive ? 'Deactivate' : 'Activate'}
-                </button>
-              </td>
-            </tr>
-          ))}
+                <td>
+                  <span className={`status-badge ${user.isActive ? 'status-paid' : 'status-unpaid'}`}>
+                    {user.isActive ? 'Active' : 'Inactive'}
+                  </span>
+                </td>
+
+                <td>
+                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+                    {isEditing ? (
+                      <>
+                        <button
+                          className="action-link"
+                          style={{ color: '#10b981' }}
+                          onClick={() => handleUpdate(user._id, { name: editName, phone: editPhone })}
+                        >
+                          Save
+                        </button>
+                        <button
+                          className="action-link"
+                          style={{ color: '#ef4444' }}
+                          onClick={() => setEditingId(null)}
+                        >
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button
+                          className="action-link"
+                          onClick={() => startEdit(user)}
+                        >
+                          Edit
+                        </button>
+                        <div style={{ width: '1px', height: '1rem', background: '#e5e7eb' }}></div>
+                        <button
+                          className="action-link"
+                          style={{ color: user.isActive ? '#ef4444' : '#10b981' }}
+                          onClick={() =>
+                            handleUpdate(user._id, { isActive: !user.isActive })
+                          }
+                        >
+                          {user.isActive ? 'Deactivate' : 'Activate'}
+                        </button>
+                        <div style={{ width: '1px', height: '1rem', background: '#e5e7eb' }}></div>
+                        <button
+                          className="action-link"
+                          style={{ color: '#ef4444' }}
+                          onClick={() => handleDelete(user)}
+                        >
+                          Delete
+                        </button>
+                      </>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            )
+          })}
         </tbody>
       </table>
     </div>

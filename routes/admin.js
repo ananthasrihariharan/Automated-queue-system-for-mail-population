@@ -5,6 +5,7 @@ const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 
 const Job = require('../models/Job')
+const User = require('../models/User')
 const {
   generateInitialPassword,
   hashPassword

@@ -1,8 +1,9 @@
-import { useEffect, useState, useMemo } from 'react'
-import { api } from '../../services/api'
+import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import './CustomerDashboard.css'
+import { useQuery } from '@tanstack/react-query'
+import { fetchCustomerJobs } from '../../services/api'
 
 function StatusBadge({ status }: { status: string }) {
     const normalizedStatus = status === 'CREATED' ? 'PENDING' : status
@@ -70,26 +71,15 @@ function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
 }
 
 export default function CustomerDashboard() {
-    const [jobs, setJobs] = useState<any[]>([])
-    const [loading, setLoading] = useState(true)
     const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
     const navigate = useNavigate()
     const { logout } = useAuth()
 
-    useEffect(() => {
-        loadJobs()
-    }, [viewMode])
-
-    const loadJobs = async () => {
-        try {
-            const res = await api.get(`/api/customer/jobs?status=${viewMode}`)
-            setJobs(res.data)
-        } catch (err) {
-            console.error('Failed to load items')
-        } finally {
-            setLoading(false)
-        }
-    }
+    const { data: jobs = [], isLoading: loading } = useQuery<any[]>({
+        queryKey: ['customer-jobs', viewMode],
+        queryFn: () => fetchCustomerJobs(viewMode),
+        refetchInterval: 5000,
+    })
 
     const stats = useMemo(() => {
         const total = jobs.length
@@ -142,40 +132,41 @@ export default function CustomerDashboard() {
                         </button>
                     </div>
 
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '1rem' }}>
-                        <p className="dashboard-description">
-                            {viewMode === 'active'
-                                ? 'Track your printing shipments, manage parcel groups, and access the collection rack instantly.'
-                                : 'View your completed orders and past shipments.'}
-                        </p>
-                        <div className="stats-container">
-                            <div className="stats-card">
-                                <span className="stats-card-label">Active</span>
-                                <span className="stats-card-value">{stats.inProgress}</span>
-                            </div>
-                            <div className="stats-card dark">
-                                <span className="stats-card-label">Total</span>
-                                <span className="stats-card-value">{stats.total}</span>
-                            </div>
+                    <div className="stats-header">
+                        <div className="stats-card">
+                            <span className="stats-card-label">Total Jobs</span>
+                            <span className="stats-card-value text-blue-600">{stats.total}</span>
+                        </div>
+                        <div className="stats-card">
+                            <span className="stats-card-label">Active</span>
+                            <span className="stats-card-value text-orange-600">{stats.inProgress}</span>
+                        </div>
+                        <div className="stats-card">
+                            <span className="stats-card-label">Collected</span>
+                            <span className="stats-card-value text-emerald-600">{stats.completed}</span>
                         </div>
                     </div>
                 </header>
 
-                <div>
+                <div className="job-grid">
                     {jobs.length === 0 ? (
                         <div className="empty-state">
-                            No orders found
+                            <div className="empty-state-icon">
+                                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0l-8 4-8-4m8 4v6"></path></svg>
+                            </div>
+                            <h3 className="empty-state-title">No orders found</h3>
+                            <p className="empty-state-text">
+                                {viewMode === 'active' ? 'Your active orders will appear here.' : 'Your order history is currently empty.'}
+                            </p>
                         </div>
                     ) : (
-                        <div className="jobs-grid">
-                            {jobs.map(job => (
-                                <JobCard
-                                    key={job.jobId}
-                                    job={job}
-                                    onClick={() => navigate(`/customer/${job.jobId}`)}
-                                />
-                            ))}
-                        </div>
+                        jobs.map(job => (
+                            <JobCard
+                                key={job.jobId}
+                                job={job}
+                                onClick={() => navigate(`/customer/packing/${job.jobId}`)}
+                            />
+                        ))
                     )}
                 </div>
             </main>

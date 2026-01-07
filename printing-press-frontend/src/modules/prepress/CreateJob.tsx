@@ -232,6 +232,23 @@ export default function CreateJob() {
                                             )}
                                         </div>
                                     )}
+
+                                    <input
+                                        type="file"
+                                        id="file-drop"
+                                        multiple
+                                        accept="image/*"
+                                        style={{ display: 'none' }}
+                                        onChange={(e) => {
+                                            const selected = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
+                                            const remaining = formData.totalItems - files.length;
+                                            if (remaining > 0) {
+                                                setFiles(prev => [...prev, ...selected.slice(0, remaining)]);
+                                            }
+                                            // Reset input value so same file can be selected again if deleted
+                                            e.target.value = '';
+                                        }}
+                                    />
                                 </div>
                             </div>
                         </div>

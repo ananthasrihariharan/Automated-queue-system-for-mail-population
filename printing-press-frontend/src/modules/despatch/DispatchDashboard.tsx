@@ -1,11 +1,13 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useState, useMemo } from 'react'
 import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './DispatchDashboard.css'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { fetchDispatchJobs } from '../../services/api'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || 'http://localhost:5000'
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
 function DispatchParcels({ job, onClose, onDispatched }: any) {
   const [parcelRacks, setParcelRacks] = useState<Record<number, string>>(() => {
@@ -427,58 +429,48 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
 
 
       {/* Lightbox Modal */}
-      {viewImage && (
-        <div
-          className="lightbox-modal"
-          onClick={() => setViewImage(null)}
-        >
-          <div className="lightbox-content">
-            <img
-              src={viewImage}
-              alt="Preview"
-              className="lightbox-img"
-            />
-            <button
-              className="lightbox-close-btn"
-              onClick={() => setViewImage(null)}
-            >
-              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-              </svg>
-            </button>
+      {
+        viewImage && (
+          <div
+            className="lightbox-modal"
+            onClick={() => setViewImage(null)}
+          >
+            <div className="lightbox-content">
+              <img
+                src={viewImage}
+                alt="Preview"
+                className="lightbox-img"
+              />
+              <button
+                className="lightbox-close-btn"
+                onClick={() => setViewImage(null)}
+              >
+                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
           </div>
-        </div>
-      )}
+        )
+      }
     </>
   )
 }
 
-
 export default function DispatchDashboard() {
-  const [jobs, setJobs] = useState<any[]>([])
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
 
+  const queryClient = useQueryClient()
+  const { data: jobs = [], isLoading: loading } = useQuery<any[]>({
+    queryKey: ['dispatch-jobs', viewMode],
+    queryFn: () => fetchDispatchJobs(viewMode),
+    refetchInterval: 5000,
+  })
+
   const { logout } = useAuth()
   const navigate = useNavigate()
-
-  useEffect(() => {
-    loadJobs()
-  }, [viewMode])
-
-  const loadJobs = async () => {
-    try {
-      setLoading(true)
-      const res = await api.get(`/api/dispatch/jobs?status=${viewMode}`)
-      setJobs(res.data)
-    } catch (err) {
-      console.error('Failed to load dispatch jobs', err)
-    } finally {
-      setLoading(false)
-    }
-  }
 
   const filteredJobs = useMemo(() => {
     return jobs.filter(job => {
@@ -603,7 +595,7 @@ export default function DispatchDashboard() {
         <DispatchParcels
           job={selectedJob}
           onClose={() => setSelectedJobId(null)}
-          onDispatched={loadJobs}
+          onDispatched={() => queryClient.invalidateQueries({ queryKey: ['dispatch-jobs'] })}
         />
       )}
     </div>
