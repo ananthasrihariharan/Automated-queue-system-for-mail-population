@@ -23,7 +23,6 @@ export default function AdminDashboard() {
   const navigate = useNavigate()
   const { logout } = useAuth()
   const [activeTab, setActiveTab] = useState<'jobs' | 'employees'>('jobs')
-  const [note, setNote] = useState<Record<string, string>>({})
 
   // Filtering & Pagination State
   const [search, setSearch] = useState('')
@@ -43,9 +42,7 @@ export default function AdminDashboard() {
   const queryClient = useQueryClient()
 
   const approve = async (jobId: string) => {
-    await api.patch(`/api/admin/jobs/${jobId}/approve-dispatch`, {
-      note: note[jobId]
-    })
+    await api.patch(`/api/admin/jobs/${jobId}/approve-dispatch`)
     queryClient.invalidateQueries({ queryKey: ['admin-jobs'] })
   }
 
@@ -164,78 +161,70 @@ export default function AdminDashboard() {
             </div>
           ) : (
             <>
-              <table className="admin-table">
-                <thead>
-                  <tr>
-                    <th>Job ID</th>
-                    <th>Customer</th>
-                    <th>Submitted By</th>
-                    <th>Payment By</th>
-                    <th>Dispatched By</th>
-                    <th>Payment</th>
-                    <th>Admin Note</th>
-                    <th>Action</th>
-                  </tr>
-                </thead>
-
-                <tbody>
-                  {paginatedJobs.length === 0 ? (
+              <div className="dispatch-table-container">
+                <table className="dispatch-table">
+                  <thead>
                     <tr>
-                      <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
-                        No jobs found matching the filters.
-                      </td>
+                      <th>Job ID</th>
+                      <th>Customer</th>
+                      <th className="hide-mobile">Submitted By</th>
+                      <th className="hide-mobile">Payment Status</th>
+                      <th className="hide-mobile">Dispatched By</th>
+                      <th className="text-right">Action</th>
                     </tr>
-                  ) : (
-                    paginatedJobs.map((job) => (
-                      <tr key={job.jobId} className="admin-row">
-                        <td>{job.jobId}</td>
-                        <td>{job.customerName}</td>
-                        <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
-                        <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.paymentHandledBy?.name || '—'}</td>
-                        <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.dispatchedBy?.name || '—'}</td>
-                        <td>
-                          <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
-                            {job.paymentStatus}
-                          </span>
-                        </td>
-
-                        <td>
-                          {job.paymentStatus === 'UNPAID' ? (
-                            <input
-                              className="form-input"
-                              style={{ width: '100%' }}
-                              placeholder="Approval note"
-                              onChange={(e) =>
-                                setNote({
-                                  ...note,
-                                  [job.jobId]: e.target.value
-                                })
-                              }
-                            />
-                          ) : (
-                            <span style={{ fontSize: '0.875rem', color: '#6b7280' }}>
-                              {job.adminApprovalNote || '—'}
-                            </span>
-                          )}
-                        </td>
-
-                        <td style={{ textAlign: 'center' }}>
-                          {job.paymentStatus === 'UNPAID' ? (
-                            <button
-                              className="btn-primary"
-                              onClick={() => approve(job.jobId)}
-                            >
-                              Approve Dispatch
-                            </button>
-                          ) : (
-                            <span className="text-gray-500">—</span>
-                          )}
+                  </thead>
+                  <tbody>
+                    {paginatedJobs.length === 0 ? (
+                      <tr>
+                        <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                          No jobs found matching the filters.
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      paginatedJobs.map((job) => (
+                        <tr key={job.jobId} className="dispatch-row">
+                          <td>
+                            <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 600 }}>{job.customerName}</span>
+                          </td>
+                          <td className="hide-mobile">
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                              {job.createdBy?.name || '—'}
+                            </span>
+                          </td>
+                          <td className="hide-mobile">
+                            <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
+                              {job.paymentStatus}
+                            </span>
+                          </td>
+                          <td className="hide-mobile">
+                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                              {job.dispatchedBy?.name || '—'}
+                            </span>
+                          </td>
+                          <td className="text-right">
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
+                              {job.paymentStatus === 'PENDING' ? (
+                                <button
+                                  className="btn-primary"
+                                  onClick={() => approve(job.jobId)}
+                                  style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem', width: 'auto' }}
+                                >
+                                  Approve Payment
+                                </button>
+                              ) : (
+                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>COMPLETED</span>
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
 
               {/* Pagination Controls */}
               {totalPages > 1 && (

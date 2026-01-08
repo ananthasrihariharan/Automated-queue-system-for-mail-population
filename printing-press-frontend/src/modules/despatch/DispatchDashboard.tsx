@@ -136,7 +136,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   return (
     <>
       <div className="dispatch-modal-overlay">
-        <div className="dispatch-modal">
+        <div className="dispatch-modal-container">
           <div className="dispatch-modal-header">
             <div>
               <h2 style={{ fontSize: '1.25rem', fontWeight: 900 }}>Job #{job.jobId}</h2>
@@ -160,7 +160,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
           </div>
 
 
-          <div className="dispatch-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1.5rem' }}>
+          <div className="dispatch-modal-content" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1.5rem' }}>
             {isReorganizing ? (
               <div className="reorganize-container">
                 <div style={{ marginBottom: '1.5rem', background: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e5e7eb' }}>
@@ -301,7 +301,14 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                         {job.paymentStatus}
                       </span>
                     </div>
-                    {job.itemScreenshots?.length > 0 && (
+                    {job.filesArchived ? (
+                      <div className="info-item">
+                        <label>Screenshots</label>
+                        <span className="status-badge" style={{ marginTop: '0.25rem', background: '#e5e7eb', color: '#6b7280' }}>
+                          Files Archived
+                        </span>
+                      </div>
+                    ) : job.itemScreenshots?.length > 0 && (
                       <div className="info-item">
                         <label>Screenshots</label>
                         <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
@@ -348,26 +355,23 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                             <span style={{ fontSize: '0.75rem', color: '#64748b' }}>({items.length} items)</span>
                           </div>
                           {!isOut && (
-                            <div style={{ display: 'flex', gap: '0.5rem' }}>
-                              <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
-                                <select
-                                  className="form-input"
-                                  style={{ padding: '0.25rem', fontSize: '0.75rem', height: '32px' }}
-                                  value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
-                                  onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                                >
-                                  <option value="">Rack</option>
-                                  {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                </select>
-                                <button
-                                  disabled={isSubmitting}
-                                  onClick={() => handlePack(p.parcelNo)}
-                                  className="btn-primary"
-                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: isPacked ? '#f1f5f9' : '#000', color: isPacked ? '#000' : '#fff' }}
-                                >
-                                  {isPacked ? 'Packed ✅' : 'Pack'}
-                                </button>
-                              </div>
+                            <div className="parcel-actions">
+                              <select
+                                className="rack-select"
+                                value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
+                                onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
+                              >
+                                <option value="">Rack</option>
+                                {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                              </select>
+                              <button
+                                disabled={isSubmitting}
+                                onClick={() => handlePack(p.parcelNo)}
+                                className="btn-primary"
+                                style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: isPacked ? '#f1f5f9' : '#000', color: isPacked ? '#000' : '#fff' }}
+                              >
+                                {isPacked ? 'Packed ✅' : 'Pack'}
+                              </button>
                               {isPacked && (
                                 <button
                                   disabled={isSubmitting || (!isApproved && !isAdmin)}
@@ -452,19 +456,25 @@ export default function DispatchDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
 
   const queryClient = useQueryClient()
-  const { data: jobs = [], isLoading: loading } = useQuery<any[]>({
-    queryKey: ['dispatch-jobs', viewMode],
-    queryFn: () => fetchDispatchJobs(viewMode),
+  const { data: responseData, isLoading: loading } = useQuery({
+    queryKey: ['dispatch-jobs', viewMode, currentPage],
+    queryFn: () => fetchDispatchJobs(viewMode, currentPage, itemsPerPage),
     refetchInterval: 5000,
   })
+
+  // Handle both legacy (array) and new (object) API responses gracefully during migration
+  const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
+  const totalPages = responseData?.pages || 1
 
   const { logout } = useAuth()
   const navigate = useNavigate()
 
   const filteredJobs = useMemo(() => {
-    return jobs.filter(job => {
+    return jobs.filter((job: any) => {
       const query = searchQuery.toLowerCase()
       return job.jobId.toLowerCase().includes(query) ||
         job.customerName.toLowerCase().includes(query)
@@ -472,7 +482,7 @@ export default function DispatchDashboard() {
   }, [jobs, searchQuery])
 
   const selectedJob = useMemo(() =>
-    jobs.find(j => j.jobId === selectedJobId),
+    jobs.find((j: any) => j.jobId === selectedJobId),
     [jobs, selectedJobId]
   )
 
@@ -525,6 +535,7 @@ export default function DispatchDashboard() {
               <th>Customer</th>
               <th>Submitted By</th>
               <th>Packing</th>
+              <th>Rack</th>
               <th>Payment</th>
               {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
               {viewMode === 'active' && <th>Actions</th>}
@@ -534,18 +545,25 @@ export default function DispatchDashboard() {
           <tbody>
             {filteredJobs.length === 0 ? (
               <tr>
-                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
+                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
                   No jobs found
                 </td>
               </tr>
             ) : (
-              filteredJobs.map(job => {
+              filteredJobs.map((job: any) => {
                 return (
                   <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
                     <td>{job.jobId}</td>
                     <td>{job.customerName}</td>
                     <td className="hide-mobile" style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
                     <td className="hide-mobile">{job.packingPreference || 'SINGLE'}</td>
+                    <td>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                        {[...new Set(job.parcels?.map((p: any) => p.rack).filter(Boolean) || [])].map((r: any) => (
+                          <span key={r} className="status-badge" style={{ background: '#f8fafc', border: '1px solid #e1e4e8', color: '#475569', padding: '0.125rem 0.375rem', fontSize: '0.625rem' }}>{r}</span>
+                        ))}
+                      </div>
+                    </td>
                     <td>
                       <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
                         {job.paymentStatus}
@@ -583,35 +601,52 @@ export default function DispatchDashboard() {
           </tbody>
         </table>
 
-        {/* Mobile-only Card View */}
-        <div className="dispatch-mobile-list">
-          {filteredJobs.length === 0 ? (
-            <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>No jobs found</div>
-          ) : (
-            filteredJobs.map(job => (
-              <div key={job.jobId} className="dispatch-job-card" onClick={() => setSelectedJobId(job.jobId)}>
-                <div className="job-card-header">
-                  <span className="job-id">#{job.jobId}</span>
-                  <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
-                    {job.paymentStatus}
-                  </span>
-                </div>
-                <div className="job-card-body">
-                  <p className="customer-name">{job.customerName}</p>
-                  <div className="job-meta">
-                    <span>{job.packingPreference || 'SINGLE'}</span>
-                    <div className="status-indicator">
-                      <span>P: {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</span>
-                      <span>D: {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
       </div>
 
+      {/* Pagination Controls */}
+      {totalPages > 1 && (
+        <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', paddingBottom: '1.5rem' }}>
+          <button
+            className="btn-primary"
+            disabled={currentPage === 1}
+            style={{ background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#9ca3af' : '#000', border: '1px solid #e5e7eb' }}
+            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+          >
+            Previous
+          </button>
+
+          {totalPages <= 7 ? (
+            [...Array(totalPages)].map((_, i) => (
+              <button
+                key={i}
+                className="btn-primary"
+                style={{
+                  minWidth: '2.5rem',
+                  background: currentPage === i + 1 ? '#000' : '#fff',
+                  color: currentPage === i + 1 ? '#fff' : '#000',
+                  border: '1px solid #e5e7eb'
+                }}
+                onClick={() => setCurrentPage(i + 1)}
+              >
+                {i + 1}
+              </button>
+            ))
+          ) : (
+            <span style={{ display: 'flex', alignItems: 'center', padding: '0 1rem', fontSize: '0.875rem' }}>
+              Page {currentPage} of {totalPages}
+            </span>
+          )}
+
+          <button
+            className="btn-primary"
+            disabled={currentPage === totalPages}
+            style={{ background: currentPage === totalPages ? '#f3f4f6' : '#fff', color: currentPage === totalPages ? '#9ca3af' : '#000', border: '1px solid #e5e7eb' }}
+            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+          >
+            Next
+          </button>
+        </div>
+      )}
       {selectedJob && (
         <DispatchParcels
           job={selectedJob}

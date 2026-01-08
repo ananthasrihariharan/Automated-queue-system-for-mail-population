@@ -50,7 +50,7 @@
    MAIN
 ========================= */
 .customer-main {
-    max-width: 64rem;
+    max-width: 1200px;
     margin: 0 auto;
 }
 
@@ -74,17 +74,17 @@
     background: none;
     border: none;
     cursor: pointer;
-    color: #d1d5db;
+    color: #cbd5e1;
     transition: color 0.2s ease;
     padding: 0;
 }
 
 .dashboard-tab.active {
-    color: #000000;
+    color: #0f172a;
 }
 
 .dashboard-description {
-    color: #6b7280;
+    color: #64748b;
     font-size: 0.875rem;
     line-height: 1.5;
 }
@@ -95,32 +95,33 @@
 .stats-container {
     display: flex;
     gap: 1rem;
-    margin-bottom: 2rem;
+    margin-bottom: 2.5rem;
 }
 
 .stats-card {
     background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 1.25rem;
-    min-width: 120px;
-    text-align: center;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    padding: 1.5rem;
+    min-width: 150px;
+    text-align: left;
 }
 
 .stats-card-label {
     display: block;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #6b7280;
+    font-size: 0.625rem;
+    font-weight: 800;
+    color: #94a3b8;
     text-transform: uppercase;
     letter-spacing: 0.05em;
-    margin-bottom: 0.25rem;
+    margin-bottom: 0.5rem;
 }
 
 .stats-card-value {
-    font-size: 1.5rem;
-    font-weight: 700;
-    color: #000000;
+    font-size: 2rem;
+    font-weight: 900;
+    color: #0f172a;
+    letter-spacing: -0.025em;
 }
 
 .stats-card.dark {
@@ -130,7 +131,7 @@
 }
 
 .stats-card.dark .stats-card-label {
-    color: #9ca3af;
+    color: #64748b;
 }
 
 .stats-card.dark .stats-card-value {
@@ -138,122 +139,13 @@
 }
 
 /* =========================
-   JOB GRID
-========================= */
-.jobs-grid {
-    display: grid;
-    grid-template-columns: 1fr;
-    gap: 1.5rem;
-}
-
-@media (min-width: 768px) {
-    .jobs-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
-}
-
-/* =========================
-   JOB CARD
-========================= */
-.job-card {
-    background: #ffffff;
-    border: 1px solid #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 1.5rem;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
-
-.job-card:hover {
-    border-color: #000000;
-    background: #f9fafb;
-}
-
-.job-card-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: flex-start;
-    margin-bottom: 1rem;
-}
-
-.job-card-id {
-    font-size: 1.125rem;
-    font-weight: 700;
-    color: #000000;
-}
-
-.job-card-date {
-    font-size: 0.875rem;
-    color: #6b7280;
-}
-
-/* =========================
-   STATUS BADGE
-========================= */
-.status-badge {
-    display: inline-block;
-    padding: 0.25rem 0.5rem;
-    border-radius: 0.375rem;
-    font-size: 0.75rem;
-    font-weight: 600;
-}
-
-.status-pending {
-    background: #fef3c7;
-    color: #92400e;
-}
-
-.status-packed {
-    background: #dbeafe;
-    color: #1e40af;
-}
-
-.status-dispatched {
-    background: #dcfce7;
-    color: #166534;
-}
-
-/* =========================
-   PROGRESS BAR
-========================= */
-.progress-container {
-    margin-top: 1rem;
-}
-
-.progress-label {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.75rem;
-    font-weight: 600;
-    color: #6b7280;
-    margin-bottom: 0.5rem;
-}
-
-.progress-track {
-    height: 0.5rem;
-    background: #f3f4f6;
-    border-radius: 999px;
-    overflow: hidden;
-}
-
-.progress-bar {
-    height: 100%;
-    background: #000000;
-    transition: width 0.3s ease;
-}
-
-.progress-bar.completed {
-    background: #10b981;
-}
-
-/* =========================
    EMPTY STATE
 ========================= */
 .empty-state {
     background: #ffffff;
-    border: 1px dashed #e5e7eb;
-    border-radius: 0.5rem;
-    padding: 4rem 2rem;
+    border: 1px dashed #e2e8f0;
+    border-radius: 1rem;
+    padding: 5rem 2rem;
     text-align: center;
-    color: #6b7280;
+    color: #64748b;
 }

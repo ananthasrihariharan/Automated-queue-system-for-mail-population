@@ -27,15 +27,22 @@ const JobSchema = new mongoose.Schema(
       default: []
     },
 
+    filesArchived: {
+      type: Boolean,
+      default: false
+    },
+
     packingPreference: {
       type: String,
-      enum: ['SINGLE', 'MULTIPLE'],
-      default: 'SINGLE'
+      enum: ['SINGLE', 'MULTIPLE', 'MIXED'],
+      default: 'SINGLE',
+      index: true
     },
     packingMode: {
       type: String,
       enum: ['SINGLE', 'MULTIPLE', 'MIXED'],
-      default: null
+      default: null,
+      index: true
     },
     packingOverride: {
       overridden: { type: Boolean, default: false },

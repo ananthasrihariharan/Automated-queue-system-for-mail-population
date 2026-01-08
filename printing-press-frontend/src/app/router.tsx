@@ -72,7 +72,7 @@ export const router = createBrowserRouter([
         element: <Unauthorized />
     },
     {
-        path: '/customer/:jobId',
+        path: '/customer/packing/:jobId',
         element: <CustomerPacking />
     },
     {

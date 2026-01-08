@@ -18,10 +18,13 @@ router.get(
     async (req, res) => {
         try {
             const { status } = req.query
+            const page = parseInt(req.query.page) || 1
+            const limit = parseInt(req.query.limit) || 50
+            const skip = (page - 1) * limit
 
             // Build filter based on status query
             const filter = {
-                packingPreference: { $in: ['SINGLE', 'MULTIPLE'] }
+                packingPreference: { $in: ['SINGLE', 'MULTIPLE', 'MIXED'] }
             }
 
             // Filter by job status if specified
@@ -30,6 +33,8 @@ router.get(
             } else if (status === 'history') {
                 filter.jobStatus = 'DISPATCHED'
             }
+
+            const total = await Job.countDocuments(filter)
 
             const jobs = await Job.find(
                 filter,
@@ -51,9 +56,16 @@ router.get(
                     totalItems: 1
                 }
             ).sort({ createdAt: -1 })
+                .skip(skip)
+                .limit(limit)
                 .populate('createdBy', 'name')
 
-            res.json(jobs)
+            res.json({
+                jobs,
+                total,
+                page,
+                pages: Math.ceil(total / limit)
+            })
         } catch (err) {
             res.status(500).json({ message: 'Server error' })
         }

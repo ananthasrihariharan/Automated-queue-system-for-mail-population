@@ -18,57 +18,7 @@ function StatusBadge({ status }: { status: string }) {
     )
 }
 
-function JobCard({ job, onClick }: { job: any; onClick: () => void }) {
-    const isOut = job.jobStatus === 'DISPATCHED'
-    const progress = job.jobStatus === 'DISPATCHED' ? 100 : job.jobStatus === 'PACKED' ? 66 : 33
-    const mode = job.packingMode || job.packingPreference || 'SINGLE'
 
-    return (
-        <div className="job-card" onClick={onClick}>
-            <div className="job-card-header">
-                <div>
-                    <div className="job-card-id">#{job.jobId}</div>
-                    <div className="job-card-date">
-                        {new Date(job.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
-                    </div>
-                </div>
-                <StatusBadge status={job.jobStatus} />
-            </div>
-
-            <div style={{ display: 'flex', gap: '1rem', marginTop: '1rem' }}>
-                <div>
-                    <span className="stats-card-label">Items</span>
-                    <span style={{ fontWeight: 700 }}>{job.totalItems}</span>
-                </div>
-                <div style={{ width: '1px', background: '#e5e7eb' }}></div>
-                <div>
-                    <span className="stats-card-label">Mode</span>
-                    <span style={{ fontWeight: 700 }}>{mode}</span>
-                </div>
-            </div>
-
-            <div className="progress-container">
-                <div className="progress-label">
-                    <span>Timeline</span>
-                    <span>{progress}%</span>
-                </div>
-                <div className="progress-track">
-                    <div
-                        className={`progress-bar ${isOut ? 'completed' : ''}`}
-                        style={{ width: `${progress}%` }}
-                    ></div>
-                </div>
-            </div>
-
-            {job.jobStatus === 'PACKED' && (
-                <div style={{ marginTop: '1rem', padding: '0.75rem', background: '#eff6ff', borderRadius: '0.375rem', fontSize: '0.75rem', fontWeight: 700, color: '#1e40af', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span>Ready for collection!</span>
-                    {job.rackLocation && <span>Rack: {job.rackLocation}</span>}
-                </div>
-            )}
-        </div>
-    )
-}
 
 export default function CustomerDashboard() {
     const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
@@ -148,26 +98,61 @@ export default function CustomerDashboard() {
                     </div>
                 </header>
 
-                <div className="job-grid">
-                    {jobs.length === 0 ? (
-                        <div className="empty-state">
-                            <div className="empty-state-icon">
-                                <svg className="w-12 h-12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0a2 2 0 01-2 2H6a2 2 0 01-2-2m16 0l-8 4-8-4m8 4v6"></path></svg>
-                            </div>
-                            <h3 className="empty-state-title">No orders found</h3>
-                            <p className="empty-state-text">
-                                {viewMode === 'active' ? 'Your active orders will appear here.' : 'Your order history is currently empty.'}
-                            </p>
-                        </div>
-                    ) : (
-                        jobs.map(job => (
-                            <JobCard
-                                key={job.jobId}
-                                job={job}
-                                onClick={() => navigate(`/customer/packing/${job.jobId}`)}
-                            />
-                        ))
-                    )}
+                <div className="dispatch-table-container">
+                    <table className="dispatch-table">
+                        <thead>
+                            <tr>
+                                <th>Job ID</th>
+                                <th>Order Date</th>
+                                <th>Units</th>
+                                <th>Packing Mode</th>
+                                <th>Status</th>
+                                <th className="text-right">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {jobs.length === 0 ? (
+                                <tr>
+                                    <td colSpan={6} style={{ textAlign: 'center', padding: '3rem', color: '#6b7280' }}>
+                                        No orders found in this category.
+                                    </td>
+                                </tr>
+                            ) : (
+                                jobs.map(job => (
+                                    <tr key={job.jobId}>
+                                        <td>
+                                            <span style={{ fontWeight: 800, color: '#0f172a' }}>#{job.jobId}</span>
+                                        </td>
+                                        <td>
+                                            <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                                                {new Date(job.createdAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <span style={{ fontWeight: 800, color: '#0f172a' }}>{job.totalItems}</span>
+                                        </td>
+                                        <td>
+                                            <span className="status-badge" style={{ background: '#f8fafc', color: '#475569', border: '1px solid #e2e8f0' }}>
+                                                {job.packingMode || job.packingPreference || 'SINGLE'}
+                                            </span>
+                                        </td>
+                                        <td>
+                                            <StatusBadge status={job.jobStatus} />
+                                        </td>
+                                        <td className="text-right">
+                                            <button
+                                                onClick={() => navigate(`/customer/packing/${job.jobId}`)}
+                                                className="btn-primary"
+                                                style={{ padding: '0.375rem 1rem', fontSize: '0.75rem', width: 'auto' }}
+                                            >
+                                                {job.jobStatus === 'PACKED' || job.jobStatus === 'DISPATCHED' ? 'View Details' : 'Organize'}
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))
+                            )}
+                        </tbody>
+                    </table>
                 </div>
             </main>
         </div>

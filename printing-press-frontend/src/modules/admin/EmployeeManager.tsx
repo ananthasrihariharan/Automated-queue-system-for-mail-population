@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { api } from '../../services/api'
-import './AdminDashboard.css'
+import './EmployeeManager.css'
 
 const ALL_ROLES = ['ADMIN', 'PREPRESS', 'CASHIER', 'DISPATCH']
 
@@ -95,34 +95,39 @@ export default function EmployeeManager() {
   }
 
   return (
-    <div>
+    <div className="employee-manager-root">
       {/* CREATE EMPLOYEE */}
       <div className="employee-form-container">
-        <h3 className="employee-form-title">Add Employee</h3>
+        <h3 className="employee-form-title">Add New Employee</h3>
 
-        <div style={{ display: 'flex', gap: '1rem', marginBottom: '1rem' }}>
-          <input
-            className="form-input"
-            style={{ flex: 1 }}
-            placeholder="Name"
-            value={name}
-            onChange={e => setName(e.target.value)}
-          />
-          <input
-            className="form-input"
-            style={{ flex: 1 }}
-            placeholder="Phone"
-            value={phone}
-            onChange={e => setPhone(e.target.value)}
-          />
+        <div className="form-row">
+          <div className="form-group">
+            <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.375rem', display: 'block' }}>Full Name</span>
+            <input
+              className="filter-input"
+              style={{ width: '100%' }}
+              value={name}
+              onChange={e => setName(e.target.value)}
+            />
+          </div>
+          <div className="form-group">
+            <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.375rem', display: 'block' }}>Phone Number</span>
+            <input
+              className="filter-input"
+              style={{ width: '100%' }}
+              value={phone}
+              onChange={e => setPhone(e.target.value)}
+            />
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1.5rem' }}>
+        <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '0.75rem', display: 'block' }}>Assign Roles</span>
+        <div className="role-selection-group">
           {ALL_ROLES.map(role => (
-            <label key={role} className="checkbox-label">
+            <label key={role} className={`role-pill-label ${roles.includes(role) ? 'active' : ''}`}>
               <input
                 type="checkbox"
-                className="checkbox-input"
+                className="role-pill-input"
                 checked={roles.includes(role)}
                 onChange={() => toggleRole(role)}
               />
@@ -134,144 +139,138 @@ export default function EmployeeManager() {
         <button
           className="btn-primary"
           onClick={createUser}
+          style={{ width: 'auto', padding: '0.75rem 2rem' }}
         >
-          Add Employee
+          Register Employee
         </button>
       </div>
 
       {/* EMPLOYEE LIST */}
-      <table className="admin-table">
-        <thead>
-          <tr>
-            <th>Name</th>
-            <th>Phone</th>
-            <th>Roles</th>
-            <th>Status</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
+      <div className="dispatch-table-container">
+        <table className="dispatch-table">
+          <thead>
+            <tr>
+              <th>Name</th>
+              <th>Phone</th>
+              <th>Roles</th>
+              <th>Status</th>
+              <th className="text-right">Actions</th>
+            </tr>
+          </thead>
 
-        <tbody>
-          {users.map(user => {
-            const isEditing = editingId === user._id
+          <tbody>
+            {users.map(user => {
+              const isEditing = editingId === user._id
 
-            return (
-              <tr key={user._id} className="admin-row">
-                <td>
-                  {isEditing ? (
-                    <input
-                      className="form-input"
-                      style={{ padding: '0.25rem', fontSize: '0.875rem' }}
-                      value={editName}
-                      onChange={e => setEditName(e.target.value)}
-                    />
-                  ) : (
-                    <span style={{ fontWeight: 600 }}>{user.name}</span>
-                  )}
-                </td>
-                <td>
-                  {isEditing ? (
-                    <input
-                      className="form-input"
-                      style={{ padding: '0.25rem', fontSize: '0.875rem' }}
-                      value={editPhone}
-                      onChange={e => setEditPhone(e.target.value)}
-                    />
-                  ) : (
-                    user.phone
-                  )}
-                </td>
-
-                <td>
-                  <div style={{ display: 'flex', gap: '1rem', flexWrap: 'wrap' }}>
-                    {ALL_ROLES.map(role => (
-                      <label
-                        key={role}
-                        className="checkbox-label"
-                        style={{ fontSize: '0.75rem' }}
-                      >
-                        <input
-                          type="checkbox"
-                          className="checkbox-input"
-                          style={{ width: '0.8rem', height: '0.8rem' }}
-                          checked={user.roles.includes(role)}
-                          onChange={() =>
-                            handleUpdate(
-                              user._id,
-                              {
-                                roles: user.roles.includes(role)
-                                  ? user.roles.filter(r => r !== role)
-                                  : [...user.roles, role]
-                              }
-                            )
-                          }
-                        />
-                        {role}
-                      </label>
-                    ))}
-                  </div>
-                </td>
-
-                <td>
-                  <span className={`status-badge ${user.isActive ? 'status-paid' : 'status-unpaid'}`}>
-                    {user.isActive ? 'Active' : 'Inactive'}
-                  </span>
-                </td>
-
-                <td>
-                  <div style={{ display: 'flex', gap: '0.75rem', alignItems: 'center' }}>
+              return (
+                <tr key={user._id} className="dispatch-row">
+                  <td>
                     {isEditing ? (
-                      <>
-                        <button
-                          className="action-link"
-                          style={{ color: '#10b981' }}
-                          onClick={() => handleUpdate(user._id, { name: editName, phone: editPhone })}
-                        >
-                          Save
-                        </button>
-                        <button
-                          className="action-link"
-                          style={{ color: '#ef4444' }}
-                          onClick={() => setEditingId(null)}
-                        >
-                          Cancel
-                        </button>
-                      </>
+                      <input
+                        className="table-edit-input"
+                        value={editName}
+                        onChange={e => setEditName(e.target.value)}
+                      />
                     ) : (
-                      <>
-                        <button
-                          className="action-link"
-                          onClick={() => startEdit(user)}
-                        >
-                          Edit
-                        </button>
-                        <div style={{ width: '1px', height: '1rem', background: '#e5e7eb' }}></div>
-                        <button
-                          className="action-link"
-                          style={{ color: user.isActive ? '#ef4444' : '#10b981' }}
-                          onClick={() =>
-                            handleUpdate(user._id, { isActive: !user.isActive })
-                          }
-                        >
-                          {user.isActive ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <div style={{ width: '1px', height: '1rem', background: '#e5e7eb' }}></div>
-                        <button
-                          className="action-link"
-                          style={{ color: '#ef4444' }}
-                          onClick={() => handleDelete(user)}
-                        >
-                          Delete
-                        </button>
-                      </>
+                      <span style={{ fontWeight: 800 }}>{user.name}</span>
                     )}
-                  </div>
-                </td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+                  </td>
+                  <td>
+                    {isEditing ? (
+                      <input
+                        className="table-edit-input"
+                        value={editPhone}
+                        onChange={e => setEditPhone(e.target.value)}
+                      />
+                    ) : (
+                      <span style={{ fontWeight: 600, color: '#64748b' }}>{user.phone}</span>
+                    )}
+                  </td>
+
+                  <td>
+                    <div className="role-tag-container">
+                      {ALL_ROLES.map(role => (
+                        <label
+                          key={role}
+                          className={`role-pill-label ${user.roles.includes(role) ? 'active' : ''}`}
+                          style={{ fontSize: '0.625rem', padding: '0.25rem 0.625rem' }}
+                        >
+                          <input
+                            type="checkbox"
+                            className="role-pill-input"
+                            checked={user.roles.includes(role)}
+                            onChange={() =>
+                              handleUpdate(
+                                user._id,
+                                {
+                                  roles: user.roles.includes(role)
+                                    ? user.roles.filter(r => r !== role)
+                                    : [...user.roles, role]
+                                }
+                              )
+                            }
+                          />
+                          {role}
+                        </label>
+                      ))}
+                    </div>
+                  </td>
+
+                  <td>
+                    <span className={`status-badge ${user.isActive ? 'status-paid' : 'status-unpaid'}`}>
+                      {user.isActive ? 'Active' : 'Deactivated'}
+                    </span>
+                  </td>
+
+                  <td className="text-right">
+                    <div className="action-group">
+                      {isEditing ? (
+                        <>
+                          <button
+                            className="action-btn-styled success"
+                            onClick={() => handleUpdate(user._id, { name: editName, phone: editPhone })}
+                          >
+                            Save
+                          </button>
+                          <button
+                            className="action-btn-styled danger"
+                            onClick={() => setEditingId(null)}
+                          >
+                            Cancel
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          <button
+                            className="action-btn-styled"
+                            onClick={() => startEdit(user)}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            className={`action-btn-styled ${user.isActive ? 'danger' : 'success'}`}
+                            onClick={() =>
+                              handleUpdate(user._id, { isActive: !user.isActive })
+                            }
+                          >
+                            {user.isActive ? 'Deactivate' : 'Activate'}
+                          </button>
+                          <button
+                            className="action-btn-styled danger"
+                            onClick={() => handleDelete(user)}
+                          >
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
