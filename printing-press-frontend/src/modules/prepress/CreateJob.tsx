@@ -1,10 +1,12 @@
-import React, { useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import React, { useState, useEffect } from 'react'
+import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
 import './CreateJob.css'
 
 export default function CreateJob() {
+    const { id } = useParams()
+    const isEdit = !!id
     const navigate = useNavigate()
     const { logout } = useAuth()
     const [loading, setLoading] = useState(false)
@@ -17,42 +19,84 @@ export default function CreateJob() {
     const [customerPhone, setCustomerPhone] = useState('')
     const [customerName, setCustomerName] = useState('')
     const [files, setFiles] = useState<File[]>([])
+    const [existingScreenshots, setExistingScreenshots] = useState<string[]>([])
     const [isDragging, setIsDragging] = useState(false)
 
     const [viewImage, setViewImage] = useState<string | null>(null)
+    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+
+    // Load existing job details if in Edit Mode
+    useEffect(() => {
+        if (isEdit) {
+            const fetchJob = async () => {
+                try {
+                    const res = await api.get('/api/prepress/jobs')
+                    const job = res.data.find((j: any) => j.jobId === id)
+                    if (job) {
+                        setFormData({
+                            jobId: job.jobId,
+                            totalItems: job.totalItems,
+                            packingPreference: job.packingPreference || 'SINGLE'
+                        })
+                        setCustomerName(job.customerName)
+                        setCustomerPhone(job.customerPhone || '')
+                        setExistingScreenshots(job.itemScreenshots || [])
+                    }
+                } catch (e) {
+                    console.error('Failed to fetch job for edit', e)
+                }
+            }
+            fetchJob()
+        }
+    }, [isEdit, id])
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault()
-        if (files.length !== formData.totalItems) {
-            alert(`Upload exactly ${formData.totalItems} screenshots`)
+
+        const totalCount = files.length + existingScreenshots.length
+
+        if (totalCount !== formData.totalItems) {
+            alert(`Total screenshots (${totalCount}) must match total items (${formData.totalItems}). Currently: ${existingScreenshots.length} kept, ${files.length} new.`)
             return
         }
+
         setLoading(true)
 
         try {
             const data = new FormData()
-            data.append('jobId', formData.jobId)
-            data.append('customerName', customerName)
-            data.append('customerPhone', customerPhone)
             data.append('totalItems', String(formData.totalItems))
+
+            if (isEdit) {
+                // Send list of kept existing screenshots
+                data.append('keptScreenshots', JSON.stringify(existingScreenshots))
+            }
 
             files.forEach(file => {
                 data.append('screenshots', file)
             })
 
-            await api.post('/api/prepress/jobs', data, {
-                headers: { 'Content-Type': 'multipart/form-data' }
-            })
+            if (isEdit) {
+                await api.patch(`/api/prepress/jobs/${id}`, data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                })
+            } else {
+                data.append('jobId', formData.jobId)
+                data.append('customerName', customerName)
+                data.append('customerPhone', customerPhone)
+                await api.post('/api/prepress/jobs', data, {
+                    headers: { 'Content-Type': 'multipart/form-data' }
+                })
+            }
             navigate('/prepress')
         } catch (err: any) {
-            alert(err.response?.data?.message || 'Failed to create job')
+            alert(err.response?.data?.message || `Failed to ${isEdit ? 'update' : 'create'} job`)
         } finally {
             setLoading(false)
         }
     }
 
     const fetchCustomer = async (phone: string) => {
-        if (phone.length !== 10) return
+        if (phone.length !== 10 || isEdit) return
         try {
             const res = await api.get(`/api/prepress/customer/by-phone/${phone}`)
             if (res.data) setCustomerName(res.data.name)
@@ -87,8 +131,8 @@ export default function CreateJob() {
                             <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v16m8-8H4"></path></svg>
                         </div>
                         <div className="header-title">
-                            <h1>New Job</h1>
-                            <span>Quick Entry</span>
+                            <h1>{isEdit ? 'Edit Job' : 'New Job'}</h1>
+                            <span>{isEdit ? 'Modify Entry' : 'Quick Entry'}</span>
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
@@ -119,8 +163,9 @@ export default function CreateJob() {
                                     <label>Job ID</label>
                                     <input
                                         required
+                                        disabled={isEdit}
                                         placeholder="e.g. PPK-9902"
-                                        className="form-input"
+                                        className={`form-input ${isEdit ? 'bg-slate-100' : ''}`}
                                         value={formData.jobId}
                                         onChange={(e) => setFormData({ ...formData, jobId: e.target.value })}
                                     />
@@ -130,8 +175,9 @@ export default function CreateJob() {
                                     <label>Customer Phone</label>
                                     <input
                                         required
+                                        disabled={isEdit}
                                         placeholder="10-digit number"
-                                        className="form-input"
+                                        className={`form-input ${isEdit ? 'bg-slate-100' : ''}`}
                                         value={customerPhone}
                                         onChange={(e) => {
                                             const val = e.target.value.slice(0, 10).replace(/\D/g, '')
@@ -145,8 +191,9 @@ export default function CreateJob() {
                                     <label>Customer Name</label>
                                     <input
                                         required
+                                        disabled={isEdit}
                                         placeholder="Full name"
-                                        className="form-input"
+                                        className={`form-input ${isEdit ? 'bg-slate-100' : ''}`}
                                         value={customerName}
                                         onChange={(e) => setCustomerName(e.target.value)}
                                     />
@@ -168,7 +215,7 @@ export default function CreateJob() {
                             {/* Right Column - File Upload */}
                             <div>
                                 <div className="form-group">
-                                    <label>Item Screenshots</label>
+                                    <label>Item Screenshots {isEdit && '(Leave empty to keep current)'}</label>
                                 </div>
                                 <div
                                     onPaste={handlePaste}
@@ -193,6 +240,36 @@ export default function CreateJob() {
                                         <p className="text-[10px] text-slate-400 font-bold mb-1">SINGLE CLICK TO FOCUS & PASTE</p>
                                         <p className="text-[10px] text-slate-400 font-bold">DOUBLE CLICK TO BROWSE FILES</p>
                                     </div>
+
+                                    {/* Display existing screenshots */}
+                                    {isEdit && existingScreenshots.length > 0 && (
+                                        <div className="flex flex-wrap gap-2 mt-6 justify-center">
+                                            {existingScreenshots.map((path, index) => (
+                                                <div
+                                                    key={`old-${index}`}
+                                                    className="thumbnail-wrapper"
+                                                >
+                                                    <img
+                                                        src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
+                                                        alt={`Existing ${index + 1}`}
+                                                        className="thumbnail-img"
+                                                        onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={(e) => {
+                                                            e.preventDefault();
+                                                            e.stopPropagation();
+                                                            setExistingScreenshots(prev => prev.filter((_, i) => i !== index));
+                                                        }}
+                                                        className="thumbnail-delete-btn"
+                                                    >
+                                                        ×
+                                                    </button>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    )}
 
                                     {files.length > 0 && (
                                         <div className="flex flex-wrap gap-2 mt-6 justify-center">
@@ -225,9 +302,9 @@ export default function CreateJob() {
                                                     </button>
                                                 </div>
                                             ))}
-                                            {files.length < formData.totalItems && (
+                                            {files.length + existingScreenshots.length < formData.totalItems && (
                                                 <div className="w-12 h-12 border border-dashed border-slate-200 rounded-lg flex items-center justify-center text-slate-300 font-black text-[10px]">
-                                                    +{formData.totalItems - files.length}
+                                                    +{formData.totalItems - (files.length + existingScreenshots.length)}
                                                 </div>
                                             )}
                                         </div>
@@ -257,12 +334,12 @@ export default function CreateJob() {
                         <div className="submit-section">
                             <button
                                 type="submit"
-                                disabled={loading || files.length !== formData.totalItems}
+                                disabled={loading || (files.length > 0 && files.length !== formData.totalItems)}
                                 className="btn-primary"
                                 style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
                             >
                                 {loading && <div className="w-3 h-3 border-2 border-white/20 border-t-white rounded-full animate-spin inline-block mr-2"></div>}
-                                Create Job Entry
+                                {isEdit ? 'Update Job Entry' : 'Create Job Entry'}
                             </button>
                         </div>
                     </form>

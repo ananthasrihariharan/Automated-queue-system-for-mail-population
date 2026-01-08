@@ -52,6 +52,14 @@ export const router = createBrowserRouter([
         )
     },
     {
+        path: '/prepress/edit/:id',
+        element: (
+            <RoleGuard allowed={['PREPRESS']}>
+                <CreateJob />
+            </RoleGuard>
+        )
+    },
+    {
         path: '/admin',
         element: (
             <RoleGuard allowed={['ADMIN']}>

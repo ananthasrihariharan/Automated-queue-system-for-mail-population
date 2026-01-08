@@ -32,7 +32,7 @@ app.use((req, res, next) => {
 ======================= */
 
 // uploads (images)
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+app.use("/uploads", express.static(process.env.UPLOAD_PATH || path.join(__dirname, "uploads")));
 
 // ✅ SERVE REACT BUILD (THIS IS THE KEY)
 app.use(

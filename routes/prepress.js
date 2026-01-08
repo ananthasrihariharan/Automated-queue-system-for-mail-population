@@ -31,6 +31,7 @@ router.get(
           _id: 0,
           jobId: 1,
           customerName: 1,
+          customerPhone: 1,
           totalItems: 1,
           itemScreenshots: 1,
           packingPreference: 1,
@@ -119,7 +120,8 @@ router.post(
       }
 
       // ✅ Now move files into job-specific folder
-      const jobDir = `uploads/jobs/${jobId}`
+      const uploadBase = process.env.UPLOAD_PATH || 'uploads'
+      const jobDir = path.join(uploadBase, 'jobs', jobId)
       if (!fs.existsSync(jobDir)) {
         fs.mkdirSync(jobDir, { recursive: true })
       }
@@ -127,9 +129,11 @@ router.post(
       const imagePaths = []
 
       files.forEach((file) => {
-        const newPath = path.join(jobDir, path.basename(file.path))
+        const filename = path.basename(file.path)
+        const newPath = path.join(jobDir, filename)
         fs.renameSync(file.path, newPath)
-        imagePaths.push(newPath)
+        // Store relative path for frontend (starting with uploads/)
+        imagePaths.push(`uploads/jobs/${jobId}/${filename}`)
       })
 
       const job = await Job.create({
@@ -148,6 +152,66 @@ router.post(
     } catch (err) {
       console.error('CREATE JOB ERROR:', err)
       res.status(500).json({ message: err.message })
+    }
+  }
+)
+
+/**
+ * UPDATE JOB (Edit Total Items & Screenshots)
+ * Role: PREPRESS
+ */
+router.patch(
+  '/jobs/:jobId',
+  auth,
+  authorize('PREPRESS'),
+  upload.array('screenshots'),
+  async (req, res) => {
+    try {
+      const { totalItems, keptScreenshots: keptJson } = req.body
+      const files = req.files || []
+      const job = await Job.findOne({ jobId: req.params.jobId, createdBy: req.user._id })
+
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found or unauthorized' })
+      }
+
+      const keptScreenshots = keptJson ? JSON.parse(keptJson) : []
+      const totalCount = keptScreenshots.length + files.length
+
+      if (totalItems !== undefined) {
+        job.totalItems = Number(totalItems)
+      }
+
+      // Validation: Total images must match totalItems
+      if (totalCount !== job.totalItems) {
+        return res.status(400).json({
+          message: `Expected ${job.totalItems} images, but got ${totalCount} (${keptScreenshots.length} kept + ${files.length} new)`
+        })
+      }
+
+      // Move new files into job-specific folder
+      const uploadBase = process.env.UPLOAD_PATH || 'uploads'
+      const jobDir = path.join(uploadBase, 'jobs', job.jobId)
+      if (!fs.existsSync(jobDir)) {
+        fs.mkdirSync(jobDir, { recursive: true })
+      }
+
+      const newImagePaths = []
+      files.forEach((file) => {
+        const filename = path.basename(file.path)
+        const newPath = path.join(jobDir, filename)
+        fs.renameSync(file.path, newPath)
+        newImagePaths.push(`uploads/jobs/${job.jobId}/${filename}`)
+      })
+
+      // Combine kept screenshots with new ones
+      job.itemScreenshots = [...keptScreenshots, ...newImagePaths]
+
+      await job.save()
+      res.json({ message: 'Job updated successfully', job })
+    } catch (err) {
+      console.error('UPDATE JOB ERROR:', err)
+      res.status(500).json({ message: 'Server error' })
     }
   }
 )

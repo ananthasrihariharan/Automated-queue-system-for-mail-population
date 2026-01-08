@@ -143,13 +143,9 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
               <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem', alignItems: 'center' }}>
                 <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Customer: {job.customerName}</p>
                 <div style={{ width: '4px', height: '4px', background: '#e5e7eb', borderRadius: '50%' }}></div>
+                <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Items: {job.totalItems}</p>
+                <div style={{ width: '4px', height: '4px', background: '#e5e7eb', borderRadius: '50%' }}></div>
                 <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Pref: <span style={{ fontWeight: 700, color: '#000' }}>{job.packingPreference}</span></p>
-                {job.packingMode && job.packingMode !== job.packingPreference && (
-                  <>
-                    <div style={{ width: '4px', height: '4px', background: '#e5e7eb', borderRadius: '50%' }}></div>
-                    <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Mode: <span style={{ fontWeight: 700, color: '#ef4444' }}>{job.packingMode} (Staff Override)</span></p>
-                  </>
-                )}
               </div>
             </div>
             <div style={{ display: 'flex', gap: '0.5rem' }}>
@@ -164,7 +160,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
           </div>
 
 
-          <div className="dispatch-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1rem' }}>
+          <div className="dispatch-modal-body" style={{ maxHeight: '70vh', overflowY: 'auto', padding: '1.5rem' }}>
             {isReorganizing ? (
               <div className="reorganize-container">
                 <div style={{ marginBottom: '1.5rem', background: '#f9fafb', padding: '1rem', borderRadius: '0.5rem', border: '1px solid #e5e7eb' }}>
@@ -297,16 +293,44 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
               </div>
             ) : (
               <>
-                {!isApproved && (
-                  <div style={{ background: '#fee2e2', padding: '0.75rem', borderRadius: '0.375rem', marginBottom: '1.5rem', fontSize: '0.875rem', border: '1px solid #fecaca' }}>
-                    <strong style={{ color: '#991b1b' }}>Payment Required</strong>
-                    <p style={{ fontSize: '0.75rem', color: '#b91c1c', marginTop: '0.25rem' }}>
-                      {isAdmin ? 'Admin override enabled.' : 'Wait for payment confirmation before dispatch.'}
-                    </p>
+                <div className="dispatch-compact-info">
+                  <div style={{ display: 'flex', gap: '1.5rem' }}>
+                    <div className="info-item">
+                      <label>Payment</label>
+                      <span className={`status-badge ${isApproved ? 'status-paid' : 'status-unpaid'}`} style={{ marginTop: '0.25rem' }}>
+                        {job.paymentStatus}
+                      </span>
+                    </div>
+                    {job.itemScreenshots?.length > 0 && (
+                      <div className="info-item">
+                        <label>Screenshots</label>
+                        <div style={{ display: 'flex', gap: '0.25rem', marginTop: '0.25rem' }}>
+                          {job.itemScreenshots.slice(0, 4).map((path: string, idx: number) => (
+                            <img
+                              key={idx}
+                              src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
+                              className="screenshot-pill"
+                              onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
+                              alt={`Item ${idx + 1}`}
+                            />
+                          ))}
+                          {job.itemScreenshots.length > 4 && (
+                            <span className="screenshot-more" onClick={() => setViewImage(`${BACKEND_URL}/${job.itemScreenshots[4].replace(/\\/g, '/')}`)}>
+                              +{job.itemScreenshots.length - 4}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
-                )}
+                  {!isApproved && isAdmin && (
+                    <div style={{ fontSize: '0.75rem', color: '#991b1b', background: '#fee2e2', padding: '0.375rem 0.75rem', borderRadius: '0.375rem', fontWeight: 600 }}>
+                      Admin Override Enabled
+                    </div>
+                  )}
+                </div>
 
-                <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+                <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
                   {(job.parcels?.length > 0 ? job.parcels : [{ parcelNo: 1, status: 'PENDING', itemIndexes: Array.from({ length: job.totalItems || 0 }, (_, i) => i + 1) }]).map((p: any) => {
 
                     const isPacked = p.status === 'PACKED'
@@ -314,104 +338,71 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                     const items = p.itemIndexes || []
 
                     return (
-                      <div key={p.parcelNo} className="parcel-card" style={{ border: '1px solid #e5e7eb', borderRadius: '0.5rem', padding: '1rem', background: '#ffffff' }}>
-                        <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '1rem', borderBottom: '1px solid #f3f4f6', paddingBottom: '0.5rem' }}>
-                          <div>
-                            <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.875rem' }}>Parcel {p.parcelNo}</span>
-                            <span className={`status-badge ${isOut ? 'status-dispatched' : isPacked ? 'status-packed' : 'status-pending'}`} style={{ marginLeft: '0.5rem' }}>
+                      <div key={p.parcelNo} className="parcel-card">
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+                            <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.875rem' }}>P{p.parcelNo}</span>
+                            <span className={`status-badge ${isOut ? 'status-dispatched' : isPacked ? 'status-packed' : 'status-pending'}`}>
                               {p.status || 'PENDING'}
                             </span>
+                            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>({items.length} items)</span>
                           </div>
-                          <div style={{ textAlign: 'right' }}>
-                            <p style={{ fontSize: '0.75rem', fontWeight: 700 }}>{p.receiverName || job.customerName}</p>
-                            <p style={{ fontSize: '0.625rem', color: '#6b7280' }}>{p.receiverPhone || job.customerPhone || 'N/A'}</p>
-                          </div>
-                        </div>
-
-                        <div style={{ marginBottom: '1rem' }}>
-                          <p style={{ fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.5rem' }}>Included Items ({items.length})</p>
-                          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(50px, 1fr))', gap: '0.5rem' }}>
-                            {items.map((idx: number) => {
-                              const imgPath = job.itemScreenshots?.[idx - 1]
-                              const fullUrl = imgPath ? `${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}` : null
-
-                              return (
-                                <div key={idx} style={{ position: 'relative' }}>
-                                  <div
-                                    style={{
-                                      width: '50px',
-                                      height: '50px',
-                                      border: '1px solid #e5e7eb',
-                                      borderRadius: '0.25rem',
-                                      overflow: 'hidden',
-                                      background: '#f9fafb',
-                                      cursor: fullUrl ? 'pointer' : 'default'
-                                    }}
-                                    onClick={() => fullUrl && setViewImage(fullUrl)}
-                                  >
-                                    {fullUrl ? (
-                                      <img
-                                        src={fullUrl}
-                                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-                                        alt={`Item ${idx}`}
-                                      />
-                                    ) : (
-                                      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '0.625rem', color: '#d1d5db' }}>N/A</div>
-                                    )}
-                                  </div>
-                                  <span style={{ position: 'absolute', bottom: '-2px', right: '-2px', background: '#000', color: '#fff', fontSize: '0.5rem', padding: '0 2px', borderRadius: '2px', fontWeight: 700 }}>{idx}</span>
-                                </div>
-                              )
-                            })}
-                          </div>
-                        </div>
-
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', marginTop: '1rem' }}>
-                          <div style={{ flex: 1 }}>
-                            <label style={{ display: 'block', fontSize: '0.625rem', fontWeight: 700, color: '#9ca3af', textTransform: 'uppercase', marginBottom: '0.25rem' }}>Rack Location</label>
-                            <div style={{ display: 'flex', gap: '0.25rem' }}>
-                              <select
-                                className="form-input"
-                                style={{ padding: '0.25rem', fontSize: '0.75rem' }}
-                                value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
-                                onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                              >
-                                <option value="">Select Rack</option>
-                                {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                                {!rackOptions.includes(parcelRacks[p.parcelNo]) && parcelRacks[p.parcelNo] && <option value={parcelRacks[p.parcelNo]}>{parcelRacks[p.parcelNo]}</option>}
-                              </select>
-                              <input
-                                className="form-input"
-                                style={{ padding: '0.25rem', fontSize: '0.75rem', width: '60px' }}
-                                placeholder="Custom"
-                                value={parcelRacks[p.parcelNo] || ''}
-                                onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                              />
+                          {!isOut && (
+                            <div style={{ display: 'flex', gap: '0.5rem' }}>
+                              <div style={{ display: 'flex', gap: '0.25rem', alignItems: 'center' }}>
+                                <select
+                                  className="form-input"
+                                  style={{ padding: '0.25rem', fontSize: '0.75rem', height: '32px' }}
+                                  value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
+                                  onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
+                                >
+                                  <option value="">Rack</option>
+                                  {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                </select>
+                                <button
+                                  disabled={isSubmitting}
+                                  onClick={() => handlePack(p.parcelNo)}
+                                  className="btn-primary"
+                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: isPacked ? '#f1f5f9' : '#000', color: isPacked ? '#000' : '#fff' }}
+                                >
+                                  {isPacked ? 'Packed ✅' : 'Pack'}
+                                </button>
+                              </div>
+                              {isPacked && (
+                                <button
+                                  disabled={isSubmitting || (!isApproved && !isAdmin)}
+                                  onClick={() => handleDispatch(p.parcelNo)}
+                                  className="btn-primary"
+                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: (isApproved || isAdmin) ? '#10b981' : '#e5e7eb', border: 'none' }}
+                                >
+                                  Dispatch
+                                </button>
+                              )}
                             </div>
-                          </div>
+                          )}
+                        </div>
 
-                          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'flex-end' }}>
-                            {!isOut && (
-                              <button
-                                disabled={isSubmitting}
-                                onClick={() => handlePack(p.parcelNo)}
-                                className="manage-btn"
-                                style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: isPacked ? '#f3f4f6' : '#000', color: isPacked ? '#000' : '#fff' }}
-                              >
-                                {isPacked ? 'Packed ✅' : 'Pack'}
-                              </button>
-                            )}
-                            {isPacked && (
-                              <button
-                                disabled={isSubmitting || (!isApproved && !isAdmin)}
-                                onClick={() => handleDispatch(p.parcelNo)}
-                                className="manage-btn"
-                                style={{ padding: '0.5rem 0.75rem', fontSize: '0.75rem', background: (isApproved || isAdmin) ? '#10b981' : '#e5e7eb', color: '#fff', border: 'none' }}
-                              >
-                                Dispatch
-                              </button>
-                            )}
-                          </div>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                          {items.map((idx: number) => {
+                            const imgPath = job.itemScreenshots?.[idx - 1]
+                            const fullUrl = imgPath ? `${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}` : null
+
+                            return (
+                              <div key={idx} style={{ position: 'relative' }}>
+                                {fullUrl ? (
+                                  <div className="item-thumb" onClick={() => setViewImage(fullUrl)}>
+                                    <img
+                                      src={fullUrl}
+                                      style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                                      alt={`Item ${idx}`}
+                                    />
+                                  </div>
+                                ) : (
+                                  <div className="item-node-simple">#{idx}</div>
+                                )}
+                              </div>
+                            )
+                          })}
                         </div>
                       </div>
                     )
@@ -526,70 +517,100 @@ export default function DispatchDashboard() {
         </div>
       </div>
 
-      <table className="dispatch-table">
-        <thead>
-          <tr>
-            <th>Job ID</th>
-            <th>Customer</th>
-            <th>Submitted By</th>
-            <th>Packing</th>
-            <th>Payment</th>
-            {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
-            {viewMode === 'active' && <th>Actions</th>}
-          </tr>
-        </thead>
-
-        <tbody>
-          {filteredJobs.length === 0 ? (
+      <div className="dispatch-table-container">
+        <table className="dispatch-table">
+          <thead>
             <tr>
-              <td colSpan={6} style={{ textAlign: 'center', padding: '2rem' }}>
-                No jobs found
-              </td>
+              <th>Job ID</th>
+              <th>Customer</th>
+              <th>Submitted By</th>
+              <th>Packing</th>
+              <th>Payment</th>
+              {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
+              {viewMode === 'active' && <th>Actions</th>}
             </tr>
+          </thead>
+
+          <tbody>
+            {filteredJobs.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
+                  No jobs found
+                </td>
+              </tr>
+            ) : (
+              filteredJobs.map(job => {
+                return (
+                  <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
+                    <td>{job.jobId}</td>
+                    <td>{job.customerName}</td>
+                    <td className="hide-mobile" style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
+                    <td className="hide-mobile">{job.packingPreference || 'SINGLE'}</td>
+                    <td>
+                      <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
+                        {job.paymentStatus}
+                      </span>
+                    </td>
+                    {viewMode === 'history' ? (
+                      <td>
+                        {job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                      </td>
+                    ) : (
+                      <td>
+                        <div style={{ fontSize: '0.75rem' }}>
+                          <div><span className="status-badge status-packed" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>P</span> {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
+                          <div style={{ marginTop: '0.25rem' }}><span className="status-badge status-dispatched" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>D</span> {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
+                        </div>
+                      </td>
+                    )}
+                    {viewMode === 'active' && (
+                      <td className="hide-mobile">
+                        <button
+                          className="btn-primary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setSelectedJobId(job.jobId);
+                          }}
+                        >
+                          Manage
+                        </button>
+                      </td>
+                    )}
+                  </tr>
+                )
+              })
+            )}
+          </tbody>
+        </table>
+
+        {/* Mobile-only Card View */}
+        <div className="dispatch-mobile-list">
+          {filteredJobs.length === 0 ? (
+            <div style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>No jobs found</div>
           ) : (
-            filteredJobs.map(job => {
-              return (
-                <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
-                  <td>{job.jobId}</td>
-                  <td>{job.customerName}</td>
-                  <td style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
-                  <td>{job.packingPreference || 'SINGLE'}</td>
-                  <td>
-                    <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
-                      {job.paymentStatus}
-                    </span>
-                  </td>
-                  {viewMode === 'history' ? (
-                    <td>
-                      {job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
-                    </td>
-                  ) : (
-                    <td>
-                      <div style={{ fontSize: '0.75rem' }}>
-                        <div><span className="status-badge status-packed" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>P</span> {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
-                        <div style={{ marginTop: '0.25rem' }}><span className="status-badge status-dispatched" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>D</span> {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
-                      </div>
-                    </td>
-                  )}
-                  {viewMode === 'active' && (
-                    <td>
-                      <button
-                        className="btn-primary"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setSelectedJobId(job.jobId);
-                        }}
-                      >
-                        Manage
-                      </button>
-                    </td>
-                  )}
-                </tr>
-              )
-            })
+            filteredJobs.map(job => (
+              <div key={job.jobId} className="dispatch-job-card" onClick={() => setSelectedJobId(job.jobId)}>
+                <div className="job-card-header">
+                  <span className="job-id">#{job.jobId}</span>
+                  <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
+                    {job.paymentStatus}
+                  </span>
+                </div>
+                <div className="job-card-body">
+                  <p className="customer-name">{job.customerName}</p>
+                  <div className="job-meta">
+                    <span>{job.packingPreference || 'SINGLE'}</span>
+                    <div className="status-indicator">
+                      <span>P: {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</span>
+                      <span>D: {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ))
           )}
-        </tbody>
-      </table>
+        </div>
+      </div>
 
       {selectedJob && (
         <DispatchParcels

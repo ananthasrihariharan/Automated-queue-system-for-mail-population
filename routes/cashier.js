@@ -24,8 +24,8 @@ router.get(
         _id: 0,
         jobId: 1,
         customerName: 1,
-        paymentStatus: 1
-
+        paymentStatus: 1,
+        jobStatus: 1
       }
       ).sort({ createdAt: -1 })
 

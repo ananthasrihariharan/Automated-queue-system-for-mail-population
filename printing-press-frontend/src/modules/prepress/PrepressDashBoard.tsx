@@ -3,11 +3,12 @@ import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './PrepressDashboard.css'
-import { useQuery } from '@tanstack/react-query'
 import { fetchPrepressJobs } from '../../services/api'
+import { useQuery } from '@tanstack/react-query'
 type Job = {
   jobId: string
   customerName: string
+  customerPhone?: string
   totalItems: number
   paymentStatus: string
   createdAt: string
@@ -28,30 +29,73 @@ export default function PrepressDashboard() {
   })
 
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
+  const [search, setSearch] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
 
   const { logout } = useAuth()
   const navigate = useNavigate()
+
+  const filteredJobs = jobs.filter(job => {
+    const matchesSearch = job.jobId.toLowerCase().includes(search.toLowerCase()) ||
+      job.customerName.toLowerCase().includes(search.toLowerCase())
+    const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
+    return matchesSearch && matchesPayment
+  })
 
   if (isLoading) return <div className="prepress-page">Loading...</div>
 
   return (
     <div className="prepress-page">
       <div className="prepress-header">
-        <div className="flex items-center gap-4">
-          <h1>Prepress Dashboard</h1>
-          <a href="/prepress/create" className="btn-primary">
-            + Create Job
-          </a>
+        <div className="header-left">
+          <h1 className="tracking-tightest font-black uppercase text-2xl">Prepress</h1>
+          <button
+            onClick={() => navigate('/prepress/create')}
+            className="btn-primary"
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
+          >
+            + NEW JOB
+          </button>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="header-right">
           <ModuleNavigation />
           <button
             onClick={() => { logout(); navigate('/login'); }}
-            className="logout-btn ml-2"
+            className="logout-btn"
           >
             Logout
           </button>
+        </div>
+      </div>
+
+      {/* Premium Filter Bar */}
+      <div className="prepress-filters-bar">
+        <div className="filter-group">
+          <div className="search-wrapper">
+            <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search Job ID or Customer..."
+              className="filter-input search"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+            />
+          </div>
+
+          <div className="dropdown-wrapper">
+            <select
+              className="filter-select"
+              value={paymentFilter}
+              onChange={(e) => setPaymentFilter(e.target.value as any)}
+            >
+              <option value="ALL">Payment: All</option>
+              <option value="UNPAID">Unpaid Only</option>
+              <option value="PAID">Paid Only</option>
+            </select>
+          </div>
         </div>
       </div>
 
@@ -69,7 +113,7 @@ export default function PrepressDashboard() {
             <div className="job-info-grid">
               <div>
                 <p>Customer</p>
-                <span>{previewJob.customerName}</span>
+                <span>{previewJob.customerName} {previewJob.customerPhone && `(${previewJob.customerPhone})`}</span>
               </div>
               <div>
                 <p>Total Items</p>
@@ -82,11 +126,9 @@ export default function PrepressDashboard() {
               <div>
                 <p>Payment Status</p>
                 <span
-                  className={`badge ${previewJob.paymentStatus === 'PAID'
-                    ? 'badge-paid'
-                    : previewJob.paymentStatus === 'ADMIN_APPROVED'
-                      ? 'badge-admin'
-                      : 'badge-unpaid'
+                  className={`status-badge ${previewJob.paymentStatus === 'PAID' || previewJob.paymentStatus === 'ADMIN_APPROVED'
+                    ? 'status-paid'
+                    : 'status-unpaid'
                     }`}
                 >
                   {previewJob.paymentStatus}
@@ -114,7 +156,7 @@ export default function PrepressDashboard() {
               )}
             </div>
 
-            <div className="modal-footer">
+            <div className="modal-footer" style={{ marginTop: '1.5rem' }}>
               <button className="btn-secondary" onClick={() => setPreviewJob(null)}>
                 Close
               </button>
@@ -123,35 +165,52 @@ export default function PrepressDashboard() {
         </div>
       )}
 
-      <table className="jobs-table">
-        <thead>
-          <tr>
-            <th>Job ID</th>
-            <th>Customer</th>
-            <th>Items</th>
-            <th>Payment</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {jobs.map((job) => (
-            <tr key={job.jobId}>
-              <td>{job.jobId}</td>
-              <td>{job.customerName}</td>
-              <td>{job.totalItems}</td>
-              <td>{job.paymentStatus}</td>
-              <td>{new Date(job.createdAt).toLocaleDateString()}</td>
-              <td style={{ textAlign: 'center' }}>
-                <button className="btn-secondary" onClick={() => setPreviewJob(job)}>
-                  View
-                </button>
-              </td>
+      <div className="table-container">
+        <table className="jobs-table">
+          <thead>
+            <tr>
+              <th>Job ID</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Payment</th>
+              <th>Created</th>
+              <th style={{ textAlign: 'center' }}>Actions</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+
+          <tbody>
+            {filteredJobs.map((job) => (
+              <tr key={job.jobId}>
+                <td>{job.jobId}</td>
+                <td>{job.customerName}</td>
+                <td>{job.totalItems}</td>
+                <td>
+                  <span className={`status-badge ${job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED' ? 'status-paid' : 'status-unpaid'}`}>
+                    {job.paymentStatus}
+                  </span>
+                </td>
+                <td>{new Date(job.createdAt).toLocaleDateString()}</td>
+                <td className="actions-cell">
+                  <div className="actions-wrapper">
+                    <button
+                      className="btn-secondary btn-sm"
+                      onClick={() => setPreviewJob(job)}
+                    >
+                      View
+                    </button>
+                    <button
+                      className="btn-primary btn-sm"
+                      onClick={() => navigate(`/prepress/edit/${job.jobId}`)}
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }
