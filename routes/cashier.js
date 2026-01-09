@@ -25,9 +25,12 @@ router.get(
         jobId: 1,
         customerName: 1,
         paymentStatus: 1,
-        jobStatus: 1
+        jobStatus: 1,
+        createdAt: 1,
+        customerId: 1
       }
       ).sort({ createdAt: -1 })
+        .populate('customerId', 'isCreditCustomer')
 
       res.json(jobs)
     } catch (err) {

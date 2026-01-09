@@ -17,7 +17,7 @@ router.get(
     authorize('DISPATCH'),
     async (req, res) => {
         try {
-            const { status } = req.query
+            const { status, date } = req.query
             const page = parseInt(req.query.page) || 1
             const limit = parseInt(req.query.limit) || 50
             const skip = (page - 1) * limit
@@ -32,6 +32,27 @@ router.get(
                 filter.jobStatus = { $ne: 'DISPATCHED' }
             } else if (status === 'history') {
                 filter.jobStatus = 'DISPATCHED'
+            }
+
+            // Date Filtering
+            if (date) {
+                const queryDate = new Date(date)
+                const nextDay = new Date(queryDate)
+                nextDay.setDate(nextDay.getDate() + 1)
+
+                if (status === 'history') {
+                    // For history, filter by dispatchedAt
+                    filter.dispatchedAt = {
+                        $gte: queryDate,
+                        $lt: nextDay
+                    }
+                } else {
+                    // For active, filter by createdAt
+                    filter.createdAt = {
+                        $gte: queryDate,
+                        $lt: nextDay
+                    }
+                }
             }
 
             const total = await Job.countDocuments(filter)
@@ -53,12 +74,14 @@ router.get(
                     itemScreenshots: 1,
                     packingMode: 1,
                     packingOverride: 1,
-                    totalItems: 1
+                    createdAt: 1,
+                    customerId: 1 // Include customerId for population
                 }
             ).sort({ createdAt: -1 })
                 .skip(skip)
                 .limit(limit)
                 .populate('createdBy', 'name')
+                .populate('customerId', 'name isCreditCustomer') // Populate credit status
 
             res.json({
                 jobs,
@@ -258,10 +281,12 @@ router.patch(
             const { adminApproval = false } = req.body
             const { jobId, parcelNo } = req.params
 
-            const job = await Job.findOne({ jobId })
+            const job = await Job.findOne({ jobId }).populate('customerId')
             if (!job) return res.status(404).json({ message: 'Job not found' })
 
-            if (job.paymentStatus !== 'PAID' && !adminApproval && job.paymentStatus !== 'ADMIN_APPROVED') {
+            // Allow if PAID, Admin Approved, OR Credit Customer
+            const isCredit = job.customerId && job.customerId.isCreditCustomer
+            if (job.paymentStatus !== 'PAID' && !adminApproval && job.paymentStatus !== 'ADMIN_APPROVED' && !isCredit) {
                 return res.status(403).json({
                     message: 'Payment pending. Admin approval required.'
                 })
@@ -328,15 +353,17 @@ router.post(
         try {
             const { rackLocation } = req.body
 
-            const job = await Job.findOne({ jobId: req.params.jobId })
+            const job = await Job.findOne({ jobId: req.params.jobId }).populate('customerId')
 
             if (!job) {
                 return res.status(404).json({ message: 'Job not found' })
             }
 
+            const isCredit = job.customerId && job.customerId.isCreditCustomer
             if (
                 job.paymentStatus !== 'PAID' &&
-                job.paymentStatus !== 'ADMIN_APPROVED'
+                job.paymentStatus !== 'ADMIN_APPROVED' &&
+                !isCredit
             ) {
                 return res
                     .status(403)

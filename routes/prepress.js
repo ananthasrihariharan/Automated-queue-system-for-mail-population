@@ -89,6 +89,9 @@ router.post(
       const day = String(date.getDate()).padStart(2, '0')
       const month = String(date.getMonth() + 1).padStart(2, '0')
       const year = String(date.getFullYear()).slice(-2)
+      const fullYear = date.getFullYear()
+
+      const dateString = `${day}-${month}-${fullYear}` // DD-MM-YYYY
       jobId = `${jobId}-${day}${month}${year}`
 
       const files = req.files || []
@@ -119,9 +122,11 @@ router.post(
         })
       }
 
-      // ✅ Now move files into job-specific folder
+      // ✅ Now move files into job-specific folder with DATE
       const uploadBase = process.env.UPLOAD_PATH || 'uploads'
-      const jobDir = path.join(uploadBase, 'jobs', jobId)
+      // Structure: uploads/jobs/DD-MM-YYYY/JobId
+      const jobDir = path.join(uploadBase, 'jobs', dateString, jobId)
+
       if (!fs.existsSync(jobDir)) {
         fs.mkdirSync(jobDir, { recursive: true })
       }
@@ -133,7 +138,7 @@ router.post(
         const newPath = path.join(jobDir, filename)
         fs.renameSync(file.path, newPath)
         // Store relative path for frontend (starting with uploads/)
-        imagePaths.push(`uploads/jobs/${jobId}/${filename}`)
+        imagePaths.push(`uploads/jobs/${dateString}/${jobId}/${filename}`)
       })
 
       const job = await Job.create({
@@ -191,17 +196,37 @@ router.patch(
 
       // Move new files into job-specific folder
       const uploadBase = process.env.UPLOAD_PATH || 'uploads'
-      const jobDir = path.join(uploadBase, 'jobs', job.jobId)
-      if (!fs.existsSync(jobDir)) {
-        fs.mkdirSync(jobDir, { recursive: true })
+
+      // 1. Try to find existing Date-Based Folder logic
+      const date = new Date(job.createdAt)
+      const dateString = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`
+
+      const newStyleDir = path.join(uploadBase, 'jobs', dateString, job.jobId)
+      const legacyDir = path.join(uploadBase, 'jobs', job.jobId)
+
+      let finalJobDir = legacyDir
+      let finalRelativeBase = `uploads/jobs/${job.jobId}`
+
+      // If new style folder exists, OR if legacy doesn't exist (force new structure for broken/new cases)
+      if (fs.existsSync(newStyleDir)) {
+        finalJobDir = newStyleDir
+        finalRelativeBase = `uploads/jobs/${dateString}/${job.jobId}`
+      } else if (!fs.existsSync(legacyDir)) {
+        // If neither exists, create new style
+        finalJobDir = newStyleDir
+        finalRelativeBase = `uploads/jobs/${dateString}/${job.jobId}`
+      }
+
+      if (!fs.existsSync(finalJobDir)) {
+        fs.mkdirSync(finalJobDir, { recursive: true })
       }
 
       const newImagePaths = []
       files.forEach((file) => {
         const filename = path.basename(file.path)
-        const newPath = path.join(jobDir, filename)
+        const newPath = path.join(finalJobDir, filename)
         fs.renameSync(file.path, newPath)
-        newImagePaths.push(`uploads/jobs/${job.jobId}/${filename}`)
+        newImagePaths.push(`${finalRelativeBase}/${filename}`)
       })
 
       // Combine kept screenshots with new ones

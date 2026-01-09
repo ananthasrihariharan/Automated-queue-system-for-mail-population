@@ -15,6 +15,10 @@ type Job = {
   jobStatus?: string
 }
 
+import DateFilter from '../../components/DateFilter'
+
+// ... existing imports
+
 export default function CashierDashboard() {
   const queryClient = useQueryClient()
   const { data: jobs = [], isLoading: loading } = useQuery<Job[]>({
@@ -30,6 +34,7 @@ export default function CashierDashboard() {
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [hideDispatched, setHideDispatched] = useState(true) // Default to true for Cashier
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 25
 
@@ -51,7 +56,14 @@ export default function CashierDashboard() {
         job.customerName.toLowerCase().includes(search.toLowerCase())
       const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
       const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
-      return matchesSearch && matchesPayment && isNotDispatched
+
+      // Date Filtering (Client-Side) - Using createdAt mostly
+      // Assuming jobs have 'createdAt' field.
+      // If a job doesn't have createdAt, we might skip or include. Safest is to include if missing, but typically it exists.
+      const jobDate = (job as any).createdAt ? new Date((job as any).createdAt).toISOString().split('T')[0] : ''
+      const matchesDate = !dateFilter || jobDate === dateFilter
+
+      return matchesSearch && matchesPayment && isNotDispatched && matchesDate
     })
     .sort((a, b) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
 
@@ -63,6 +75,7 @@ export default function CashierDashboard() {
   )
 
   if (loading) {
+    // ... loading state
     return (
       <div className="dispatch-loading">
         <div className="dispatch-spinner"></div>
@@ -93,6 +106,7 @@ export default function CashierDashboard() {
           {/* Premium Filter Bar */}
           <div className="cashier-filters-bar">
             <div className="filter-group">
+              <DateFilter value={dateFilter} onChange={(d) => { setDateFilter(d); setCurrentPage(1); }} />
               <div className="search-wrapper">
                 <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -154,7 +168,16 @@ export default function CashierDashboard() {
                         <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
                       </td>
                       <td>
-                        <span style={{ fontWeight: 600 }}>{job.customerName}</span>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontWeight: 600, color: (job as any).customerId?.isCreditCustomer ? '#047857' : 'inherit' }}>
+                            {job.customerName}
+                          </span>
+                          {(job as any).customerId?.isCreditCustomer && (
+                            <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#d1fae5', color: '#047857', borderRadius: '4px', fontWeight: 700 }}>
+                              CREDIT
+                            </span>
+                          )}
+                        </div>
                       </td>
                       <td className="hide-mobile">
                         <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
@@ -190,9 +213,9 @@ export default function CashierDashboard() {
 
           {/* Pagination Controls */}
           {totalPages > 1 && (
-            <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
+            <div className="pagination-container">
               <button
-                className="btn-secondary"
+                className="pagination-btn prev-next"
                 disabled={currentPage === 1}
                 onClick={() => setCurrentPage((prev: number) => prev - 1)}
               >
@@ -201,15 +224,14 @@ export default function CashierDashboard() {
               {[...Array(totalPages)].map((_, i) => (
                 <button
                   key={i}
-                  className={`btn-secondary ${currentPage === i + 1 ? 'active' : ''}`}
-                  style={{ minWidth: '2.5rem', background: currentPage === i + 1 ? '#000' : '', color: currentPage === i + 1 ? '#fff' : '' }}
+                  className={`pagination-btn ${currentPage === i + 1 ? 'active' : ''}`}
                   onClick={() => setCurrentPage(i + 1)}
                 >
                   {i + 1}
                 </button>
               ))}
               <button
-                className="btn-secondary"
+                className="pagination-btn prev-next"
                 disabled={currentPage === totalPages}
                 onClick={() => setCurrentPage((prev: number) => prev + 1)}
               >

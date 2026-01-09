@@ -18,6 +18,10 @@ type Job = {
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
+import DateFilter from '../../components/DateFilter'
+
+// ... existing imports
+
 export default function PrepressDashboard() {
   const {
     data: jobs = [],
@@ -31,6 +35,7 @@ export default function PrepressDashboard() {
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
 
   const { logout } = useAuth()
   const navigate = useNavigate()
@@ -39,7 +44,12 @@ export default function PrepressDashboard() {
     const matchesSearch = job.jobId.toLowerCase().includes(search.toLowerCase()) ||
       job.customerName.toLowerCase().includes(search.toLowerCase())
     const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
-    return matchesSearch && matchesPayment
+
+    // Date Filtering
+    const jobDate = new Date(job.createdAt).toISOString().split('T')[0]
+    const matchesDate = !dateFilter || jobDate === dateFilter
+
+    return matchesSearch && matchesPayment && matchesDate
   })
 
   if (isLoading) return <div className="prepress-page">Loading...</div>
@@ -47,6 +57,7 @@ export default function PrepressDashboard() {
   return (
     <div className="prepress-page">
       <div className="prepress-header">
+        {/* ... header ... */}
         <div className="header-left">
           <h1 className="tracking-tightest font-black uppercase text-2xl">Prepress</h1>
           <button
@@ -72,6 +83,7 @@ export default function PrepressDashboard() {
       {/* Premium Filter Bar */}
       <div className="prepress-filters-bar">
         <div className="filter-group">
+          <DateFilter value={dateFilter} onChange={setDateFilter} />
           <div className="search-wrapper">
             <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />

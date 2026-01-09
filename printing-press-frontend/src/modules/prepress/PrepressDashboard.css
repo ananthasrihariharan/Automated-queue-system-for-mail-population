@@ -272,3 +272,47 @@
 .screenshot-item img:hover {
   transform: scale(1.05);
 }
+
+/* Mobile Responsive Fixes */
+@media (max-width: 768px) {
+  .prepress-page {
+    padding: 1rem;
+  }
+
+  .prepress-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+  }
+
+  .header-left,
+  .header-right {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 1rem;
+  }
+
+  .search-wrapper,
+  .dropdown-wrapper {
+    max-width: 100%;
+  }
+
+  /* FIX: Allow horizontal scroll on table */
+  .table-container {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    /* Smooth scroll on iOS */
+  }
+
+  /* Optional: Ensure table doesn't shrink too much */
+  .jobs-table {
+    min-width: 800px;
+    /* Force scroll if needed */
+  }
+}

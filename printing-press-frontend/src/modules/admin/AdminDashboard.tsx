@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { api } from '../../services/api'
 import EmployeeManager from './EmployeeManager'
+import CustomerManager from './CustomerManager'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../hooks/useAuth'
 import ModuleNavigation from '../../components/ModuleNavigation'
@@ -19,16 +20,21 @@ type Job = {
   dispatchedBy?: { name: string }
 }
 
+import DateFilter from '../../components/DateFilter'
+
+// ... imports
+
 export default function AdminDashboard() {
   const navigate = useNavigate()
   const { logout } = useAuth()
-  const [activeTab, setActiveTab] = useState<'jobs' | 'employees'>('jobs')
+  const [activeTab, setActiveTab] = useState<'jobs' | 'employees' | 'customers'>('jobs')
 
   // Filtering & Pagination State
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'CREATED' | 'PACKED' | 'DISPATCHED'>('ALL')
   const [hideDispatched, setHideDispatched] = useState(false)
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
@@ -39,11 +45,26 @@ export default function AdminDashboard() {
     enabled: activeTab === 'jobs',
   })
 
+  // State for inline approval notes
+  const [approvalNotes, setApprovalNotes] = useState<Record<string, string>>({})
+
   const queryClient = useQueryClient()
 
   const approve = async (jobId: string) => {
-    await api.patch(`/api/admin/jobs/${jobId}/approve-dispatch`)
-    queryClient.invalidateQueries({ queryKey: ['admin-jobs'] })
+    const note = approvalNotes[jobId] || "Approved by Admin"
+
+    try {
+      await api.patch(`/api/admin/jobs/${jobId}/approve-dispatch`, { note })
+      queryClient.invalidateQueries({ queryKey: ['admin-jobs'] })
+      // Clear note after success
+      setApprovalNotes(prev => {
+        const next = { ...prev }
+        delete next[jobId]
+        return next
+      })
+    } catch (err) {
+      alert("Failed to approve job")
+    }
   }
 
   // Derived Data: Filtering & Sorting
@@ -55,7 +76,16 @@ export default function AdminDashboard() {
       const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter || (paymentFilter === 'PAID' && job.paymentStatus === 'ADMIN_APPROVED')
       const matchesStatus = statusFilter === 'ALL' || job.jobStatus === statusFilter
       const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
-      return matchesSearch && matchesPayment && matchesStatus && isNotDispatched
+
+      // Date Filter (Client-side)
+      // Assuming jobs have 'createdAt' from the backend. 
+      // If the backend returns 'createdAt', we use it. If not present (e.g. legacy), we might skip or show.
+      // Admin dashboard Job type doesn't strictly define createdAt in lines above, but it likely exists.
+      // I'll cast to any for safety in this snippet context if needed, but usually it exists on the object.
+      const jobDate = (job as any).createdAt ? new Date((job as any).createdAt).toISOString().split('T')[0] : ''
+      const matchesDate = !dateFilter || jobDate === dateFilter
+
+      return matchesSearch && matchesPayment && matchesStatus && isNotDispatched && matchesDate
     })
     .sort((a, b) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
 
@@ -69,21 +99,33 @@ export default function AdminDashboard() {
   return (
     <div className="admin-page">
       <div className="admin-navbar">
+        {/* ... navbar content ... */}
         <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
           <h1 style={{ fontWeight: 900, fontSize: '1.5rem', textTransform: 'uppercase', letterSpacing: '-0.05em' }}>Admin</h1>
           <div className="dashboard-tabs" style={{ marginBottom: 0 }}>
+            {/* ... tabs ... */}
             <button
               onClick={() => setActiveTab('jobs')}
               className={`dashboard-tab ${activeTab === 'jobs' ? 'active' : ''}`}
+              title="Jobs"
             >
-              Jobs
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
             </button>
             <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
             <button
               onClick={() => setActiveTab('employees')}
               className={`dashboard-tab ${activeTab === 'employees' ? 'active' : ''}`}
+              title="Employees"
             >
-              Employees
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+            </button>
+            <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
+            <button
+              onClick={() => setActiveTab('customers')}
+              className={`dashboard-tab ${activeTab === 'customers' ? 'active' : ''}`}
+              title="Customers"
+            >
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
             </button>
           </div>
         </div>
@@ -104,7 +146,9 @@ export default function AdminDashboard() {
         <>
           {/* Premium Filter Bar */}
           <div className="admin-filters-bar">
+            {/* ... filters ... */}
             <div className="filter-group">
+              <DateFilter value={dateFilter} onChange={(d) => { setDateFilter(d); setCurrentPage(1); }} />
               <div className="search-wrapper">
                 <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -167,9 +211,9 @@ export default function AdminDashboard() {
                     <tr>
                       <th>Job ID</th>
                       <th>Customer</th>
-                      <th className="hide-mobile">Submitted By</th>
-                      <th className="hide-mobile">Payment Status</th>
-                      <th className="hide-mobile">Dispatched By</th>
+                      <th>Submitted By</th>
+                      <th>Payment Status</th>
+                      <th>Dispatched By</th>
                       <th className="text-right">Action</th>
                     </tr>
                   </thead>
@@ -187,35 +231,61 @@ export default function AdminDashboard() {
                             <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
                           </td>
                           <td>
-                            <span style={{ fontWeight: 600 }}>{job.customerName}</span>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <span style={{ fontWeight: 600, color: (job as any).customerId?.isCreditCustomer ? '#047857' : 'inherit' }}>
+                                {job.customerName}
+                              </span>
+                              {(job as any).customerId?.isCreditCustomer && (
+                                <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#d1fae5', color: '#047857', borderRadius: '4px', fontWeight: 700 }}>
+                                  CREDIT
+                                </span>
+                              )}
+                            </div>
                           </td>
-                          <td className="hide-mobile">
+                          <td>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
                               {job.createdBy?.name || '—'}
                             </span>
                           </td>
-                          <td className="hide-mobile">
+                          <td>
                             <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
                               {job.paymentStatus}
                             </span>
                           </td>
-                          <td className="hide-mobile">
+                          <td>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
                               {job.dispatchedBy?.name || '—'}
                             </span>
                           </td>
                           <td className="text-right">
-                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end' }}>
-                              {job.paymentStatus === 'PENDING' ? (
-                                <button
-                                  className="btn-primary"
-                                  onClick={() => approve(job.jobId)}
-                                  style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem', width: 'auto' }}
-                                >
-                                  Approve Payment
-                                </button>
+                            <div style={{ display: 'flex', gap: '0.5rem', justifyContent: 'flex-end', alignItems: 'center' }}>
+                              {job.paymentStatus === 'UNPAID' ? (
+                                <>
+                                  <input
+                                    type="text"
+                                    placeholder="Optional Note"
+                                    className="form-input"
+                                    style={{ fontSize: '0.75rem', padding: '0.25rem', width: '150px', height: '28px' }}
+                                    value={approvalNotes[job.jobId] || ''}
+                                    onChange={(e) => setApprovalNotes(prev => ({ ...prev, [job.jobId]: e.target.value }))}
+                                  />
+                                  <button
+                                    className="btn-primary"
+                                    onClick={() => approve(job.jobId)}
+                                    style={{ padding: '0.375rem 0.75rem', fontSize: '0.75rem', width: 'auto' }}
+                                  >
+                                    Approve Payment
+                                  </button>
+                                </>
                               ) : (
-                                <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>COMPLETED</span>
+                                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end' }}>
+                                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#10b981' }}>COMPLETED</span>
+                                  {job.adminApprovalNote && (
+                                    <span style={{ fontSize: '0.65rem', color: '#6b7280', maxWidth: '150px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} title={job.adminApprovalNote}>
+                                      "{job.adminApprovalNote}"
+                                    </span>
+                                  )}
+                                </div>
                               )}
                             </div>
                           </td>
@@ -261,6 +331,7 @@ export default function AdminDashboard() {
       )}
 
       {activeTab === 'employees' && <EmployeeManager />}
+      {activeTab === 'customers' && <CustomerManager />}
     </div>
   )
 }

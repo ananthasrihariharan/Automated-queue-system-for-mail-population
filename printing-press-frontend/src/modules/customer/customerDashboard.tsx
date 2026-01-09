@@ -5,6 +5,10 @@ import './CustomerDashboard.css'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCustomerJobs } from '../../services/api'
 
+import DateFilter from '../../components/DateFilter'
+
+// ... imports
+
 function StatusBadge({ status }: { status: string }) {
     const normalizedStatus = status === 'CREATED' ? 'PENDING' : status
     const statusClass = normalizedStatus === 'PENDING' ? 'status-pending' :
@@ -18,18 +22,28 @@ function StatusBadge({ status }: { status: string }) {
     )
 }
 
-
-
 export default function CustomerDashboard() {
     const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
+    const [activeDateFilter, setActiveDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
+
     const navigate = useNavigate()
     const { logout } = useAuth()
 
-    const { data: jobs = [], isLoading: loading } = useQuery<any[]>({
+    const { data: allJobs = [], isLoading: loading } = useQuery<any[]>({
         queryKey: ['customer-jobs', viewMode],
         queryFn: () => fetchCustomerJobs(viewMode),
         refetchInterval: 5000,
     })
+
+    // Filter jobs by date
+    const jobs = useMemo(() => {
+        if (!activeDateFilter) return allJobs
+        return allJobs.filter(j => {
+            const relevantDate = (viewMode === 'history' && j.dispatchedAt) ? j.dispatchedAt : j.createdAt
+            const dateStr = new Date(relevantDate).toISOString().split('T')[0]
+            return dateStr === activeDateFilter
+        })
+    }, [allJobs, activeDateFilter, viewMode])
 
     const stats = useMemo(() => {
         const total = jobs.length
@@ -56,12 +70,15 @@ export default function CustomerDashboard() {
                         <span style={{ fontSize: '0.625rem', color: '#9ca3af', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.2em' }}>Private Access</span>
                     </div>
                 </div>
-                <button
-                    onClick={() => { logout(); navigate('/login'); }}
-                    className="logout-btn"
-                >
-                    Logout
-                </button>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+                    <DateFilter value={activeDateFilter} onChange={setActiveDateFilter} label="Order Date" />
+                    <button
+                        onClick={() => { logout(); navigate('/login'); }}
+                        className="logout-btn"
+                    >
+                        Logout
+                    </button>
+                </div>
             </nav>
 
             <main className="customer-main">

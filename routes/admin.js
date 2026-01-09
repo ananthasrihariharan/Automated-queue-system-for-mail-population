@@ -56,12 +56,14 @@ router.get(
           packingPreference: 1,
           jobStatus: 1,
           createdAt: 1,
-          adminApprovalNote: 1
+          adminApprovalNote: 1,
+          customerId: 1
         }
       ).sort({ createdAt: -1 })
         .populate('createdBy', 'name')
         .populate('paymentHandledBy', 'name')
         .populate('dispatchedBy', 'name')
+        .populate('customerId', 'isCreditCustomer')
 
       res.json(jobs)
     } catch (err) {
@@ -107,5 +109,49 @@ router.patch(
     }
   }
 )
+
+/**
+ * CUSTOMER MANAGEMENT
+ */
+
+// GET ALL CUSTOMERS
+router.get('/customers', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const customers = await require('../models/Customer').find().sort({ createdAt: -1 })
+    res.json(customers)
+  } catch (err) {
+    res.status(500).json({ message: 'Server error' })
+  }
+})
+
+// UPDATE CUSTOMER
+router.patch('/customers/:id', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const { name, phone, isCreditCustomer } = req.body
+    const updateData = {}
+    if (name) updateData.name = name
+    if (phone) updateData.phone = phone
+    if (isCreditCustomer !== undefined) updateData.isCreditCustomer = isCreditCustomer
+
+    const customer = await require('../models/Customer').findByIdAndUpdate(
+      req.params.id,
+      updateData,
+      { new: true }
+    )
+    res.json(customer)
+  } catch (err) {
+    res.status(500).json({ message: 'Update failed' })
+  }
+})
+
+// DELETE CUSTOMER
+router.delete('/customers/:id', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    await require('../models/Customer').findByIdAndDelete(req.params.id)
+    res.json({ message: 'Customer deleted' })
+  } catch (err) {
+    res.status(500).json({ message: 'Delete failed' })
+  }
+})
 
 module.exports = router

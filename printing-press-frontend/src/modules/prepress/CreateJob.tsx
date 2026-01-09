@@ -105,7 +105,7 @@ export default function CreateJob() {
 
     const handlePaste = (e: React.ClipboardEvent) => {
         const items = e.clipboardData.items
-        const remaining = formData.totalItems - files.length
+        const remaining = formData.totalItems - (files.length + existingScreenshots.length)
         if (remaining <= 0) return
 
         let addedCount = 0
@@ -225,7 +225,7 @@ export default function CreateJob() {
                                         e.preventDefault();
                                         setIsDragging(false);
                                         const dropped = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/'));
-                                        const remaining = formData.totalItems - files.length
+                                        const remaining = formData.totalItems - (files.length + existingScreenshots.length)
                                         setFiles(prev => [...prev, ...dropped.slice(0, remaining)]);
                                     }}
                                     onDoubleClick={() => document.getElementById('file-drop')?.click()}
@@ -318,7 +318,7 @@ export default function CreateJob() {
                                         style={{ display: 'none' }}
                                         onChange={(e) => {
                                             const selected = Array.from(e.target.files || []).filter(f => f.type.startsWith('image/'));
-                                            const remaining = formData.totalItems - files.length;
+                                            const remaining = formData.totalItems - (files.length + existingScreenshots.length);
                                             if (remaining > 0) {
                                                 setFiles(prev => [...prev, ...selected.slice(0, remaining)]);
                                             }
@@ -334,7 +334,7 @@ export default function CreateJob() {
                         <div className="submit-section">
                             <button
                                 type="submit"
-                                disabled={loading || (files.length > 0 && files.length !== formData.totalItems)}
+                                disabled={loading || (files.length + existingScreenshots.length !== formData.totalItems)}
                                 className="btn-primary"
                                 style={{ width: '100%', padding: '0.75rem', fontSize: '1rem' }}
                             >

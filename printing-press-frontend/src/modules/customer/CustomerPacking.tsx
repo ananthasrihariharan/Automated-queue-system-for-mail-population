@@ -17,20 +17,26 @@ export default function CustomerPacking() {
   const { jobId } = useParams()
   const navigate = useNavigate()
   const [job, setJob] = useState<any>(null)
+
+  // Packing State
   const [packing, setPacking] = useState<'SINGLE' | 'MULTIPLE' | null>(null)
   const [selectedItems, setSelectedItems] = useState<number[]>([])
   const [parcels, setParcels] = useState<Parcel[]>([])
 
+  // Receiver Form State
   const [receiverType, setReceiverType] = useState<'SELF' | 'OTHER'>('SELF')
   const [receiverName, setReceiverName] = useState('')
   const [receiverPhone, setReceiverPhone] = useState('')
   const [loading, setLoading] = useState(false)
 
+  // Load Job Logic
   useEffect(() => {
     api
       .get(`/api/customer/jobs/${jobId}`)
       .then(res => {
         setJob(res.data)
+        // If already packed/dispatched, the backend might send the preference.
+        // We can set it to view mode automatically in the render logic.
         if (res.data.packingPreference) setPacking(res.data.packingPreference)
       })
       .catch(err => {
@@ -86,7 +92,9 @@ export default function CustomerPacking() {
           ? [{ parcelNo: 1, itemIndexes: Array.from({ length: job.totalItems }, (_, i) => i + 1), receiverType: 'SELF' }]
           : parcels
       })
-      navigate('/customer/dashboard')
+      // Refresh job data to switch to read-only view
+      const res = await api.get(`/api/customer/jobs/${jobId}`)
+      setJob(res.data)
     } catch (err: any) {
       alert(err.response?.data?.message || 'Failed to submit packing')
     } finally {
@@ -95,232 +103,232 @@ export default function CustomerPacking() {
   }
 
   if (!job) return (
-    <div className="dispatch-loading">
-      <div className="dispatch-spinner"></div>
-    </div>
+    <div style={{ padding: '2rem', textAlign: 'center' }}>Loading...</div>
   )
 
-  if (job.jobStatus === 'DISPATCHED') return (
-    <div className="packing-page" style={{ textAlign: 'center', paddingTop: '10rem' }}>
-      <h2 style={{ fontSize: '2rem', fontWeight: 900 }}>Already Dispatched</h2>
-      <p style={{ color: '#6b7280', margin: '1rem 0 2rem' }}>This job has been completed and dispatched.</p>
-      <button onClick={() => navigate('/customer/dashboard')} className="btn-primary" style={{ width: 'auto' }}>
-        Back to Dashboard
-      </button>
-    </div>
-  )
+  const isLocked = job.jobStatus === 'PACKED' || job.jobStatus === 'DISPATCHED' || job.parcels?.some((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED')
 
-  return (
-    <div className="dispatch-modal-overlay">
-      <div className="dispatch-modal-container">
-        <header className="dispatch-modal-header" style={{ flexShrink: 0 }}>
-          <div className="job-info-brief">
-            <h2 className="modal-title">Organize Packing for #{job.jobId}</h2>
-            <p className="modal-subtitle">Customer: {job.customerName}</p>
+  // --- READ ONLY VIEW ---
+  if (isLocked) {
+    const finalParcels = job.parcels && job.parcels.length > 0 ? job.parcels : [{ parcelNo: 1, itemIndexes: Array.from({ length: job.totalItems }, (_, i) => i + 1), receiverName: job.customerName }]
+
+    return (
+      <div className="packing-page">
+        <div className="read-only-container">
+          <div className="ro-header">
+            <h1 style={{ fontSize: '2rem', fontWeight: 900, marginBottom: '0.5rem' }}>Job #{job.jobId}</h1>
+            <div className="ro-status-badge">
+              <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M5 13l4 4L19 7" /></svg>
+              Packing Confirmed
+            </div>
+            <p style={{ color: '#6b7280' }}>Your packing preferences have been submitted to our dispatch team.</p>
+            <button onClick={() => navigate('/customer/dashboard')} className="btn-outline" style={{ display: 'inline-flex', marginTop: '1.5rem', width: 'auto' }}>
+              Back to Dashboard
+            </button>
           </div>
-          <button onClick={() => navigate('/customer/dashboard')} className="btn-outline">
-            &larr; Exit to Dashboard
-          </button>
-        </header>
 
-        <div className="dispatch-modal-content" style={{ overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
-          {job.jobStatus === 'PACKED' || job.parcels?.some((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED') ? (
-            <div style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: '2rem', textAlign: 'center' }}>
-              <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: '1rem', padding: '3rem', maxWidth: '500px' }}>
-                <h3 style={{ color: '#1e40af', fontWeight: 900, fontSize: '1.5rem', marginBottom: '1rem' }}>Order is Locked</h3>
-                <p style={{ color: '#1e3a8a', marginBottom: '2rem', lineHeight: 1.5 }}>
-                  This job has already been processed by our dispatch team. The packing configuration is now locked and cannot be modified.
-                </p>
-                <div style={{ padding: '1rem', background: '#fff', borderRadius: '0.5rem', border: '1px solid #dbeafe', textAlign: 'left' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase' }}>Selected Preference</span>
-                  <p style={{ fontSize: '1.125rem', fontWeight: 700, color: '#0f172a' }}>{packing === 'SINGLE' ? 'Single Parcel' : 'Multiple Parcels'}</p>
+          <div className="ro-grid">
+            {finalParcels.map((p: any) => (
+              <div key={p.parcelNo} className="ro-parcel-card">
+                <div className="ro-parcel-header">
+                  <span style={{ fontWeight: 800 }}>PARCEL {p.parcelNo}</span>
+                  <span style={{ fontSize: '0.75rem', color: '#64748b' }}>{p.itemIndexes.length} items</span>
+                </div>
+                <div className="ro-parcel-content">
+                  <div className="ro-item-grid">
+                    {p.itemIndexes.map((idx: number) => {
+                      const imgPath = job.itemScreenshots?.[idx - 1]
+                      return (
+                        <div key={idx} className="ro-item-thumb">
+                          {imgPath ? (
+                            <img src={`${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}`} alt={`Item ${idx}`} />
+                          ) : (
+                            <div style={{ height: '100%', background: '#f1f5f9' }}></div>
+                          )}
+                          <span>#{idx}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                  <div style={{ marginTop: '1rem', paddingTop: '1rem', borderTop: '1px solid #f1f5f9', fontSize: '0.75rem', color: '#64748b' }}>
+                    <strong style={{ color: '#000' }}>Receiver:</strong> {p.receiverName || job.customerName}
+                  </div>
                 </div>
               </div>
+            ))}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  // --- EDITABLE PACKING VIEW ---
+  return (
+    <div className="packing-page">
+      <div className="packing-container">
+
+        {/* Left Panel: Configurator */}
+        <div style={{ display: 'flex', flexDirection: 'column', height: '100%' }}>
+          <header className="packing-header">
+            <div>
+              <h2 style={{ fontSize: '1.5rem', fontWeight: 800 }}>Pack Your Items</h2>
+              <p style={{ color: '#6b7280' }}>Select items to group them into parcels.</p>
             </div>
-          ) : (
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 350px', gap: '2rem', height: '100%', overflow: 'hidden' }}>
-              {/* Left Column: Configurator */}
-              <div style={{ overflowY: 'auto', paddingRight: '1rem' }}>
-                <section className="packing-mode-section" style={{ marginBottom: '2rem' }}>
-                  <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '1rem' }}>1. Choose Mode</h4>
-                  <div className="strategy-grid" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem' }}>
-                    <div
-                      className={`strategy-card ${packing === 'SINGLE' ? 'active' : ''}`}
-                      onClick={() => { setPacking('SINGLE'); setParcels([]); }}
-                      style={{ padding: '1.5rem', border: '2px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'center' }}
-                    >
-                      <span style={{ display: 'block', fontWeight: 700, fontSize: '1rem' }}>Single Parcel</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Best for small orders</span>
-                    </div>
-                    <div
-                      className={`strategy-card ${packing === 'MULTIPLE' ? 'active' : ''}`}
-                      onClick={() => setPacking('MULTIPLE')}
-                      style={{ padding: '1.5rem', border: '2px solid #e2e8f0', borderRadius: '0.75rem', cursor: 'pointer', textAlign: 'center' }}
-                    >
-                      <span style={{ display: 'block', fontWeight: 700, fontSize: '1rem' }}>Multiple Parcels</span>
-                      <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Split by receiver or safety</span>
-                    </div>
-                  </div>
-                </section>
+            <button onClick={() => navigate('/customer/dashboard')} className="btn-outline" style={{ width: 'auto' }}>Exit</button>
+          </header>
 
-                {packing === 'MULTIPLE' && (
-                  <section style={{ marginBottom: '2rem' }}>
-                    <h4 style={{ fontSize: '0.875rem', fontWeight: 800, color: '#64748b', textTransform: 'uppercase', marginBottom: '1rem' }}>2. Group Items</h4>
-                    <div style={{ background: '#f8fafc', padding: '1.5rem', borderRadius: '1rem', border: '1px solid #e2e8f0' }}>
-                      <div className="item-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(60px, 1fr))', gap: '0.5rem', marginBottom: '1.5rem' }}>
-                        {Array.from({ length: job.totalItems }, (_, i) => i + 1).map(i => {
-                          const isAssigned = assignedItems.includes(i)
-                          const isSelected = selectedItems.includes(i)
-                          return (
-                            <div
-                              key={i}
-                              className={`item-node ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''}`}
-                              onClick={() => !isAssigned && toggleItem(i)}
-                              style={{
-                                height: '60px',
-                                display: 'flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                borderRadius: '0.5rem',
-                                fontWeight: 800,
-                                cursor: isAssigned ? 'not-allowed' : 'pointer',
-                                background: isAssigned ? '#e2e8f0' : isSelected ? '#000' : '#fff',
-                                color: isAssigned ? '#94a3b8' : isSelected ? '#fff' : '#1e293b',
-                                border: '2px solid',
-                                borderColor: isAssigned ? 'transparent' : isSelected ? '#000' : '#e2e8f0'
-                              }}
-                            >
-                              {i}
-                            </div>
-                          )
-                        })}
-                      </div>
+          <div style={{ flex: 1, overflowY: 'auto', paddingRight: '1rem' }}>
+            <div className="strategy-grid">
+              <div
+                className={`strategy-card ${packing === 'SINGLE' ? 'active' : ''}`}
+                onClick={() => { setPacking('SINGLE'); setParcels([]); setSelectedItems([]); }}
+              >
+                <span className="strategy-card-title">Single Parcel</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Everything in one box</span>
+              </div>
+              <div
+                className={`strategy-card ${packing === 'MULTIPLE' ? 'active' : ''}`}
+                onClick={() => setPacking('MULTIPLE')}
+              >
+                <span className="strategy-card-title">Multiple Parcels</span>
+                <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Split items into boxes</span>
+              </div>
+            </div>
 
-                      <div className="receiver-form" style={{ marginTop: '1.5rem', padding: '1rem', background: '#fff', borderRadius: '0.75rem', border: '1px solid #e2e8f0' }}>
-                        <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer' }}>
-                            <input type="radio" checked={receiverType === 'SELF'} onChange={() => setReceiverType('SELF')} /> Self Collection
-                          </label>
-                          <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 700, cursor: 'pointer' }}>
-                            <input type="radio" checked={receiverType === 'OTHER'} onChange={() => setReceiverType('OTHER')} /> Send to Other
-                          </label>
-                        </div>
+            {packing === 'MULTIPLE' && (
+              <>
+                <h4 className="section-title">Select Items for New Segment</h4>
+                <div className="packing-item-grid">
+                  {Array.from({ length: job.totalItems }, (_, i) => i + 1).map(i => {
+                    const isAssigned = assignedItems.includes(i)
+                    const isSelected = selectedItems.includes(i)
+                    const imgPath = job.itemScreenshots?.[i - 1]
+                    const fullUrl = imgPath ? `${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}` : null
 
-                        {receiverType === 'OTHER' && (
-                          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                            <div>
-                              <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Receiver Name</span>
-                              <input
-                                className="form-input"
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
-                                value={receiverName}
-                                onChange={e => setReceiverName(e.target.value)}
-                              />
+                    return (
+                      <div
+                        key={i}
+                        className={`packing-item-card ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''}`}
+                        onClick={() => !isAssigned && toggleItem(i)}
+                      >
+                        {fullUrl ? (
+                          <>
+                            <img src={fullUrl} alt={`Item ${i}`} />
+                            <div className="overlay">
+                              <div className="check-icon">
+                                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" /></svg>
+                              </div>
                             </div>
-                            <div>
-                              <span style={{ fontSize: '0.625rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase' }}>Phone Number</span>
-                              <input
-                                className="form-input"
-                                style={{ width: '100%', padding: '0.5rem', borderRadius: '0.375rem', border: '1px solid #e2e8f0' }}
-                                value={receiverPhone}
-                                onChange={e => setReceiverPhone(e.target.value)}
-                              />
-                            </div>
+                            {!isSelected && <div className="item-number-badge">{i}</div>}
+                          </>
+                        ) : (
+                          <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '1.5rem', fontWeight: 800, color: '#e5e7eb' }}>
+                            {i}
                           </div>
                         )}
+                      </div>
+                    )
+                  })}
+                </div>
 
-                        <button
-                          className="btn-primary"
-                          style={{ width: '100%', borderRadius: '0.5rem' }}
-                          onClick={addParcel}
-                          disabled={selectedItems.length === 0}
-                        >
-                          Add to Selection
-                        </button>
+                <div className="packing-section">
+                  <h4 className="section-title" style={{ marginBottom: '0.5rem' }}>Receiver Details (Optional)</h4>
+                  <div style={{ display: 'flex', gap: '1.5rem', marginBottom: '1rem' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
+                      <input type="radio" checked={receiverType === 'SELF'} onChange={() => setReceiverType('SELF')} /> Self (Me)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.875rem', fontWeight: 600, cursor: 'pointer' }}>
+                      <input type="radio" checked={receiverType === 'OTHER'} onChange={() => setReceiverType('OTHER')} /> Someone Else
+                    </label>
+                  </div>
+
+                  {receiverType === 'OTHER' && (
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                      <div>
+                        <label className="form-label">Name</label>
+                        <input className="form-input" value={receiverName} onChange={e => setReceiverName(e.target.value)} placeholder="Receiver Name" />
+                      </div>
+                      <div>
+                        <label className="form-label">Phone</label>
+                        <input className="form-input" value={receiverPhone} onChange={e => setReceiverPhone(e.target.value)} placeholder="Phone Number" />
                       </div>
                     </div>
-                  </section>
-                )}
+                  )}
 
-                {packing && (
-                  <div style={{ marginTop: '3rem', padding: '1.5rem', background: '#000', borderRadius: '1rem', color: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <div>
-                      <h5 style={{ fontWeight: 800, fontSize: '1.125rem' }}>Ready to Confirm?</h5>
-                      <p style={{ fontSize: '0.875rem', color: '#94a3b8' }}>This will lock in your strategy for the dispatch team.</p>
-                    </div>
-                    <button
-                      className="btn-primary"
-                      onClick={submitPacking}
-                      disabled={loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)}
-                      style={{ background: '#fff', color: '#000', width: 'auto', padding: '0.75rem 2rem' }}
-                    >
-                      {loading ? 'Processing...' : 'Confirm Strategy'}
-                    </button>
-                  </div>
-                )}
-              </div>
+                  <button className="btn-primary" onClick={addParcel} disabled={selectedItems.length === 0}>
+                    Create Parcel Segment ({selectedItems.length} Items)
+                  </button>
+                </div>
+              </>
+            )}
 
-              {/* Right Column: Previews & Result */}
-              <div style={{ overflowY: 'auto', background: '#f8fafc', borderRadius: '1rem', padding: '1.5rem', border: '1px solid #e2e8f0' }}>
-                <section style={{ marginBottom: '2rem' }}>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '1rem' }}>Configured Parcels</h4>
-                  <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                    {packing === 'SINGLE' && (
-                      <div className="parcel-card" style={{ background: '#fff' }}>
-                        <div className="parcel-header">
-                          <span className="parcel-id">Unified Parcel #1</span>
-                          <span className="status-badge">SINGLE</span>
-                        </div>
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.875rem', fontWeight: 600 }}>
-                          All {job.totalItems} Units
-                        </div>
-                      </div>
-                    )}
-
-                    {parcels.length === 0 && packing === 'MULTIPLE' && (
-                      <div style={{ textAlign: 'center', padding: '2rem', border: '2px dashed #e2e8f0', borderRadius: '0.75rem', color: '#94a3b8', fontSize: '0.875rem' }}>
-                        No segments created yet
-                      </div>
-                    )}
-
-                    {parcels.map(p => (
-                      <div key={p.parcelNo} className="parcel-card" style={{ background: '#fff' }}>
-                        <div className="parcel-header" style={{ display: 'flex', justifyContent: 'space-between' }}>
-                          <span className="parcel-id">Segment #{p.parcelNo}</span>
-                          <button style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 800, fontSize: '1.25rem' }} onClick={() => removeParcel(p.parcelNo)}>&times;</button>
-                        </div>
-                        <div style={{ marginTop: '0.5rem', display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                          {p.itemIndexes.map(idx => (
-                            <span key={idx} style={{ background: '#f1f5f9', padding: '0.125rem 0.375rem', borderRadius: '0.25rem', fontSize: '0.75rem', fontWeight: 700 }}>#{idx}</span>
-                          ))}
-                        </div>
-                        <div style={{ marginTop: '0.5rem', fontSize: '0.75rem', color: '#64748b' }}>
-                          <strong>Receiver:</strong> {p.receiverName}
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
-
-                <section>
-                  <h4 style={{ fontSize: '0.75rem', fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', marginBottom: '1rem' }}>Unit Previews</h4>
-                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.75rem' }}>
-                    {job.itemScreenshots?.map((img: string, i: number) => (
-                      <div key={i} className="item-thumb" style={{ background: '#fff' }}>
-                        <img
-                          src={`${BACKEND_URL}/${img.replace(/\\/g, '/')}`}
-                          alt={`Unit ${i + 1}`}
-                          style={{ width: '100%', height: '80px', objectFit: 'cover' }}
-                        />
-                        <div style={{ padding: '0.5rem', fontSize: '0.625rem', textAlign: 'center', fontWeight: 800 }}>Unit {i + 1}</div>
-                      </div>
-                    ))}
-                  </div>
-                </section>
+            {/* Confirmation Area */}
+            <div style={{ marginTop: '2rem', padding: '1.5rem', background: '#000', borderRadius: '1rem', color: '#fff' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <div>
+                  <h3 style={{ fontWeight: 800, fontSize: '1.25rem' }}>Confirm Packing</h3>
+                  <p style={{ fontSize: '0.875rem', color: '#a3a3a3' }}>
+                    {packing === 'SINGLE' ? 'All items will be packed in one box.' : `${parcels.length} parcels configured.`}
+                  </p>
+                </div>
+                <button
+                  className="btn-primary"
+                  style={{ background: '#fff', color: '#000', width: 'auto' }}
+                  onClick={submitPacking}
+                  disabled={loading || (packing === 'MULTIPLE' && assignedItems.length < job.totalItems)}
+                >
+                  {loading ? 'Submitting...' : 'Submit to Dispatch'}
+                </button>
               </div>
             </div>
-          )}
+
+          </div>
         </div>
+
+        {/* Right Panel: Summary */}
+        <div className="packing-sidebar">
+          <h3 style={{ fontSize: '1rem', fontWeight: 800, marginBottom: '1.5rem', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+            Current Configuration
+          </h3>
+
+          <div className="parcel-list">
+            {packing === 'SINGLE' && (
+              <div className="parcel-card-new">
+                <div className="parcel-header">
+                  <span className="parcel-title">Parcel #1</span>
+                  <span className="ro-status-badge" style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', marginBottom: 0 }}>SINGLE</span>
+                </div>
+                <p style={{ fontSize: '0.875rem', color: '#64748b' }}>Contains all {job.totalItems} items.</p>
+              </div>
+            )}
+
+            {packing === 'MULTIPLE' && parcels.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '2rem', color: '#94a3b8', border: '2px dashed #e2e8f0', borderRadius: '0.75rem' }}>
+                No parcels created yet. Select items and click "Create Parcel" to start.
+              </div>
+            )}
+
+            {parcels.map(p => (
+              <div key={p.parcelNo} className="parcel-card-new">
+                <div className="parcel-header">
+                  <span className="parcel-title">Parcel #{p.parcelNo}</span>
+                  <button style={{ color: '#ef4444', background: 'none', border: 'none', cursor: 'pointer' }} onClick={() => removeParcel(p.parcelNo)}>
+                    <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+                <div className="parcel-items-preview">
+                  {p.itemIndexes.map(idx => (
+                    <span key={idx} className="mini-item-pill">#{idx}</span>
+                  ))}
+                </div>
+                <div style={{ marginTop: '0.75rem', fontSize: '0.75rem', color: '#64748b' }}>
+                  <strong>To:</strong> {p.receiverName}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
       </div>
     </div>
   )

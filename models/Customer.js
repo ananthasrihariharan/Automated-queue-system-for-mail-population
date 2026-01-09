@@ -18,6 +18,10 @@ const CustomerSchema = new mongoose.Schema(
             type: String,
             required: true,
             select: false
+        },
+        isCreditCustomer: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }

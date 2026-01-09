@@ -1,4 +1,5 @@
 import { useState, useMemo } from 'react'
+import { createPortal } from 'react-dom'
 import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
@@ -31,8 +32,9 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
 
   const isAdmin = user?.roles?.includes('ADMIN')
   const isApproved = job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED'
+  const isCreditCustomer = job.customerId?.isCreditCustomer || false
 
-  const rackOptions = ['R1', 'R2', 'R3', 'R4', 'CB-VC', 'CB-SM', 'CB-SP', 'OUT PARCEL']
+  const rackOptions = ['R1', 'R2', 'R3', 'R4', 'CB-VC', 'CB-SM', 'CB-SP', 'OUT PARCEL', 'BIG PARCEL', 'OFFC RACK']
 
   const handlePack = async (parcelNo: number) => {
     const rack = parcelRacks[parcelNo]
@@ -55,8 +57,8 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   }
 
   const handleDispatch = async (parcelNo: number) => {
-    if (!isApproved && !isAdmin) {
-      alert('Cannot dispatch: Payment or Admin approval required')
+    if (!isApproved && !isAdmin && !isCreditCustomer) {
+      alert('Cannot dispatch: Payment, Admin approval, or Credit Account required')
       return
     }
 
@@ -330,9 +332,14 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                       </div>
                     )}
                   </div>
-                  {!isApproved && isAdmin && (
+                  {!isApproved && isAdmin && !isCreditCustomer && (
                     <div style={{ fontSize: '0.75rem', color: '#991b1b', background: '#fee2e2', padding: '0.375rem 0.75rem', borderRadius: '0.375rem', fontWeight: 600 }}>
                       Admin Override Enabled
+                    </div>
+                  )}
+                  {isCreditCustomer && (
+                    <div style={{ fontSize: '0.75rem', color: '#047857', background: '#d1fae5', padding: '0.375rem 0.75rem', borderRadius: '0.375rem', fontWeight: 600 }}>
+                      Credit Account
                     </div>
                   )}
                 </div>
@@ -374,10 +381,10 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                               </button>
                               {isPacked && (
                                 <button
-                                  disabled={isSubmitting || (!isApproved && !isAdmin)}
+                                  disabled={isSubmitting || (!isApproved && !isAdmin && !isCreditCustomer)}
                                   onClick={() => handleDispatch(p.parcelNo)}
                                   className="btn-primary"
-                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: (isApproved || isAdmin) ? '#10b981' : '#e5e7eb', border: 'none' }}
+                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: (isApproved || isAdmin || isCreditCustomer) ? '#10b981' : '#e5e7eb', border: 'none' }}
                                 >
                                   Dispatch
                                 </button>
@@ -424,30 +431,30 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
 
 
       {/* Lightbox Modal */}
-      {
-        viewImage && (
-          <div
-            className="lightbox-modal"
-            onClick={() => setViewImage(null)}
-          >
-            <div className="lightbox-content">
-              <img
-                src={viewImage}
-                alt="Preview"
-                className="lightbox-img"
-              />
-              <button
-                className="lightbox-close-btn"
-                onClick={() => setViewImage(null)}
-              >
-                <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
+      {viewImage && createPortal(
+        <div
+          className="lightbox-modal"
+          onClick={() => setViewImage(null)}
+          style={{ zIndex: 99999 }}
+        >
+          <div className="lightbox-content">
+            <img
+              src={viewImage}
+              alt="Preview"
+              className="lightbox-img"
+            />
+            <button
+              className="lightbox-close-btn"
+              onClick={() => setViewImage(null)}
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
           </div>
-        )
-      }
+        </div>,
+        document.body
+      )}
     </>
   )
 }
@@ -497,15 +504,17 @@ export default function DispatchDashboard() {
             <button
               onClick={() => setViewMode('active')}
               className={`dashboard-tab ${viewMode === 'active' ? 'active' : ''}`}
+              title="Active Jobs"
             >
-              Active
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
             </button>
             <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
             <button
               onClick={() => setViewMode('history')}
               className={`dashboard-tab ${viewMode === 'history' ? 'active' : ''}`}
+              title="Job History"
             >
-              History
+              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
             </button>
           </div>
         </div>
@@ -533,12 +542,12 @@ export default function DispatchDashboard() {
             <tr>
               <th>Job ID</th>
               <th>Customer</th>
-              <th>Submitted By</th>
-              <th>Packing</th>
+              <th className="mobile-label-submit">Submitted By</th>
+              <th className="mobile-label-pack">Packing</th>
               <th>Rack</th>
               <th>Payment</th>
               {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
-              {viewMode === 'active' && <th>Actions</th>}
+              {viewMode === 'active' && <th className="action-header">Actions</th>}
             </tr>
           </thead>
 
@@ -554,10 +563,21 @@ export default function DispatchDashboard() {
                 return (
                   <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
                     <td>{job.jobId}</td>
-                    <td>{job.customerName}</td>
-                    <td className="hide-mobile" style={{ fontSize: '0.8rem', color: '#4b5563' }}>{job.createdBy?.name || '—'}</td>
-                    <td className="hide-mobile">{job.packingPreference || 'SINGLE'}</td>
                     <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <span style={{ fontWeight: 600, color: job.customerId?.isCreditCustomer ? '#047857' : 'inherit' }}>
+                          {job.customerName}
+                        </span>
+                        {job.customerId?.isCreditCustomer && (
+                          <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#d1fae5', color: '#047857', borderRadius: '4px', fontWeight: 700 }}>
+                            CREDIT
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="submit-cell">{job.createdBy?.name || '—'}</td>
+                    <td className="pack-cell">{job.packingPreference || 'SINGLE'}</td>
+                    <td className="rack-cell">
                       <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
                         {[...new Set(job.parcels?.map((p: any) => p.rack).filter(Boolean) || [])].map((r: any) => (
                           <span key={r} className="status-badge" style={{ background: '#f8fafc', border: '1px solid #e1e4e8', color: '#475569', padding: '0.125rem 0.375rem', fontSize: '0.625rem' }}>{r}</span>
@@ -582,7 +602,7 @@ export default function DispatchDashboard() {
                       </td>
                     )}
                     {viewMode === 'active' && (
-                      <td className="hide-mobile">
+                      <td>
                         <button
                           className="btn-primary"
                           onClick={(e) => {
@@ -601,59 +621,55 @@ export default function DispatchDashboard() {
           </tbody>
         </table>
 
-      </div>
+      </div >
 
       {/* Pagination Controls */}
-      {totalPages > 1 && (
-        <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem', paddingBottom: '1.5rem' }}>
-          <button
-            className="btn-primary"
-            disabled={currentPage === 1}
-            style={{ background: currentPage === 1 ? '#f3f4f6' : '#fff', color: currentPage === 1 ? '#9ca3af' : '#000', border: '1px solid #e5e7eb' }}
-            onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-          >
-            Previous
-          </button>
+      {
+        totalPages > 1 && (
+          <div className="pagination-container">
+            <button
+              className="pagination-btn prev-next"
+              disabled={currentPage === 1}
+              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
+            >
+              Previous
+            </button>
 
-          {totalPages <= 7 ? (
-            [...Array(totalPages)].map((_, i) => (
-              <button
-                key={i}
-                className="btn-primary"
-                style={{
-                  minWidth: '2.5rem',
-                  background: currentPage === i + 1 ? '#000' : '#fff',
-                  color: currentPage === i + 1 ? '#fff' : '#000',
-                  border: '1px solid #e5e7eb'
-                }}
-                onClick={() => setCurrentPage(i + 1)}
-              >
-                {i + 1}
-              </button>
-            ))
-          ) : (
-            <span style={{ display: 'flex', alignItems: 'center', padding: '0 1rem', fontSize: '0.875rem' }}>
-              Page {currentPage} of {totalPages}
-            </span>
-          )}
+            {totalPages <= 7 ? (
+              [...Array(totalPages)].map((_, i) => (
+                <button
+                  key={i}
+                  className={`pagination-btn ${currentPage === i + 1 ? 'active' : ''}`}
+                  onClick={() => setCurrentPage(i + 1)}
+                >
+                  {i + 1}
+                </button>
+              ))
+            ) : (
+              <span style={{ display: 'flex', alignItems: 'center', padding: '0 1rem', fontSize: '0.875rem', color: '#64748b', fontWeight: 600 }}>
+                Page {currentPage} of {totalPages}
+              </span>
+            )}
 
-          <button
-            className="btn-primary"
-            disabled={currentPage === totalPages}
-            style={{ background: currentPage === totalPages ? '#f3f4f6' : '#fff', color: currentPage === totalPages ? '#9ca3af' : '#000', border: '1px solid #e5e7eb' }}
-            onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-          >
-            Next
-          </button>
-        </div>
-      )}
-      {selectedJob && (
-        <DispatchParcels
-          job={selectedJob}
-          onClose={() => setSelectedJobId(null)}
-          onDispatched={() => queryClient.invalidateQueries({ queryKey: ['dispatch-jobs'] })}
-        />
-      )}
-    </div>
+            <button
+              className="pagination-btn prev-next"
+              disabled={currentPage === totalPages}
+              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
+            >
+              Next
+            </button>
+          </div>
+        )
+      }
+      {
+        selectedJob && (
+          <DispatchParcels
+            job={selectedJob}
+            onClose={() => setSelectedJobId(null)}
+            onDispatched={() => queryClient.invalidateQueries({ queryKey: ['dispatch-jobs'] })}
+          />
+        )
+      }
+    </div >
   )
 }

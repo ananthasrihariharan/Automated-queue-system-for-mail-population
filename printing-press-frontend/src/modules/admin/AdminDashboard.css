@@ -198,3 +198,38 @@
 }
 
 /* Styles moved to EmployeeManager.css */
+
+/* Mobile Responsive Fixes */
+@media (max-width: 768px) {
+    .admin-page {
+        padding: 1rem;
+    }
+
+    .admin-navbar {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+        height: auto;
+    }
+
+    .admin-navbar>div {
+        width: 100%;
+        justify-content: space-between;
+    }
+
+    /* FIX: Allow horizontal scroll on table */
+    .dispatch-table-container {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+        width: 100%;
+        margin-top: 1rem;
+        border-radius: 0.5rem;
+        border: 1px solid #e2e8f0;
+    }
+
+    .dispatch-table {
+        min-width: 800px;
+        /* Force scroll if needed */
+        display: table;
+    }
+}

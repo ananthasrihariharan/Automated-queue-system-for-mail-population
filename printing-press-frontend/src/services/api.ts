@@ -16,8 +16,8 @@ export const fetchPrepressJobs = async () => {
   return res.data
 }
 
-export const fetchDispatchJobs = async (status: string = 'active', page: number = 1, limit: number = 50) => {
-  const res = await api.get(`/api/dispatch/jobs?status=${status}&page=${page}&limit=${limit}`)
+export const fetchDispatchJobs = async (status: string = 'active', page: number = 1, limit: number = 50, date: string = '') => {
+  const res = await api.get(`/api/dispatch/jobs?status=${status}&page=${page}&limit=${limit}&date=${date}`)
   return res.data
 }
 
