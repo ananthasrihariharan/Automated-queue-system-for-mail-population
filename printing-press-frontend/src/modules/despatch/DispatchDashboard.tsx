@@ -1,12 +1,15 @@
 import { useState, useMemo } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../services/api'
+import { endpoints } from '../../services/endpoints'
 import { useAuth } from '../../hooks/useAuth'
 import { useNavigate } from 'react-router-dom'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './DispatchDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import DateFilter from '../../components/DateFilter'
 import { fetchDispatchJobs } from '../../services/api'
+import Pagination from '../../components/Pagination'
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
 
@@ -27,6 +30,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   const [selectedItems, setSelectedItems] = useState<number[]>([])
   const [overrideReason, setOverrideReason] = useState('')
   const [reorgMode, setReorgMode] = useState<'SINGLE' | 'MULTIPLE' | 'MIXED'>('SINGLE')
+  const [newParcelType, setNewParcelType] = useState<'COURIER' | 'WALK_IN'>('COURIER')
 
   const { user } = useAuth()
 
@@ -79,7 +83,13 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   }
 
   const startReorganizing = () => {
-    setTempParcels(job.parcels?.length > 0 ? [...job.parcels] : [{ parcelNo: 1, itemIndexes: Array.from({ length: job.totalItems }, (_, i) => i + 1), receiverType: 'SELF', receiverName: job.customerName }])
+    setTempParcels(job.parcels?.length > 0 ? [...job.parcels] : [{
+      parcelNo: 1,
+      itemIndexes: Array.from({ length: job.totalItems }, (_, i) => i + 1),
+      receiverType: 'SELF',
+      receiverName: job.customerName,
+      deliveryType: job.defaultDeliveryType || 'COURIER'
+    }])
     setReorgMode(job.packingMode || job.packingPreference || 'SINGLE')
     setIsReorganizing(true)
   }
@@ -116,6 +126,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
         itemIndexes: [...selectedItems].sort((a, b) => a - b),
         receiverType: 'SELF',
         receiverName: job.customerName,
+        deliveryType: newParcelType,
         status: 'PENDING'
       }
     ])
@@ -264,6 +275,25 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                           )
                         })}
                       </div>
+                      <div style={{ marginBottom: '1rem', display: 'flex', gap: '1rem', alignItems: 'center' }}>
+                        <label style={{ fontSize: '0.75rem', fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Delivery:</label>
+                        <div style={{ display: 'flex', gap: '0.5rem' }}>
+                          <button
+                            className={`btn-outline ${newParcelType === 'COURIER' ? 'active' : ''}`}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: newParcelType === 'COURIER' ? '#000' : '#e5e7eb', background: newParcelType === 'COURIER' ? '#000' : '#fff', color: newParcelType === 'COURIER' ? '#fff' : '#000' }}
+                            onClick={() => setNewParcelType('COURIER')}
+                          >
+                            Courier
+                          </button>
+                          <button
+                            className={`btn-outline ${newParcelType === 'WALK_IN' ? 'active' : ''}`}
+                            style={{ padding: '0.25rem 0.5rem', fontSize: '0.75rem', borderColor: newParcelType === 'WALK_IN' ? '#000' : '#e5e7eb', background: newParcelType === 'WALK_IN' ? '#000' : '#fff', color: newParcelType === 'WALK_IN' ? '#fff' : '#000' }}
+                            onClick={() => setNewParcelType('WALK_IN')}
+                          >
+                            Walk-in
+                          </button>
+                        </div>
+                      </div>
                       <button className="btn-primary" style={{ width: '100%', fontSize: '0.875rem' }} onClick={addTempParcel} disabled={selectedItems.length === 0}>
                         Create Parcel Segment
                       </button>
@@ -277,6 +307,9 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                     <div key={p.parcelNo} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0.75rem', border: '1px solid #e5e7eb', borderRadius: '0.5rem', marginBottom: '0.5rem' }}>
                       <div>
                         <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>Parcel #{p.parcelNo}</span>
+                        <span style={{ fontSize: '0.75rem', marginLeft: '0.5rem', padding: '2px 6px', background: p.deliveryType === 'WALK_IN' ? '#dbeafe' : '#f3f4f6', color: p.deliveryType === 'WALK_IN' ? '#1e40af' : '#374151', borderRadius: '4px', fontWeight: 600 }}>
+                          {p.deliveryType === 'WALK_IN' ? 'Walk-in' : 'Courier'}
+                        </span>
                         <p style={{ fontSize: '0.75rem', color: '#6b7280' }}>Items: {p.itemIndexes.join(', ')}</p>
                       </div>
                       {reorgMode !== 'SINGLE' && (
@@ -299,9 +332,32 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                   <div style={{ display: 'flex', gap: '1.5rem' }}>
                     <div className="info-item">
                       <label>Payment</label>
-                      <span className={`status-badge ${isApproved ? 'status-paid' : 'status-unpaid'}`} style={{ marginTop: '0.25rem' }}>
-                        {job.paymentStatus}
-                      </span>
+                      <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', marginTop: '0.25rem' }}>
+                        <span className={`status-badge ${isApproved ? 'status-paid' : 'status-unpaid'}`}>
+                          {job.paymentStatus}
+                        </span>
+                        {!isApproved && isAdmin && (
+                          <button
+                            className="btn-primary"
+                            style={{ padding: '0.125rem 0.5rem', fontSize: '0.625rem', height: '20px', minWidth: 'auto', background: '#059669' }}
+                            onClick={async () => {
+                              if (!window.confirm("Confirm: Mark this job as PAID manually?")) return;
+                              try {
+                                setIsSubmitting(true);
+                                await api.patch(endpoints.markPaid(job.jobId));
+                                onDispatched(); // Refresh parent
+                              } catch (err: any) {
+                                alert("Failed to mark paid");
+                              } finally {
+                                setIsSubmitting(false);
+                              }
+                            }}
+                            disabled={isSubmitting}
+                          >
+                            Mark Paid
+                          </button>
+                        )}
+                      </div>
                     </div>
                     {job.filesArchived ? (
                       <div className="info-item">
@@ -345,7 +401,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                 </div>
 
                 <div className="parcel-list" style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-                  {(job.parcels?.length > 0 ? job.parcels : [{ parcelNo: 1, status: 'PENDING', itemIndexes: Array.from({ length: job.totalItems || 0 }, (_, i) => i + 1) }]).map((p: any) => {
+                  {(job.parcels?.length > 0 ? job.parcels : [{ parcelNo: 1, status: 'PENDING', itemIndexes: Array.from({ length: job.totalItems || 0 }, (_, i) => i + 1), deliveryType: job.defaultDeliveryType }]).map((p: any) => {
 
                     const isPacked = p.status === 'PACKED'
                     const isOut = p.status === 'DISPATCHED'
@@ -353,7 +409,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
 
                     return (
                       <div key={p.parcelNo} className="parcel-card">
-                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+                        <div className="parcel-card-header">
                           <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
                             <span style={{ fontWeight: 900, textTransform: 'uppercase', fontSize: '0.875rem' }}>P{p.parcelNo}</span>
                             <span className={`status-badge ${isOut ? 'status-dispatched' : isPacked ? 'status-packed' : 'status-pending'}`}>
@@ -363,31 +419,52 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                           </div>
                           {!isOut && (
                             <div className="parcel-actions">
-                              <select
-                                className="rack-select"
-                                value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
-                                onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
-                              >
-                                <option value="">Rack</option>
-                                {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
-                              </select>
-                              <button
-                                disabled={isSubmitting}
-                                onClick={() => handlePack(p.parcelNo)}
-                                className="btn-primary"
-                                style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: isPacked ? '#f1f5f9' : '#000', color: isPacked ? '#000' : '#fff' }}
-                              >
-                                {isPacked ? 'Packed ✅' : 'Pack'}
-                              </button>
-                              {isPacked && (
+                              {p.deliveryType === 'WALK_IN' ? (
                                 <button
                                   disabled={isSubmitting || (!isApproved && !isAdmin && !isCreditCustomer)}
                                   onClick={() => handleDispatch(p.parcelNo)}
                                   className="btn-primary"
-                                  style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: (isApproved || isAdmin || isCreditCustomer) ? '#10b981' : '#e5e7eb', border: 'none' }}
+                                  style={{
+                                    padding: '0 0.75rem',
+                                    fontSize: '0.75rem',
+                                    height: '32px',
+                                    minWidth: 'auto',
+                                    background: (isApproved || isAdmin || isCreditCustomer) ? '#2563eb' : '#e5e7eb',
+                                    border: 'none',
+                                    width: '100%'
+                                  }}
                                 >
-                                  Dispatch
+                                  Hand Over (Walk-in)
                                 </button>
+                              ) : (
+                                <>
+                                  <select
+                                    className="rack-select"
+                                    value={rackOptions.includes(parcelRacks[p.parcelNo]) ? parcelRacks[p.parcelNo] : ''}
+                                    onChange={e => setParcelRacks(prev => ({ ...prev, [p.parcelNo]: e.target.value }))}
+                                  >
+                                    <option value="">Rack</option>
+                                    {rackOptions.map(opt => <option key={opt} value={opt}>{opt}</option>)}
+                                  </select>
+                                  <button
+                                    disabled={isSubmitting}
+                                    onClick={() => handlePack(p.parcelNo)}
+                                    className="btn-primary"
+                                    style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: isPacked ? '#f1f5f9' : '#000', color: isPacked ? '#000' : '#fff' }}
+                                  >
+                                    {isPacked ? 'Packed ✅' : 'Pack'}
+                                  </button>
+                                  {isPacked && (
+                                    <button
+                                      disabled={isSubmitting || (!isApproved && !isAdmin && !isCreditCustomer)}
+                                      onClick={() => handleDispatch(p.parcelNo)}
+                                      className="btn-primary"
+                                      style={{ padding: '0 0.75rem', fontSize: '0.75rem', height: '32px', minWidth: 'auto', background: (isApproved || isAdmin || isCreditCustomer) ? '#10b981' : '#e5e7eb', border: 'none' }}
+                                    >
+                                      Dispatch
+                                    </button>
+                                  )}
+                                </>
                               )}
                             </div>
                           )}
@@ -463,13 +540,14 @@ export default function DispatchDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
+  const [dateFilter, setDateFilter] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
 
   const queryClient = useQueryClient()
   const { data: responseData, isLoading: loading } = useQuery({
-    queryKey: ['dispatch-jobs', viewMode, currentPage],
-    queryFn: () => fetchDispatchJobs(viewMode, currentPage, itemsPerPage),
+    queryKey: ['dispatch-jobs', viewMode, currentPage, dateFilter],
+    queryFn: () => fetchDispatchJobs(viewMode, currentPage, itemsPerPage, dateFilter),
     refetchInterval: 5000,
   })
 
@@ -477,7 +555,7 @@ export default function DispatchDashboard() {
   const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
   const totalPages = responseData?.pages || 1
 
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const navigate = useNavigate()
 
   const filteredJobs = useMemo(() => {
@@ -519,6 +597,7 @@ export default function DispatchDashboard() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <DateFilter value={dateFilter} onChange={setDateFilter} />
           <input
             className="form-input"
             style={{ width: '200px' }}
@@ -527,6 +606,11 @@ export default function DispatchDashboard() {
             onChange={e => setSearchQuery(e.target.value)}
           />
           <ModuleNavigation />
+          {user?.name && (
+            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+              Welcome, {user.name}
+            </span>
+          )}
           <button
             onClick={() => { logout(); navigate('/login'); }}
             className="logout-btn"
@@ -624,43 +708,11 @@ export default function DispatchDashboard() {
       </div >
 
       {/* Pagination Controls */}
-      {
-        totalPages > 1 && (
-          <div className="pagination-container">
-            <button
-              className="pagination-btn prev-next"
-              disabled={currentPage === 1}
-              onClick={() => setCurrentPage(prev => Math.max(1, prev - 1))}
-            >
-              Previous
-            </button>
-
-            {totalPages <= 7 ? (
-              [...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i}
-                  className={`pagination-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(i + 1)}
-                >
-                  {i + 1}
-                </button>
-              ))
-            ) : (
-              <span style={{ display: 'flex', alignItems: 'center', padding: '0 1rem', fontSize: '0.875rem', color: '#64748b', fontWeight: 600 }}>
-                Page {currentPage} of {totalPages}
-              </span>
-            )}
-
-            <button
-              className="pagination-btn prev-next"
-              disabled={currentPage === totalPages}
-              onClick={() => setCurrentPage(prev => Math.min(totalPages, prev + 1))}
-            >
-              Next
-            </button>
-          </div>
-        )
-      }
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
       {
         selectedJob && (
           <DispatchParcels

@@ -18,15 +18,17 @@ type Job = {
   createdBy?: { name: string }
   paymentHandledBy?: { name: string }
   dispatchedBy?: { name: string }
+  defaultDeliveryType?: string
 }
 
 import DateFilter from '../../components/DateFilter'
 
 // ... imports
+import Pagination from '../../components/Pagination'
 
 export default function AdminDashboard() {
   const navigate = useNavigate()
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const [activeTab, setActiveTab] = useState<'jobs' | 'employees' | 'customers'>('jobs')
 
   // Filtering & Pagination State
@@ -34,13 +36,13 @@ export default function AdminDashboard() {
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'PENDING' | 'CREATED' | 'PACKED' | 'DISPATCHED'>('ALL')
   const [hideDispatched, setHideDispatched] = useState(false)
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
+  const [dateFilter, setDateFilter] = useState('') // Default: Show All (Fresh Daily from Backend)
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
   const { data: jobs = [], isLoading: loading } = useQuery<Job[]>({
-    queryKey: ['admin-jobs'],
-    queryFn: fetchAdminJobs,
+    queryKey: ['admin-jobs', dateFilter],
+    queryFn: () => fetchAdminJobs(dateFilter),
     refetchInterval: 5000,
     enabled: activeTab === 'jobs',
   })
@@ -68,8 +70,8 @@ export default function AdminDashboard() {
   }
 
   // Derived Data: Filtering & Sorting
-  const filteredJobs = jobs
-    .filter(job => {
+  const filteredJobs = (jobs || [])
+    .filter((job: Job) => {
       const matchesSearch =
         job.jobId.toLowerCase().includes(search.toLowerCase()) ||
         job.customerName.toLowerCase().includes(search.toLowerCase())
@@ -77,17 +79,13 @@ export default function AdminDashboard() {
       const matchesStatus = statusFilter === 'ALL' || job.jobStatus === statusFilter
       const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
 
-      // Date Filter (Client-side)
-      // Assuming jobs have 'createdAt' from the backend. 
-      // If the backend returns 'createdAt', we use it. If not present (e.g. legacy), we might skip or show.
-      // Admin dashboard Job type doesn't strictly define createdAt in lines above, but it likely exists.
-      // I'll cast to any for safety in this snippet context if needed, but usually it exists on the object.
-      const jobDate = (job as any).createdAt ? new Date((job as any).createdAt).toISOString().split('T')[0] : ''
-      const matchesDate = !dateFilter || jobDate === dateFilter
+      // Client-side date filtering is REMOVED because backend handles it now.
+      // If dateFilter is present, backend returns only matching range.
+      // If dateFilter is empty, backend returns Fresh Daily backlog.
 
-      return matchesSearch && matchesPayment && matchesStatus && isNotDispatched && matchesDate
+      return matchesSearch && matchesPayment && matchesStatus && isNotDispatched
     })
-    .sort((a, b) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
+    .sort((a: Job, b: Job) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage)
@@ -132,6 +130,11 @@ export default function AdminDashboard() {
 
         <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
           <ModuleNavigation />
+          {user?.name && (
+            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+              Welcome, {user.name}
+            </span>
+          )}
           <button
             onClick={() => { logout(); navigate('/login'); }}
             className="logout-btn"
@@ -229,6 +232,11 @@ export default function AdminDashboard() {
                         <tr key={job.jobId} className="dispatch-row">
                           <td>
                             <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
+                            {job.defaultDeliveryType === 'WALK_IN' && (
+                              <span style={{ display: 'block', fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontWeight: 700, width: 'fit-content', marginTop: '0.25rem' }}>
+                                WALK-IN
+                              </span>
+                            )}
                           </td>
                           <td>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
@@ -297,34 +305,11 @@ export default function AdminDashboard() {
               </div>
 
               {/* Pagination Controls */}
-              {totalPages > 1 && (
-                <div className="pagination-container" style={{ display: 'flex', justifyContent: 'center', gap: '0.5rem', marginTop: '1.5rem' }}>
-                  <button
-                    className="btn-secondary"
-                    disabled={currentPage === 1}
-                    onClick={() => setCurrentPage(prev => prev - 1)}
-                  >
-                    Previous
-                  </button>
-                  {[...Array(totalPages)].map((_, i) => (
-                    <button
-                      key={i}
-                      className={`btn-secondary ${currentPage === i + 1 ? 'active' : ''}`}
-                      style={{ minWidth: '2.5rem', background: currentPage === i + 1 ? '#000' : '', color: currentPage === i + 1 ? '#fff' : '' }}
-                      onClick={() => setCurrentPage(i + 1)}
-                    >
-                      {i + 1}
-                    </button>
-                  ))}
-                  <button
-                    className="btn-secondary"
-                    disabled={currentPage === totalPages}
-                    onClick={() => setCurrentPage(prev => prev + 1)}
-                  >
-                    Next
-                  </button>
-                </div>
-              )}
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </>
           )}
         </>

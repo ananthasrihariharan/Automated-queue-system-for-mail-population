@@ -21,6 +21,7 @@ export default function CreateJob() {
     const [files, setFiles] = useState<File[]>([])
     const [existingScreenshots, setExistingScreenshots] = useState<string[]>([])
     const [isDragging, setIsDragging] = useState(false)
+    const [isWalkIn, setIsWalkIn] = useState(false)
 
     const [viewImage, setViewImage] = useState<string | null>(null)
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
@@ -83,6 +84,7 @@ export default function CreateJob() {
                 data.append('jobId', formData.jobId)
                 data.append('customerName', customerName)
                 data.append('customerPhone', customerPhone)
+                data.append('defaultDeliveryType', isWalkIn ? 'WALK_IN' : 'COURIER')
                 await api.post('/api/prepress/jobs', data, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 })
@@ -209,6 +211,20 @@ export default function CreateJob() {
                                         value={formData.totalItems || ''}
                                         onChange={(e) => setFormData({ ...formData, totalItems: parseInt(e.target.value) || 0 })}
                                     />
+                                </div>
+
+                                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
+                                    <input
+                                        type="checkbox"
+                                        id="walkInCheck"
+                                        checked={isWalkIn}
+                                        onChange={(e) => setIsWalkIn(e.target.checked)}
+                                        disabled={isEdit}
+                                        style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
+                                    />
+                                    <label htmlFor="walkInCheck" style={{ cursor: 'pointer', fontWeight: 700, color: '#374151', fontSize: '0.875rem' }}>
+                                        Walk-in 
+                                    </label>
                                 </div>
                             </div>
 

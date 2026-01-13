@@ -145,6 +145,13 @@
     transition: border-color 0.2s;
 }
 
+.parcel-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
 .parcel-card:hover {
     border-color: #cbd5e1;
 }
@@ -461,5 +468,35 @@
         flex-direction: column;
         align-items: stretch;
         gap: 0.75rem;
+    }
+
+    /* Parcel Card Mobile Layout */
+    .dispatch-page .parcel-card-header {
+        flex-direction: column;
+        align-items: stretch;
+        gap: 1rem;
+    }
+
+    .dispatch-page .parcel-actions {
+        width: 100%;
+        display: grid;
+        grid-template-columns: 1fr auto auto;
+        /* Select takes space, buttons auto */
+        gap: 0.5rem;
+    }
+
+    /* If rack select is too small, stack it */
+    @media (max-width: 480px) {
+        .dispatch-page .parcel-actions {
+            grid-template-columns: 1fr 1fr;
+            grid-template-areas:
+                "select select"
+                "btn1 btn2";
+        }
+
+        .dispatch-page .rack-select {
+            grid-area: select;
+            width: 100%;
+        }
     }
 }

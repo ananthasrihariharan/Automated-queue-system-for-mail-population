@@ -16,6 +16,7 @@ type Job = {
 }
 
 import DateFilter from '../../components/DateFilter'
+import Pagination from '../../components/Pagination'
 
 // ... existing imports
 
@@ -27,7 +28,7 @@ export default function CashierDashboard() {
     refetchInterval: 5000,
   })
 
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const navigate = useNavigate()
 
   // Filtering & Pagination State
@@ -91,11 +92,16 @@ export default function CashierDashboard() {
             <h1 className="cashier-title">Cashier</h1>
           </div>
 
-          <div className="flex items-center">
+          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
             <ModuleNavigation />
+            {user?.name && (
+              <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+                Welcome, {user.name}
+              </span>
+            )}
             <button
               onClick={() => { logout(); navigate('/login'); }}
-              className="logout-btn ml-2"
+              className="logout-btn"
             >
               Logout
             </button>
@@ -212,33 +218,11 @@ export default function CashierDashboard() {
           </div>
 
           {/* Pagination Controls */}
-          {totalPages > 1 && (
-            <div className="pagination-container">
-              <button
-                className="pagination-btn prev-next"
-                disabled={currentPage === 1}
-                onClick={() => setCurrentPage((prev: number) => prev - 1)}
-              >
-                Previous
-              </button>
-              {[...Array(totalPages)].map((_, i) => (
-                <button
-                  key={i}
-                  className={`pagination-btn ${currentPage === i + 1 ? 'active' : ''}`}
-                  onClick={() => setCurrentPage(i + 1)}
-                >
-                  {i + 1}
-                </button>
-              ))}
-              <button
-                className="pagination-btn prev-next"
-                disabled={currentPage === totalPages}
-                onClick={() => setCurrentPage((prev: number) => prev + 1)}
-              >
-                Next
-              </button>
-            </div>
-          )}
+          <Pagination
+            currentPage={currentPage}
+            totalPages={totalPages}
+            onPageChange={setCurrentPage}
+          />
         </main>
       </div>
     </div>

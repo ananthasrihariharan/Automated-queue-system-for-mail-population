@@ -51,6 +51,12 @@ const JobSchema = new mongoose.Schema(
       overriddenAt: Date
     },
 
+    defaultDeliveryType: {
+      type: String,
+      enum: ['COURIER', 'WALK_IN'],
+      default: 'COURIER'
+    },
+
     paymentStatus: {
       type: String,
       enum: ['UNPAID', 'PAID', 'ADMIN_APPROVED'],
@@ -97,6 +103,11 @@ const JobSchema = new mongoose.Schema(
         receiverType: {
           type: String,
           enum: ['SELF', 'OTHER']
+        },
+        deliveryType: {
+          type: String,
+          enum: ['COURIER', 'WALK_IN'],
+          default: 'COURIER'
         },
         receiverName: String,
         receiverPhone: String,

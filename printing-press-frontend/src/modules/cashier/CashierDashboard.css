@@ -116,15 +116,7 @@
     gap: 0.75rem;
 }
 
-.cashier-logo-icon {
-    background: #000000;
-    color: #ffffff;
-    padding: 0.5rem;
-    border-radius: 0.5rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
+
 
 .cashier-title {
     font-size: 1.25rem;

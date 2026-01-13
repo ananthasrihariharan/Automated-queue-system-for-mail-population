@@ -43,12 +43,33 @@ router.get(
   authorize('ADMIN'),
   async (req, res) => {
     try {
-      const last30Days = new Date(
-        Date.now() - 30 * 24 * 60 * 60 * 1000
-      )
+      const { date } = req.query
+
+      let filter = {}
+
+      if (date) {
+        // Historical View: Strict Date Filter
+        const queryDate = new Date(date)
+        const nextDay = new Date(queryDate)
+        nextDay.setDate(nextDay.getDate() + 1)
+
+        filter.createdAt = {
+          $gte: queryDate,
+          $lt: nextDay
+        }
+      } else {
+        // Fresh Daily Logic (Default)
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+
+        filter.$or = [
+          { jobStatus: { $ne: 'DISPATCHED' } }, // Backlog
+          { jobStatus: 'DISPATCHED', dispatchedAt: { $gte: startOfToday } } // Today's Done
+        ]
+      }
 
       const jobs = await Job.find(
-        { createdAt: { $gte: last30Days } },
+        filter,
         {
           jobId: 1,
           customerName: 1,
@@ -57,7 +78,8 @@ router.get(
           jobStatus: 1,
           createdAt: 1,
           adminApprovalNote: 1,
-          customerId: 1
+          customerId: 1,
+          defaultDeliveryType: 1
         }
       ).sort({ createdAt: -1 })
         .populate('createdBy', 'name')

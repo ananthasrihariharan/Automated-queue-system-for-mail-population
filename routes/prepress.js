@@ -82,7 +82,7 @@ router.post(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      let { jobId, customerName, customerPhone, totalItems } = req.body
+      let { jobId, customerName, customerPhone, totalItems, defaultDeliveryType = 'COURIER' } = req.body
 
       // ✅ Auto-Append Date Suffix (DDMMYY)
       const date = new Date()
@@ -150,7 +150,8 @@ router.post(
         itemScreenshots: imagePaths,
         packingPreference: req.body.packingPreference,
         paymentStatus: 'UNPAID',
-        createdBy: req.user._id
+        createdBy: req.user._id,
+        defaultDeliveryType
       })
 
       res.status(201).json(job)

@@ -26,8 +26,8 @@ export const fetchCashierJobs = async () => {
   return res.data
 }
 
-export const fetchAdminJobs = async () => {
-  const res = await api.get('/api/admin/jobs')
+export const fetchAdminJobs = async (date: string = '') => {
+  const res = await api.get(`/api/admin/jobs?date=${date}`)
   return res.data
 }
 

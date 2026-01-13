@@ -38,7 +38,7 @@ export default function ModuleNavigation() {
                     <button
                         key={m.role}
                         onClick={() => navigate(m.path)}
-                        className="px-3 py-1 text-xs font-bold bg-white border border-slate-200 rounded-lg hover:bg-slate-50 hover:border-slate-300 transition-colors uppercase tracking-wide text-slate-600"
+                        className="px-4 py-1.5 text-xs font-extrabold bg-white border border-gray-200 rounded-lg hover:bg-gray-50 hover:border-gray-300 hover:text-gray-900 hover:shadow-sm transition-all uppercase tracking-wider text-gray-500 active:scale-95"
                     >
                         {m.label}
                     </button>

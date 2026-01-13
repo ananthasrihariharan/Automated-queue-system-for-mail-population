@@ -33,11 +33,12 @@ export default function PrepressDashboard() {
   })
 
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
+  const [viewImage, setViewImage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
 
-  const { logout } = useAuth()
+  const { logout, user } = useAuth()
   const navigate = useNavigate()
 
   const filteredJobs = jobs.filter(job => {
@@ -71,6 +72,11 @@ export default function PrepressDashboard() {
 
         <div className="header-right">
           <ModuleNavigation />
+          {user?.name && (
+            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
+              Welcome, {user.name}
+            </span>
+          )}
           <button
             onClick={() => { logout(); navigate('/login'); }}
             className="logout-btn"
@@ -159,6 +165,8 @@ export default function PrepressDashboard() {
                       <img
                         src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
                         alt={`Item ${idx + 1}`}
+                        onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
+                        style={{ cursor: 'pointer' }}
                       />
                     </div>
                   ))}
@@ -223,6 +231,52 @@ export default function PrepressDashboard() {
           </tbody>
         </table>
       </div>
+
+      {/* Lightbox Modal */}
+      {viewImage && (
+        <div
+          className="lightbox-modal"
+          onClick={() => setViewImage(null)}
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            backgroundColor: 'rgba(0, 0, 0, 0.9)',
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            zIndex: 9999
+          }}
+        >
+          <div className="lightbox-content" style={{ position: 'relative', maxWidth: '90vw', maxHeight: '90vh' }}>
+            <img
+              src={viewImage}
+              alt="Preview"
+              className="lightbox-img"
+              style={{ maxWidth: '100%', maxHeight: '90vh', objectFit: 'contain', borderRadius: '4px' }}
+            />
+            <button
+              className="lightbox-close-btn"
+              onClick={() => setViewImage(null)}
+              style={{
+                position: 'absolute',
+                top: '-40px',
+                right: '-10px',
+                background: 'none',
+                border: 'none',
+                color: 'white',
+                cursor: 'pointer'
+              }}
+            >
+              <svg fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ width: '32px', height: '32px' }}>
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

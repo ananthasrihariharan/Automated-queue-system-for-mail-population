@@ -90,7 +90,9 @@ router.get(
           packingPreference: 1,
           dispatchedAt: 1,
           rackLocation: 1,
-          itemScreenshots: 1
+          itemScreenshots: 1,
+          defaultDeliveryType: 1,
+          packingMode: 1
         }
       ).sort({ createdAt: -1 })
 

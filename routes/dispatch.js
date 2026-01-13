@@ -29,29 +29,49 @@ router.get(
 
             // Filter by job status if specified
             if (status === 'active') {
+                // Strict Active: Only non-dispatched jobs
                 filter.jobStatus = { $ne: 'DISPATCHED' }
             } else if (status === 'history') {
                 filter.jobStatus = 'DISPATCHED'
             }
 
-            // Date Filtering
+            // Date Filtering (Overrides Fresh Daily default)
             if (date) {
                 const queryDate = new Date(date)
                 const nextDay = new Date(queryDate)
                 nextDay.setDate(nextDay.getDate() + 1)
 
+                // If date is present, we strictly filter by that date.
+                // For 'active' tab + date, usually means "Find jobs created on this date"
+                // For 'history' tab + date, usually means "Find jobs dispatched on this date"
+
                 if (status === 'history') {
-                    // For history, filter by dispatchedAt
                     filter.dispatchedAt = {
                         $gte: queryDate,
                         $lt: nextDay
                     }
                 } else {
-                    // For active, filter by createdAt
+                    // Reset the $or logic from Fresh Daily if it exists
+                    // We want strict creation date
+                    delete filter.$or
+                    delete filter.jobStatus // Remove default status check if we want pure history?
+                    // actually, Active tab + Date probably means "Show me what was created that day"
+
+                    // But if we want to mimic Admin's strict override:
                     filter.createdAt = {
                         $gte: queryDate,
                         $lt: nextDay
                     }
+
+                    // Do we keep the status check?
+                    // If I select a date in Active tab, do I want to see Dispatched jobs?
+                    // Probably not, they would be in History tab.
+                    // So we probably keep basic status checks but remove the specialized $or.
+
+                    if (filter.$or) delete filter.$or; // Remove Fresh Daily complex logic
+                    filter.jobStatus = { $ne: 'DISPATCHED' } // Restore basic active check? 
+                    // Wait, if I want to see "Active jobs from 3 days ago", this is correct.
+                    // But if I want to see "What I did 3 days ago", I'd go to History.
                 }
             }
 
@@ -75,6 +95,7 @@ router.get(
                     packingMode: 1,
                     packingOverride: 1,
                     createdAt: 1,
+                    defaultDeliveryType: 1,
                     customerId: 1 // Include customerId for population
                 }
             ).sort({ createdAt: -1 })
@@ -270,7 +291,7 @@ router.post(
 )
 
 /**
- * DISPATCH INDIVIDUAL PARCEL
+ * DISPATCH INDIVIDUAL PARCEL (OR HAND OVER)
  */
 router.patch(
     '/jobs/:jobId/parcels/:parcelNo/dispatch',
@@ -298,13 +319,19 @@ router.patch(
 
             if (!parcel) {
                 // Support automatic creation for SINGLE if missing
+                // Check if job preference or defaultDeliveryType implies WALK_IN
                 if (job.packingPreference === 'SINGLE' && Number(parcelNo) === 1) {
                     if (job.parcels.length === 0) {
+                        const isWalkIn = job.defaultDeliveryType === 'WALK_IN'
                         job.parcels.push({
                             parcelNo: 1,
                             itemIndexes: Array.from({ length: job.totalItems }, (_, i) => i + 1),
                             receiverType: 'SELF',
-                            receiverName: job.customerName
+                            receiverName: job.customerName,
+                            deliveryType: isWalkIn ? 'WALK_IN' : 'COURIER',
+                            status: 'DISPATCHED', // Set immediately to DISPATCHED
+                            dispatchedAt: new Date(),
+                            dispatchedBy: req.user && req.user.roles && req.user.roles.includes('ADMIN') ? 'ADMIN' : 'DISPATCH'
                         })
                     }
                 } else {
@@ -312,19 +339,24 @@ router.patch(
                 }
             }
 
+            // Re-fetch parcel after potential creation
             const activeParcel = job.parcels.find(p => p.parcelNo === Number(parcelNo))
-            activeParcel.status = 'DISPATCHED'
-            activeParcel.dispatchedAt = new Date()
+
+            // Should already be dispatched if we just created it, but ensure it valid for existing ones
+            if (activeParcel.status !== 'DISPATCHED') {
+                activeParcel.status = 'DISPATCHED'
+                activeParcel.dispatchedAt = new Date()
+                activeParcel.dispatchedBy = req.user && req.user.roles && req.user.roles.includes('ADMIN')
+                    ? 'ADMIN'
+                    : 'DISPATCH'
+            }
 
             // Sync top-level fields for visibility
             if (activeParcel.parcelNo === 1 || job.parcels.length === 1) {
                 job.dispatchedAt = activeParcel.dispatchedAt
             }
 
-            // req.user comes from auth middleware, check roles
-            activeParcel.dispatchedBy = req.user && req.user.roles && req.user.roles.includes('ADMIN')
-                ? 'ADMIN'
-                : 'DISPATCH'
+            job.markModified('parcels')
 
             // Check if all parcels are dispatched
             const allDispatched = job.parcels.every(p => p.status === 'DISPATCHED')
@@ -335,7 +367,7 @@ router.patch(
             }
 
             await job.save()
-            res.json({ message: 'Parcel dispatched', parcelNo, jobStatus: job.jobStatus })
+            res.json({ message: 'Parcel dispatched (Handover/Courier)', parcelNo, jobStatus: job.jobStatus })
         } catch (err) {
             res.status(500).json({ message: 'Server error' })
         }
