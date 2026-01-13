@@ -101,6 +101,11 @@ router.post(
         return res.status(400).json({ message: 'Missing fields' })
       }
 
+      // 🛡️ SANITIZATION CHECK
+      if (!/^[a-zA-Z0-9-]+$/.test(jobId)) {
+        return res.status(400).json({ message: 'Invalid Job ID format. Use only letters, numbers, and hyphens.' })
+      }
+
       if (files.length !== Number(totalItems)) {
         return res.status(400).json({
           message: `Upload exactly ${totalItems} screenshots`

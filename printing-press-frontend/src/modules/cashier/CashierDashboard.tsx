@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { api } from '../../services/api'
 import { endpoints } from '../../services/endpoints'
-import { useAuth } from '../../hooks/useAuth'
-import { useNavigate } from 'react-router-dom'
+import UserMenu from '../../components/UserMenu'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './CashierDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -28,8 +27,8 @@ export default function CashierDashboard() {
     refetchInterval: 5000,
   })
 
-  const { logout, user } = useAuth()
-  const navigate = useNavigate()
+  // const { logout, user } = useAuth()
+  // const navigate = useNavigate()
 
   // Filtering & Pagination State
   const [search, setSearch] = useState('')
@@ -88,23 +87,13 @@ export default function CashierDashboard() {
     <div className="cashier-page">
       <div className="cashier-container">
         <nav className="cashier-navbar">
-          <div className="cashier-logo">
+          <div className="cashier-navbar-left">
             <h1 className="cashier-title">Cashier</h1>
           </div>
 
-          <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+          <div className="cashier-navbar-right">
             <ModuleNavigation />
-            {user?.name && (
-              <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-                Welcome, {user.name}
-              </span>
-            )}
-            <button
-              onClick={() => { logout(); navigate('/login'); }}
-              className="logout-btn"
-            >
-              Logout
-            </button>
+            <UserMenu />
           </div>
         </nav>
 
@@ -143,7 +132,9 @@ export default function CashierDashboard() {
                   type="checkbox"
                   checked={hideDispatched}
                   onChange={(e) => { setHideDispatched(e.target.checked); setCurrentPage(1); }}
+                  style={{ display: 'none' }}
                 />
+                <div className="toggle-switch"></div>
                 <span className="toggle-text">Active Only</span>
               </label>
             </div>

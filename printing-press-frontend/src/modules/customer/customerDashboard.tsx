@@ -1,6 +1,6 @@
 import { useState, useMemo } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import UserMenu from '../../components/UserMenu'
 import './CustomerDashboard.css'
 import { useQuery } from '@tanstack/react-query'
 import { fetchCustomerJobs } from '../../services/api'
@@ -27,7 +27,7 @@ export default function CustomerDashboard() {
     const [activeDateFilter, setActiveDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
 
     const navigate = useNavigate()
-    const { logout } = useAuth()
+    // const { logout } = useAuth()
 
     const { data: allJobs = [], isLoading: loading } = useQuery<any[]>({
         queryKey: ['customer-jobs', viewMode],
@@ -71,13 +71,8 @@ export default function CustomerDashboard() {
                     </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                    <DateFilter value={activeDateFilter} onChange={setActiveDateFilter} label="Order Date" />
-                    <button
-                        onClick={() => { logout(); navigate('/login'); }}
-                        className="logout-btn"
-                    >
-                        Logout
-                    </button>
+                    <DateFilter value={activeDateFilter} onChange={setActiveDateFilter} />
+                    <UserMenu />
                 </div>
             </nav>
 

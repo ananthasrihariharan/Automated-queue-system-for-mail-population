@@ -1,9 +1,8 @@
 import { useState } from 'react'
 import { api } from '../../services/api'
+import UserMenu from '../../components/UserMenu'
 import EmployeeManager from './EmployeeManager'
 import CustomerManager from './CustomerManager'
-import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './AdminDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -27,8 +26,7 @@ import DateFilter from '../../components/DateFilter'
 import Pagination from '../../components/Pagination'
 
 export default function AdminDashboard() {
-  const navigate = useNavigate()
-  const { logout, user } = useAuth()
+
   const [activeTab, setActiveTab] = useState<'jobs' | 'employees' | 'customers'>('jobs')
 
   // Filtering & Pagination State
@@ -97,50 +95,41 @@ export default function AdminDashboard() {
   return (
     <div className="admin-page">
       <div className="admin-navbar">
-        {/* ... navbar content ... */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <h1 style={{ fontWeight: 900, fontSize: '1.5rem', textTransform: 'uppercase', letterSpacing: '-0.05em' }}>Admin</h1>
-          <div className="dashboard-tabs" style={{ marginBottom: 0 }}>
-            {/* ... tabs ... */}
+        <div className="admin-navbar-left">
+          <h1 className="admin-title">Admin</h1>
+          <div className="dashboard-tabs">
             <button
               onClick={() => setActiveTab('jobs')}
               className={`dashboard-tab ${activeTab === 'jobs' ? 'active' : ''}`}
               title="Jobs"
             >
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 13.255A23.931 23.931 0 0112 15c-3.183 0-6.22-.62-9-1.745M16 6V4a2 2 0 00-2-2h-4a2 2 0 00-2 2v2m4 6h.01M5 20h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+              <span className="tab-label">Jobs</span>
             </button>
-            <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
+
             <button
               onClick={() => setActiveTab('employees')}
               className={`dashboard-tab ${activeTab === 'employees' ? 'active' : ''}`}
               title="Employees"
             >
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"></path></svg>
+              <span className="tab-label">Team</span>
             </button>
-            <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
+
             <button
               onClick={() => setActiveTab('customers')}
               className={`dashboard-tab ${activeTab === 'customers' ? 'active' : ''}`}
               title="Customers"
             >
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
+              <span className="tab-label">Customers</span>
             </button>
           </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
+        <div className="admin-navbar-right">
           <ModuleNavigation />
-          {user?.name && (
-            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-              Welcome, {user.name}
-            </span>
-          )}
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            className="logout-btn"
-          >
-            Logout
-          </button>
+          <UserMenu />
         </div>
       </div>
 

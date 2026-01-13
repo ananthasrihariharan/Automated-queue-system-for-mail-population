@@ -6,41 +6,121 @@
 }
 
 /* ===== Header ===== */
-.prepress-header {
+.prepress-navbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1.5rem;
+  /* Standardized from 2rem */
   padding-bottom: 1rem;
   border-bottom: 1px solid #e2e8f0;
+  gap: 1rem;
+  flex-wrap: wrap;
 }
 
-.header-left {
-  display: flex;
-  align-items: center;
-  gap: 1.5rem;
-}
-
-.header-right {
+.prepress-navbar-left {
   display: flex;
   align-items: center;
   gap: 1rem;
+  flex-wrap: wrap;
 }
 
-/* Premium Filter Bar */
-.prepress-filters-bar {
-  background: white;
-  padding: 1rem 1.25rem;
-  border-radius: 0.75rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 1.5rem;
-  border: 1px solid #e2e8f0;
+.prepress-title {
+  font-weight: 900;
+  font-size: 1.25rem;
+  text-transform: uppercase;
+  letter-spacing: -0.05em;
+  margin: 0;
+  white-space: nowrap;
+}
+
+.prepress-navbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-shrink: 0;
+  margin-left: auto;
+  /* Pin to far right like LeetCode */
 }
 
 .filter-group {
   display: flex;
   align-items: center;
-  gap: 1.5rem;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .prepress-navbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .prepress-navbar-left {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .prepress-navbar-right {
+    width: 100%;
+    justify-content: flex-end;
+  }
+
+  .filter-group {
+    gap: 0.75rem;
+  }
+
+  .search-wrapper {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .dropdown-wrapper {
+    flex: 1;
+    min-width: 120px;
+  }
+}
+
+@media (max-width: 480px) {
+  .filter-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .dropdown-wrapper {
+    width: 100%;
+  }
+}
+
+
+.filter-input,
+.filter-select {
+  height: 40px;
+  padding: 0 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #e2e8f0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #1e293b;
+  background: #ffffff;
+  transition: all 0.2s;
+  appearance: none;
+}
+
+.filter-input.search {
+  padding-left: 2.5rem;
+}
+
+.filter-input:hover,
+.filter-select:hover {
+  border-color: #cbd5e1;
+}
+
+.filter-input:focus,
+.filter-select:focus {
+  outline: none;
+  border-color: #000;
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
 }
 
 .search-wrapper {
@@ -57,33 +137,49 @@
   width: 1.125rem;
   height: 1.125rem;
   color: #94a3b8;
+  z-index: 10;
 }
 
-.filter-input,
-.filter-select {
-  width: 100%;
-  padding: 0.625rem 1rem;
-  padding-left: 2.75rem;
-  border-radius: 0.5rem;
+/* Date Filter for Prepress */
+.date-filter-group {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: white;
   border: 1px solid #e2e8f0;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: #1e293b;
-  background: #f8fafc;
+  border-radius: 0.75rem;
+  padding: 0 1rem;
+  height: 40px;
   transition: all 0.2s;
 }
 
-.filter-select {
-  padding-left: 1rem;
-  min-width: 180px;
+.date-filter-icon {
+  width: 1rem;
+  height: 1rem;
+  color: #94a3b8;
 }
 
-.filter-input:focus,
-.filter-select:focus {
+.date-filter-input {
+  border: none;
   outline: none;
-  border-color: #000;
-  background: white;
-  box-shadow: 0 0 0 4px rgba(0, 0, 0, 0.05);
+  background: transparent;
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #1e293b;
+  cursor: pointer;
+  padding: 0;
+}
+
+.date-filter-reset {
+  font-size: 0.625rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  color: #2563eb;
+  background: #eff6ff;
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.375rem;
+  border: none;
+  cursor: pointer;
 }
 
 .table-container {

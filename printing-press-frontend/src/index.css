@@ -565,3 +565,5 @@ textarea {
   letter-spacing: 0.025em;
   padding: 0 1rem;
 }
+
+/* Filter styles moved to module-specific CSS to ensure isolation */

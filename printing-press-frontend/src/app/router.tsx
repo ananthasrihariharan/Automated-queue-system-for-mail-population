@@ -9,8 +9,13 @@ import CreateJob from '../modules/prepress/CreateJob'
 import AdminDashboard from '../modules/admin/AdminDashboard'
 import Unauthorized from '../pages/unauthorized'
 import CustomerPacking from '../modules/customer/CustomerPacking'
+import ProfilePage from '../pages/Profile'
 
 export const router = createBrowserRouter([
+    {
+        path: '/profile',
+        element: <ProfilePage />
+    },
     {
         path: '/',
         element: <Navigate to="/login" />

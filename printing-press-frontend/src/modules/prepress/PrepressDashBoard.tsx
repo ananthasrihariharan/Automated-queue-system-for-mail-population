@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../../hooks/useAuth'
+import UserMenu from '../../components/UserMenu'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './PrepressDashboard.css'
 import { fetchPrepressJobs } from '../../services/api'
@@ -38,8 +38,9 @@ export default function PrepressDashboard() {
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
 
-  const { logout, user } = useAuth()
   const navigate = useNavigate()
+
+
 
   const filteredJobs = jobs.filter(job => {
     const matchesSearch = job.jobId.toLowerCase().includes(search.toLowerCase()) ||
@@ -57,10 +58,9 @@ export default function PrepressDashboard() {
 
   return (
     <div className="prepress-page">
-      <div className="prepress-header">
-        {/* ... header ... */}
-        <div className="header-left">
-          <h1 className="tracking-tightest font-black uppercase text-2xl">Prepress</h1>
+      <div className="prepress-navbar">
+        <div className="prepress-navbar-left">
+          <h1 className="prepress-title">Prepress</h1>
           <button
             onClick={() => navigate('/prepress/create')}
             className="btn-primary"
@@ -70,19 +70,9 @@ export default function PrepressDashboard() {
           </button>
         </div>
 
-        <div className="header-right">
+        <div className="prepress-navbar-right">
           <ModuleNavigation />
-          {user?.name && (
-            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-              Welcome, {user.name}
-            </span>
-          )}
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            className="logout-btn"
-          >
-            Logout
-          </button>
+          <UserMenu />
         </div>
       </div>
 

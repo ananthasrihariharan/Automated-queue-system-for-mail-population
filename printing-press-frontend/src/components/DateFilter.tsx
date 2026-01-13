@@ -3,10 +3,9 @@
 interface DateFilterProps {
     value: string
     onChange: (date: string) => void
-    label?: string
 }
 
-export default function DateFilter({ value, onChange, label = "Filter Date" }: DateFilterProps) {
+export default function DateFilter({ value, onChange }: DateFilterProps) {
     // Helper to quickly set 'Today'
     const setToday = () => {
         const today = new Date().toISOString().split('T')[0]
@@ -17,22 +16,21 @@ export default function DateFilter({ value, onChange, label = "Filter Date" }: D
     // For now, we stick to specific date selection as primary interaction.
 
     return (
-        <div className="flex items-center gap-2 bg-white border border-gray-200 rounded-md px-2 py-1 shadow-sm">
-            <span className="text-xs font-bold text-gray-500 uppercase tracking-wider">{label}</span>
+        <div className="date-filter-group">
+            <svg className="date-filter-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             <input
                 type="date"
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
-                className="text-sm font-semibold text-gray-900 border-none outline-none focus:ring-0 cursor-pointer bg-transparent p-1"
-                style={{ fontFamily: 'inherit' }}
+                className="date-filter-input"
             />
-            {value !== new Date().toISOString().split('T')[0] && (
+            {value && value !== new Date().toISOString().split('T')[0] && (
                 <button
                     onClick={setToday}
-                    className="ml-1 text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-0.5 bg-blue-50 rounded"
+                    className="date-filter-reset"
                     title="Reset to Today"
                 >
-                    TODAY
+                    Today
                 </button>
             )}
         </div>

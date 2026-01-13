@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom'
 import { api } from '../../services/api'
 import { endpoints } from '../../services/endpoints'
 import { useAuth } from '../../hooks/useAuth'
-import { useNavigate } from 'react-router-dom'
+import UserMenu from '../../components/UserMenu'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './DispatchDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -555,8 +555,7 @@ export default function DispatchDashboard() {
   const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
   const totalPages = responseData?.pages || 1
 
-  const { logout, user } = useAuth()
-  const navigate = useNavigate()
+
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job: any) => {
@@ -576,47 +575,49 @@ export default function DispatchDashboard() {
   return (
     <div className="dispatch-page">
       <div className="dispatch-navbar">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '2rem' }}>
-          <h1 style={{ fontWeight: 900, fontSize: '1.5rem', textTransform: 'uppercase', letterSpacing: '-0.05em' }}>Dispatch</h1>
-          <div className="dashboard-tabs" style={{ marginBottom: 0 }}>
+        <div className="dispatch-navbar-left">
+          <h1 className="dispatch-title">Dispatch</h1>
+          <div className="dashboard-tabs">
             <button
               onClick={() => setViewMode('active')}
               className={`dashboard-tab ${viewMode === 'active' ? 'active' : ''}`}
               title="Active Jobs"
             >
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path></svg>
+              <span className="tab-label">Active</span>
             </button>
-            <div style={{ width: '2px', height: '1.5rem', background: '#e5e7eb' }}></div>
+
             <button
               onClick={() => setViewMode('history')}
               className={`dashboard-tab ${viewMode === 'history' ? 'active' : ''}`}
               title="Job History"
             >
-              <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"></path></svg>
+              <span className="tab-label">History</span>
             </button>
           </div>
         </div>
-        <div style={{ display: 'flex', gap: '1rem', alignItems: 'center' }}>
-          <DateFilter value={dateFilter} onChange={setDateFilter} />
-          <input
-            className="form-input"
-            style={{ width: '200px' }}
-            placeholder="Search jobs..."
-            value={searchQuery}
-            onChange={e => setSearchQuery(e.target.value)}
-          />
+
+        <div className="dispatch-navbar-right">
           <ModuleNavigation />
-          {user?.name && (
-            <span style={{ fontWeight: 700, fontSize: '0.875rem' }}>
-              Welcome, {user.name}
-            </span>
-          )}
-          <button
-            onClick={() => { logout(); navigate('/login'); }}
-            className="logout-btn"
-          >
-            Logout
-          </button>
+          <UserMenu />
+        </div>
+      </div>
+
+      <div className="dispatch-filters-bar">
+        <div className="dispatch-header-actions">
+          <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <div className="search-wrapper">
+            <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+            </svg>
+            <input
+              className="filter-input search"
+              placeholder="Search jobs..."
+              value={searchQuery}
+              onChange={e => setSearchQuery(e.target.value)}
+            />
+          </div>
         </div>
       </div>
 
