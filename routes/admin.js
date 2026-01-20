@@ -11,28 +11,7 @@ const {
   hashPassword
 } = require('../utils/password')
 
-router.post(
-  '/users',
-  auth,
-  authorize('ADMIN'),
-  async (req, res) => {
-    const { name, phone, roles } = req.body
 
-    const plainPassword = generateInitialPassword(name, phone)
-
-    const user = await User.create({
-      name,
-      phone,
-      roles,
-      password: plainPassword
-    })
-
-    res.json({
-      message: 'User created',
-      initialPassword: plainPassword // show ONCE
-    })
-  }
-)
 
 /**
  * GET JOBS FOR ADMIN (LAST 30 DAYS)

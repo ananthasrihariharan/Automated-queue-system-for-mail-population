@@ -155,3 +155,56 @@
 .table-edit-input:focus {
     border-color: #000;
 }
+
+/* =========================
+   TOGGLE SWITCH COMPONENT
+========================= */
+.toggle-label {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    cursor: pointer;
+    user-select: none;
+}
+
+.toggle-input {
+    display: none;
+    /* Hide default checkbox */
+}
+
+.toggle-switch {
+    width: 2.75rem;
+    height: 1.5rem;
+    background-color: #e2e8f0;
+    border-radius: 9999px;
+    position: relative;
+    transition: background-color 0.2s ease-in-out;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    top: 0.125rem;
+    left: 0.125rem;
+    width: 1.25rem;
+    height: 1.25rem;
+    background-color: white;
+    border-radius: 50%;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    transition: transform 0.2s ease-in-out;
+}
+
+.toggle-input:checked+.toggle-switch {
+    background-color: #2563eb;
+    /* Primary Blue from index.css */
+}
+
+.toggle-input:checked+.toggle-switch::after {
+    transform: translateX(1.25rem);
+}
+
+.toggle-text {
+    font-size: 0.875rem;
+    font-weight: 600;
+    color: #475569;
+}

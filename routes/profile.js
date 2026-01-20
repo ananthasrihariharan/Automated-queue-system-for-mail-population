@@ -147,8 +147,13 @@ router.patch('/password', unifiedAuth, async (req, res) => {
             return res.status(400).json({ message: 'Incorrect current password' })
         }
 
-        const salt = await bcrypt.genSalt(10)
-        userWithPass.password = await bcrypt.hash(newPassword, salt)
+        // const salt = await bcrypt.genSalt(10)
+        // userWithPass.password = await bcrypt.hash(newPassword, salt)
+
+        // AUTO-HASHING FIX: 
+        // User model has a pre('save') hook that handles hashing.
+        // Assigning plain text here prevents double-hashing.
+        userWithPass.password = newPassword
 
         await userWithPass.save()
 

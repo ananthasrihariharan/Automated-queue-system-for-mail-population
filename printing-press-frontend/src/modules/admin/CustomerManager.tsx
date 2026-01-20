@@ -140,9 +140,11 @@ export default function CustomerManager() {
                                                 <label className="toggle-label" style={{ margin: 0 }}>
                                                     <input
                                                         type="checkbox"
+                                                        className="toggle-input"
                                                         checked={editIsCredit}
                                                         onChange={(e) => setEditIsCredit(e.target.checked)}
                                                     />
+                                                    <span className="toggle-switch"></span>
                                                     <span className="toggle-text">Credit Customer</span>
                                                 </label>
                                             ) : (
