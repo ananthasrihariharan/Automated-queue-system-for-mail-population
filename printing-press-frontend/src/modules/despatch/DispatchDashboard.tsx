@@ -625,6 +625,7 @@ export default function DispatchDashboard() {
         <table className="dispatch-table">
           <thead>
             <tr>
+              <th>S.No</th>
               <th>Job ID</th>
               <th>Customer</th>
               <th className="mobile-label-submit">Submitted By</th>
@@ -644,9 +645,14 @@ export default function DispatchDashboard() {
                 </td>
               </tr>
             ) : (
-              filteredJobs.map((job: any) => {
+              filteredJobs.map((job: any, index: number) => {
                 return (
                   <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
+                    <td>
+                      <span style={{ fontWeight: 600, color: '#64748b' }}>
+                        {(currentPage - 1) * itemsPerPage + index + 1}
+                      </span>
+                    </td>
                     <td>{job.jobId}</td>
                     <td>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>

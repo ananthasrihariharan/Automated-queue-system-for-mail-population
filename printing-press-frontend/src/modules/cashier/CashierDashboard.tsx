@@ -65,7 +65,7 @@ export default function CashierDashboard() {
 
       return matchesSearch && matchesPayment && isNotDispatched && matchesDate
     })
-    .sort((a, b) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
+    .sort((a, b) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true, sensitivity: 'base' })) // Natural Numeric Sort
 
   // Pagination Logic
   const totalPages = Math.ceil(filteredJobs.length / itemsPerPage)
@@ -144,6 +144,7 @@ export default function CashierDashboard() {
             <table className="dispatch-table">
               <thead>
                 <tr>
+                  <th>S.No</th>
                   <th>Job ID</th>
                   <th>Customer</th>
                   <th className="hide-mobile">Created At</th>
@@ -159,8 +160,11 @@ export default function CashierDashboard() {
                     </td>
                   </tr>
                 ) : (
-                  paginatedJobs.map((job: any) => ( // Changed from 'jobs' to 'paginatedJobs'
+                  paginatedJobs.map((job: any, index: number) => ( // Changed from 'jobs' to 'paginatedJobs'
                     <tr key={job.jobId} className="dispatch-row"> {/* Changed from job._id to job.jobId */}
+                      <td style={{ fontWeight: 600, color: '#64748b' }}>
+                        {(currentPage - 1) * itemsPerPage + index + 1}
+                      </td>
                       <td>
                         <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
                       </td>

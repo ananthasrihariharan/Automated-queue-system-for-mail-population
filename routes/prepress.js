@@ -36,7 +36,8 @@ router.get(
           itemScreenshots: 1,
           packingPreference: 1,
           paymentStatus: 1,
-          createdAt: 1
+          createdAt: 1,
+          defaultDeliveryType: 1
         }
       ).sort({ createdAt: -1 })
 
@@ -60,6 +61,33 @@ router.get(
     try {
       const customer = await Customer.findOne({ phone: req.params.phone })
       res.json(customer || null)
+    } catch (err) {
+      res.status(500).json({ message: 'Server error' })
+    }
+  }
+)
+
+/**
+ * SEARCH CUSTOMERS BY NAME
+ * Role: PREPRESS
+ */
+router.get(
+  '/customers/search',
+  auth,
+  authorize('PREPRESS'),
+  async (req, res) => {
+    try {
+      const { name } = req.query
+      if (!name) return res.json([])
+
+      // Escape special characters for regex
+      const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+
+      const customers = await Customer.find({
+        name: { $regex: escapedName, $options: 'i' }
+      }).limit(5)
+
+      res.json(customers)
     } catch (err) {
       res.status(500).json({ message: 'Server error' })
     }
@@ -178,7 +206,7 @@ router.patch(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      const { totalItems, keptScreenshots: keptJson } = req.body
+      const { totalItems, keptScreenshots: keptJson, defaultDeliveryType } = req.body
       const files = req.files || []
       const job = await Job.findOne({ jobId: req.params.jobId, createdBy: req.user._id })
 
@@ -191,6 +219,10 @@ router.patch(
 
       if (totalItems !== undefined) {
         job.totalItems = Number(totalItems)
+      }
+
+      if (defaultDeliveryType) {
+        job.defaultDeliveryType = defaultDeliveryType
       }
 
       // Validation: Total images must match totalItems

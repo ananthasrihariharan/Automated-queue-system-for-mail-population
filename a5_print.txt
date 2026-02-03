@@ -1,0 +1,1005 @@
+.only-print {
+    display: none !important;
+}
+
+/* ============================================================================
+   JOB CARD PRINT LAYOUT – A5 PERFORATED SHEET
+   
+   PERFORATION LAYOUT:
+   - Strip 1: Header + Checkboxes = 42mm (25mm + 17mm)
+   - Strip 2: Binding / Lamination = 40mm
+   - Strip 3: Creasing / Die Cutting = 65mm
+   - Strip 4: Cutting / Corner Cutting = 50mm
+   - TOTAL: 197mm
+   ============================================================================ */
+
+@media print {
+
+    /* =========================================================================
+       SECTION 1: PAGE SETUP
+       ========================================================================= */
+    @page {
+        size: A5 portrait;
+        margin: 0;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        box-sizing: border-box !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        text-shadow: none !important;
+        gap: 0 !important;
+        /* Critical: kill flex/grid gaps from screen CSS */
+        line-height: 1.1 !important;
+    }
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 148mm !important;
+        /* Standard A5 Width */
+        height: 197mm !important;
+        /* STRICT CLIP: Exact height of card */
+        overflow: hidden !important;
+        /* Hide all ghost content */
+        background: white !important;
+    }
+
+    .screen-only {
+        display: none !important;
+    }
+
+    /* ABSOLUTE BREAKOUT: Hide everything else to ignore parent layout */
+    body * {
+        visibility: hidden;
+    }
+
+    /* Unhide only the job card and its children */
+    .job-card-container,
+    .job-card-container * {
+        visibility: visible;
+    }
+
+    /* Reset Modal wrappers to ensure they don't trap the absolute card */
+    .job-card-modal-overlay,
+    .job-card-modal-content,
+    .job-card-modal-body {
+        position: static !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        width: 100% !important;
+        height: auto !important;
+        background: transparent !important;
+        box-shadow: none !important;
+        overflow: visible !important;
+    }
+
+    /* Explicitly hide the header and actions to prevent layout shift */
+    .job-card-modal-header,
+    .job-card-modal-actions,
+    .no-print,
+    .btn-add-row,
+    .btn-icon-delete,
+    .btn-icon-delete-inline,
+    span.no-print {
+        display: none !important;
+        height: 0 !important;
+        overflow: hidden !important;
+    }
+
+    /* =========================================================================
+       SECTION 3: MAIN CONTAINER (136mm x 197mm)
+       ========================================================================= */
+    .job-card-container {
+        position: absolute !important;
+        left: 6mm !important;
+        /* STRICT CENTER: (148mm - 136mm) / 2 = 6mm */
+        top: 0 !important;
+        margin: 0 !important;
+        /* Disable auto centering */
+        right: auto !important;
+        width: 136mm !important;
+        height: 197mm !important;
+        padding: 0 !important;
+        background: white !important;
+        z-index: 9999 !important;
+        /* On top of everything */
+        page-break-inside: avoid !important;
+        break-inside: avoid !important;
+        font-family: Arial, sans-serif !important;
+        font-size: 8pt !important;
+        /* Compact base size */
+        color: black !important;
+        overflow: hidden !important;
+    }
+
+    .job-card {
+        width: 100% !important;
+        height: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+        gap: 0 !important;
+        /* Override 1.5rem gap from screen CSS */
+    }
+
+    /* =========================================================================
+       SECTION 4: HEADER (25mm) – Part of Strip 1
+       Refactored for compactness
+       ========================================================================= */
+    .job-card-header {
+        height: 25mm !important;
+        min-height: 25mm !important;
+        max-height: 25mm !important;
+        padding: 1mm 1mm 0 1mm !important;
+        /* Tighter side padding */
+        margin: 0 !important;
+        border: none !important;
+        /* Clean Header */
+        background: white !important;
+        overflow: hidden !important;
+        flex-shrink: 0 !important;
+        gap: 0 !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        display: flex !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: center !important;
+        /* Center main text to leave space at bottom */
+        padding-bottom: 0 !important;
+        padding-top: 0 !important;
+        gap: 2mm !important;
+        /* Comfortable gap between ID and AttBy */
+        position: relative !important;
+        /* For absolute VC Box */
+    }
+
+    .header-row {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        gap: 0.5mm !important;
+        margin-bottom: 0.2mm !important;
+        /* Reduced row spacing */
+        width: 100% !important;
+        /* line-height: 1.2 !important; */
+    }
+
+    .header-row:last-child {
+        margin-bottom: 0 !important;
+    }
+
+    .header-field {
+        display: flex !important;
+        align-items: center !important;
+        gap: 0.5mm !important;
+    }
+
+    .field-label {
+        font-size: 8pt !important;
+        font-weight: 700 !important;
+        /* Bold for sharpness */
+        color: black !important;
+        /* True Black */
+        text-transform: uppercase !important;
+    }
+
+    .field-value {
+        font-size: 10pt !important;
+        font-weight: 800 !important;
+        /* Extra Bold */
+        color: black !important;
+        background: transparent !important;
+        /* Clean white background */
+        padding: 0 !important;
+        /* Remove pill padding */
+        padding: 0 !important;
+        /* Remove pill padding */
+    }
+
+    /* Absolute VC Box Positioning */
+    .header-row-separator {
+        position: absolute !important;
+        bottom: 0 !important;
+        left: 2mm !important;
+        right: 2mm !important;
+        width: auto !important;
+        /* auto with left/right set works like 100% */
+        top: auto !important;
+        transform: none !important;
+        margin: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        padding: 0 !important;
+        z-index: 10 !important;
+        display: flex !important;
+        justify-content: flex-start !important;
+        gap: 10mm !important;
+    }
+
+    .header-row-separator .header-field {
+        background: white !important;
+        padding: 0 !important;
+    }
+
+    /* Reduce text size for VC Box Qty */
+    .header-row-separator .field-label,
+    .header-row-separator .field-value {
+        font-size: 8pt !important;
+        line-height: 1 !important;
+    }
+
+    /* =========================================================================
+       SECTION 5: TOP CHECKBOXES (17mm) – Part of Strip 1
+       Total Strip 1: 25mm + 17mm = 42mm
+       ========================================================================= */
+    .top-checkbox-section {
+        height: 17mm !important;
+        min-height: 17mm !important;
+        max-height: 17mm !important;
+        display: flex !important;
+        flex-wrap: nowrap !important;
+        /* Force single line as requested */
+        justify-content: space-between !important;
+        /* Distribute wide */
+        align-items: center !important;
+        gap: 0mm !important;
+        /* Minimal gap */
+        padding: 0 1mm !important;
+        margin: 0 !important;
+        border-bottom: 2px solid black !important;
+        flex-shrink: 0 !important;
+        background: white !important;
+        white-space: nowrap !important;
+    }
+
+    .top-checkbox-section .checkbox-item[data-checked="false"],
+    .top-checkbox-section .vc-box-wrapper[data-checked="false"] {
+        display: none !important;
+    }
+
+    /* Hide the secondary VC Box input in print (already in header) */
+    .top-checkbox-section .vc-box-wrapper .field-input-box-sm-inline {
+        display: none !important;
+    }
+
+    .top-checkbox-section .checkbox-item {
+        display: inline-flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        background: white !important;
+        color: black !important;
+        font-size: 5pt !important;
+        /* Squeezed to fit */
+        font-weight: 700 !important;
+        padding: 0.5mm 0.5mm !important;
+        /* Balanced padding */
+        border-radius: 0 !important;
+        margin: 0 !important;
+        white-space: nowrap !important;
+        line-height: 1 !important;
+        border: 1px solid black !important;
+        text-transform: uppercase !important;
+        flex: 0 0 auto !important;
+        /* Don't force equal widths, let them fit naturally */
+        letter-spacing: -0.5px !important;
+        /* Squeeze letters slightly */
+    }
+
+    /* Ensure the section uses space-between to spread them out without overlap */
+    .top-checkbox-section {
+        justify-content: space-around !important;
+        gap: 0.5mm !important;
+        padding: 0 0.5mm !important;
+    }
+
+    /* Highlight selected processes with bold border/look */
+    .top-checkbox-section .checkbox-item[data-checked="true"] {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid black !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* Remove unselected items box-clutter */
+    .top-checkbox-section .checkbox-item[data-checked="false"] {
+        display: none !important;
+    }
+
+    /* Hide the actual checkbox input in print, just show the label/pill */
+    .top-checkbox-section input[type="checkbox"] {
+        display: none !important;
+    }
+
+    /* CRITICAL: Treat wrapper as ghost to allow children to flex evenly */
+    .vc-box-wrapper {
+        display: contents !important;
+    }
+
+    .vc-box-wrapper input {
+        display: none !important;
+    }
+
+    /* Override the generic hide for the text input inside wrapper */
+    .vc-box-wrapper input[type="text"] {
+        display: none !important;
+        /* User requested removal from top checkbox */
+    }
+
+    /* =========================================================================
+       SECTION 6: GRID CONTAINER
+       ========================================================================= */
+    .job-card-grid {
+        flex: 1 !important;
+        display: flex !important;
+        flex-direction: column !important;
+        margin-top: 0 !important;
+        /* Critical: Remove gap from top */
+        padding-top: 0 !important;
+    }
+
+    .grid-row-pair {
+        display: grid !important;
+        grid-template-columns: 1fr 1fr !important;
+        flex-shrink: 0 !important;
+        border: none !important;
+        /* No row dividers */
+        gap: 0 !important;
+        align-items: stretch !important;
+    }
+
+    /* Dynamic Full Width Expansion */
+    .grid-row-pair.expand-left,
+    .grid-row-pair.expand-right {
+        grid-template-columns: 1fr !important;
+    }
+
+    /* CENTERED CONTENT for Expanded Sections */
+    /* When expanded, the valid section (left or right) becomes full width container. */
+    /* Headers stay full width. Content is centered and restrained to 85mm. */
+    .grid-row-pair.expand-left .card-section>*:not(.section-header):not(.section-identifiers),
+    .grid-row-pair.expand-right .card-section>*:not(.section-header):not(.section-identifiers) {
+        width: 85mm !important;
+        margin: 0 auto !important;
+        /* Ensure it doesn't touch edges */
+    }
+
+    /* Remove vertical borders for cleaner look when expanded */
+    .grid-row-pair.expand-left .card-section,
+    .grid-row-pair.expand-right .card-section {
+        border-right: none !important;
+        border-left: none !important;
+    }
+
+    /* Remove bottom border from last row */
+    .grid-row-pair:last-child {
+        border-bottom: none !important;
+    }
+
+    /* =========================================================================
+       SECTION 7: ROW 1 - BINDING / LAMINATION (40mm) – Strip 2
+       ========================================================================= */
+
+    .grid-row-pair:nth-child(1) {
+        height: 40mm !important;
+        min-height: 40mm !important;
+        max-height: 40mm !important;
+        margin-bottom: 0 !important;
+        /* Remove gap to fit 197mm exactly */
+        overflow: hidden !important;
+    }
+
+    /* =========================================================================
+       SECTION 8: ROW 2 - CREASING / DIE CUTTING (65mm) – Strip 3
+       ========================================================================= */
+    .grid-row-pair:nth-child(2) {
+        height: 65mm !important;
+        min-height: 65mm !important;
+        max-height: 65mm !important;
+        margin-bottom: 0 !important;
+        /* Remove gap */
+        overflow: hidden !important;
+    }
+
+    /* =========================================================================
+       SECTION 9: ROW 3 - CUTTING / CORNER CUTTING (50mm) – Strip 4
+       ========================================================================= */
+    .grid-row-pair:nth-child(3) {
+        height: 50mm !important;
+        min-height: 50mm !important;
+        max-height: 50mm !important;
+        overflow: hidden !important;
+    }
+
+    /* =========================================================================
+       SECTION 10: CARD SECTIONS (inside each row)
+       ========================================================================= */
+    .card-section {
+        height: auto !important;
+        /* Allow collapse */
+        border: none !important;
+        /* No box borders */
+        display: flex !important;
+        flex-direction: column !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        overflow: visible !important;
+        /* Allow content to show */
+        background: white !important;
+        box-shadow: none !important;
+        border-radius: 0 !important;
+        transform: none !important;
+    }
+
+    /* DYNAMIC TEMPLATE: Hide content of unselected sections */
+    .card-section[data-checked="false"]>* {
+        display: none !important;
+    }
+
+    .card-section[data-checked="false"] {
+        border: none !important;
+        box-shadow: none !important;
+        display: none !important;
+        /* Completely hide container */
+    }
+
+    .card-section[data-checked="false"]::after {
+        content: none !important;
+    }
+
+    .card-section:last-child {
+        border: none !important;
+    }
+
+    .section-header {
+        background: black !important;
+        color: white !important;
+        padding: 0.5mm 1mm !important;
+        font-size: 9pt !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+        text-transform: uppercase !important;
+        flex-shrink: 0 !important;
+        margin: 0 !important;
+        /* Remove gap */
+        border: none !important;
+        /* Remove screen border */
+    }
+
+    /* =========================================================================
+       SECTION 12: IDENTIFIERS (ID, JOB BY, DT)
+       ========================================================================= */
+    .section-identifiers {
+        display: flex !important;
+        justify-content: space-between !important;
+        align-items: center !important;
+        padding: 0.5mm 1mm !important;
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        border-bottom: 1px solid black !important;
+        background: transparent !important;
+        color: black !important;
+        white-space: nowrap !important;
+        flex-shrink: 0 !important;
+        flex-wrap: wrap !important;
+        row-gap: 0 !important;
+        height: auto !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    /* New 2-line layout:
+       Line 1: ID (50% Left), JOB BY (50% Right)
+       Line 2: C.NAME (100% Left) */
+    .identifier-field {
+        box-sizing: border-box !important;
+        margin: 0 !important;
+        text-align: left !important;
+    }
+
+    /* ID and JOB BY sit side-by-side on Line 1 */
+    .identifier-field:nth-child(1) {
+        width: 35% !important;
+        flex: 0 0 35% !important;
+    }
+
+    .identifier-field:nth-child(2) {
+        width: 65% !important;
+        flex: 0 0 65% !important;
+        text-align: right !important;
+    }
+
+    /* C.NAME takes full width on Line 2 */
+    .identifier-field:nth-child(3) {
+        width: 100% !important;
+        flex: 0 0 100% !important;
+        display: block !important;
+    }
+
+    .identifier-field.only-print {
+        display: block !important;
+    }
+
+    /* =========================================================================
+       SECTION 13: SECTION CONTENT
+       ========================================================================= */
+    .section-content {
+        flex: 1 !important;
+        padding: 1mm 2mm !important;
+        font-size: 8pt !important;
+        overflow: hidden !important;
+        display: flex !important;
+        flex-direction: column !important;
+        justify-content: flex-start !important;
+        gap: 1mm !important;
+        /* Clean vertical rhythm */
+    }
+
+
+
+    /* =========================================================================
+       SECTION 14: FORM ELEMENTS & NEUTRALIZERS
+       ========================================================================= */
+
+    /* Kill Screen UI artifacts in print */
+    .binding-type-row,
+    .lamination-type-row,
+    .creasing-item,
+    .card-section,
+    .field-input-inline,
+    .field-input-box-sm-inline,
+    .table-input,
+    .lamination-other-type-input {
+        background-color: transparent !important;
+        background-image: none !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        transform: none !important;
+        transition: none !important;
+        border: none !important;
+        border-bottom: 1px solid #ddd !important;
+        /* Subtle line for visual structure */
+        appearance: none !important;
+        /* Hide dropdown arrows */
+    }
+
+    /* Force high-contrast text for standard labels */
+    .field-label-sm,
+    .checkbox-item-sm span,
+    .radio-item-sm span {
+        color: #000 !important;
+        font-weight: 700 !important;
+    }
+
+    /* Standard font for labels */
+
+    input[type="checkbox"],
+    input[type="radio"] {
+        width: 8px !important;
+        height: 8px !important;
+        margin-right: 1mm !important;
+    }
+
+    input[type="text"],
+    input[type="number"],
+    .field-input-inline,
+    .table-input {
+        border: none !important;
+        /* No border = Static Text look */
+        background: transparent !important;
+        font-size: 9pt !important;
+        font-weight: 700 !important;
+        color: black !important;
+        padding: 0 1mm !important;
+        font-family: 'Courier New', monospace !important;
+    }
+
+    /* =========================================================================
+       SECTION 15: BINDING / LAMINATION ROWS
+       ========================================================================= */
+    /* Refactored Binding/Lam Rows: GRID LAYOUT for Alignment */
+    .binding-type-row,
+    .lamination-type-row {
+        display: grid !important;
+        /* [Label 35mm] [Qty 10mm] [Details Rest] */
+        grid-template-columns: 35mm 10mm 1fr !important;
+        align-items: center !important;
+        width: 100% !important;
+        padding: 0.1mm 0 !important;
+        min-height: 4mm !important;
+        height: 4mm !important;
+        white-space: nowrap !important;
+        border: none !important;
+        border-bottom: none !important;
+        print-color-adjust: exact !important;
+        background: transparent !important;
+        gap: 0 !important;
+        margin: 0 !important;
+    }
+
+    .binding-type-row *,
+    .lamination-type-row * {
+        border: none !important;
+        margin: 0 !important;
+        padding: 0 !important;
+    }
+
+    .binding-type-row input[type="checkbox"],
+    .lamination-type-row input[type="checkbox"] {
+        display: none !important;
+    }
+
+    .binding-type-row:has(input:checked),
+    .lamination-type-row:has(input[type="checkbox"]:checked) {
+        display: grid !important;
+        background: transparent !important;
+    }
+
+    /* SPECIFIC FIX FOR "OTHER" LAMINATION PRINT GRID */
+    .lamination-type-row:has(.lamination-other-type-input)>.checkbox-item-sm {
+        display: none !important;
+    }
+
+    /* Column 1: Label */
+    .binding-type-row>label,
+    .lamination-type-row>label {
+        width: 100% !important;
+        overflow: hidden !important;
+        flex: none !important;
+        padding-right: 1mm !important;
+    }
+
+    /* Column 2: Quantity Input */
+    .binding-details input[type="text"],
+    .lamination-details input[type="text"],
+    .binding-type-row input[type="text"],
+    .lamination-type-row input[type="text"] {
+        width: 100% !important;
+        text-align: left !important;
+    }
+
+    /* Wrapper Handling: UNWRAP details to allow children to sit in Grid */
+    .binding-details,
+    .lamination-details {
+        display: contents !important;
+    }
+
+    /* Inner Qty Wrapper */
+    .binding-details .field-row,
+    .lamination-details .field-row {
+        width: 100% !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        padding: 0 !important;
+        margin: 0 !important;
+    }
+
+    /* Side Selection (Lamination) */
+    .side-selection {
+        display: flex !important;
+        align-items: center !important;
+        justify-content: flex-start !important;
+        gap: 2mm !important;
+        margin-left: 1mm !important;
+        width: 100% !important;
+    }
+
+    /* Hide Unselected Radio Buttons & Labels */
+    .side-selection input[type="radio"] {
+        display: none !important;
+    }
+
+    /* Hide Unselected Side Selection Labels */
+    .side-selection.side-single label:nth-of-type(2),
+    .side-selection.side-double label:nth-of-type(1),
+    .side-selection.side-none label {
+        display: none !important;
+    }
+
+    /* Selected Label Style */
+    .side-selection label {
+        display: inline-flex !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        font-size: 8pt !important;
+        color: black !important;
+    }
+
+    /* "Other" Row Fixes */
+    .lamination-other-type-input {
+        width: 35mm !important;
+        /* Force into Label Column */
+        flex: 0 0 35mm !important;
+        grid-column: 1 !important;
+        border: none !important;
+        background: transparent !important;
+        font-weight: 700 !important;
+        text-transform: uppercase !important;
+        padding-right: 1mm !important;
+        font-size: 8pt !important;
+        /* Match standard label size */
+        font-family: inherit !important;
+        /* Use standard font for labels */
+    }
+
+    /* Fix side selection width issues */
+    .side-selection {
+        gap: 1mm !important;
+        justify-content: flex-start !important;
+        overflow: hidden !important;
+    }
+
+    .lamination-details .field-label-sm {
+        display: none !important;
+        /* Hide "NO OF SHEETS" label */
+    }
+
+    /* DYNAMIC VISIBILITY: HIDE UNCHECKED ROWS (Must come last to override Grid) */
+    .binding-type-row[data-row-checked="false"],
+    .lamination-type-row[data-row-checked="false"] {
+        display: none !important;
+        height: 0 !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        overflow: hidden !important;
+        border: none !important;
+    }
+
+
+
+
+
+
+
+    /* ========================================================================= */
+    /* ... skipped ... */
+
+    /* CREASING ALIGNMENT */
+    /* CREASING ALIGNMENT - GRID REFACTOR */
+    .creasing-item {
+        display: grid !important;
+        grid-template-columns: 45mm auto 1fr !important;
+        /* Label, "NO:", Input */
+        align-items: center !important;
+        padding: 0 !important;
+        margin: 0 !important;
+        height: 4mm !important;
+        width: 100% !important;
+        white-space: nowrap !important;
+        background: transparent !important;
+        border: none !important;
+    }
+
+    .creasing-item .checkbox-item-sm {
+        display: flex !important;
+        align-items: center !important;
+        width: 100% !important;
+        /* Fill grid cell */
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent !important;
+    }
+
+    /* HIDE Checkbox Square in Print */
+    .creasing-item .checkbox-item-sm input[type="checkbox"] {
+        display: none !important;
+    }
+
+    /* "NO:" Text styling */
+    .creasing-item .field-label-sm {
+        margin: 0 !important;
+        padding: 0 1mm !important;
+        text-align: right !important;
+    }
+
+    .creasing-item .field-input-box-sm-inline {
+        border: none !important;
+        background: transparent !important;
+        width: 100% !important;
+        max-width: 12mm !important;
+        text-align: center !important;
+        font-weight: 700 !important;
+        padding: 0 !important;
+        height: auto !important;
+    }
+
+    /* FIX: HIDE UNCHECKED CREASING ROWS within Grid */
+    .creasing-item[data-row-checked="false"] {
+        display: none !important;
+    }
+
+    /* =========================================================================
+       SECTION 17: DIE CUTTING TABLE
+       ========================================================================= */
+    .die-cutting-table {
+        width: 100% !important;
+        border-collapse: collapse !important;
+        margin-top: 0 !important;
+        border: 1px solid black !important;
+        /* Full outer border */
+    }
+
+    .die-table-header,
+    .die-table-row {
+        display: grid !important;
+        grid-template-columns: 2fr 2fr 1.5fr !important;
+        border-bottom: 1px solid black !important;
+    }
+
+    .die-table-header {
+        background: transparent !important;
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+        padding: 0 !important;
+        /* Let cells handle padding */
+        border-bottom: 2px solid black !important;
+        /* Thicker header divider */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .die-table-cell {
+        border-right: 1px solid black !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        text-align: center !important;
+        padding: 0.5mm !important;
+        /* Uniform padding */
+    }
+
+    .die-table-cell:last-child {
+        border-right: none !important;
+    }
+
+    .die-table-row>div {
+        border-right: 1px solid black !important;
+        padding: 0 1mm !important;
+        /* Very tight padding */
+        height: 4mm !important;
+        /* Force small height per row */
+        text-align: left !important;
+        /* Align text left */
+        font-size: 7pt !important;
+        /* Smaller font */
+        display: flex !important;
+        align-items: center !important;
+        line-height: 1 !important;
+        overflow: hidden !important;
+    }
+
+    .die-table-row>div:not(:first-child) {
+        justify-content: center !important;
+        /* Center numbers */
+    }
+
+    .die-table-row>div:last-child {
+        border-right: none !important;
+    }
+
+    /* =========================================================================
+       SECTION 18: CUTTING GRID
+       ========================================================================= */
+    .cutting-grid {
+        width: 100% !important;
+        border: 2px solid black !important;
+        /* Outer frame */
+        display: flex !important;
+        flex-direction: column !important;
+        margin-top: 0 !important;
+        /* Remove screen margin */
+    }
+
+    /* Reduce gap above grid */
+    /* Force NO OF SHEETS to be single line in these sections */
+    .creasing-section .field-row,
+    .die-cutting-section .field-row,
+    .cutting-details-section .field-row {
+        margin: 0 !important;
+        padding: 0.5mm 0 !important;
+        min-height: auto !important;
+        display: flex !important;
+        flex-direction: row !important;
+        align-items: center !important;
+        gap: 2mm !important;
+        white-space: nowrap !important;
+        flex-wrap: nowrap !important;
+    }
+
+    .creasing-section .field-label-sm,
+    .die-cutting-section .field-label-sm,
+    .cutting-details-section .field-label-sm {
+        width: auto !important;
+        margin-right: 0 !important;
+        flex: 0 0 auto !important;
+    }
+
+    .cutting-grid-header,
+    .cutting-grid-row {
+        display: grid !important;
+        grid-template-columns: repeat(4, 1fr) !important;
+        border-bottom: 1px solid black !important;
+    }
+
+    .cutting-grid-row:last-child {
+        border-bottom: none !important;
+    }
+
+    .cutting-grid-header {
+        background: transparent !important;
+        font-size: 7pt !important;
+        font-weight: 700 !important;
+        text-align: center !important;
+        padding: 0 !important;
+        /* Reset padding to let cells handle it */
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .cutting-grid-header .cutting-grid-cell {
+        background: transparent !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+
+    .cutting-grid-cell {
+        border-right: 1px solid black !important;
+        padding: 1mm !important;
+        text-align: center !important;
+        font-size: 8pt !important;
+        font-weight: 700 !important;
+        line-height: 1 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+    }
+
+    /* FIX: HIDE EMPTY ROWS IN DIE CUTTING & CUTTING */
+    .die-table-row[data-has-content="false"],
+    .cutting-grid-row[data-has-content="false"] {
+        display: none !important;
+    }
+
+    /* Keep at least one empty row visible if ALL are empty? No, used asked to show only filled. */
+
+    .cutting-grid-cell:last-child {
+        border-right: none !important;
+    }
+
+    /* =========================================================================
+       SECTION 19: CORNER CUTTING DIAGRAM
+       MOVED TO separate file: CornerCheckboxes.css
+       ========================================================================= */
+}
+
+/* End of TOP LEVEL @media print */
+
+/* Helper classes for visibility (Screen defaults) */
+.only-print {
+    display: none !important;
+}
+
+.hide-print {
+    display: block !important;
+}
+
+@media print {
+
+    /* Global print visibility helpers */
+    .only-print {
+        display: block !important;
+    }
+
+    .hide-print {
+        display: none !important;
+    }
+}

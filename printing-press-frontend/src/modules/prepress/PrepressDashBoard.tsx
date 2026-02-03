@@ -179,6 +179,7 @@ export default function PrepressDashboard() {
         <table className="jobs-table">
           <thead>
             <tr>
+              <th>S.No</th>
               <th>Job ID</th>
               <th>Customer</th>
               <th>Items</th>
@@ -189,8 +190,9 @@ export default function PrepressDashboard() {
           </thead>
 
           <tbody>
-            {filteredJobs.map((job) => (
+            {filteredJobs.map((job, index) => (
               <tr key={job.jobId}>
+                <td><span style={{ fontWeight: 600, color: '#64748b' }}>{index + 1}</span></td>
                 <td>{job.jobId}</td>
                 <td>{job.customerName}</td>
                 <td>{job.totalItems}</td>

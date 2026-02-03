@@ -111,6 +111,60 @@
     font-weight: 900;
 }
 
+/* ===== Autocomplete Dropdown ===== */
+.relative {
+    position: relative;
+}
+
+.customer-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: white;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    z-index: 50;
+    margin-top: 0.25rem;
+    overflow: hidden;
+}
+
+.dropdown-item {
+    padding: 0.75rem 1rem;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.dropdown-item:last-child {
+    border-bottom: none;
+}
+
+.dropdown-item.highlighted {
+    background: #f8fafc;
+}
+
+.customer-info {
+    display: flex;
+    justify-content: flex-start;
+    align-items: center;
+    gap: 20px;
+}
+
+.customer-name {
+    font-size: 0.875rem;
+    font-weight: 700;
+    color: #0f172a;
+    margin-right: 10px;
+}
+
+.customer-phone {
+    font-size: 0.75rem;
+    color: #64748b;
+    font-weight: 600;
+}
+
 /* ===== File Upload ===== */
 .file-drop {
     border: 2px dashed #cbd5f5;

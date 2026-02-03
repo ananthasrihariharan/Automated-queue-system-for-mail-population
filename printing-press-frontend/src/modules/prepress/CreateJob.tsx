@@ -2,14 +2,18 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { api } from '../../services/api'
 import { useAuth } from '../../hooks/useAuth'
+import JobCardModal from '../../components/JobCardModal'
+import { useRef } from 'react'
 import './CreateJob.css'
 
 export default function CreateJob() {
     const { id } = useParams()
     const isEdit = !!id
     const navigate = useNavigate()
-    const { logout } = useAuth()
+    const { user, logout } = useAuth()
     const [loading, setLoading] = useState(false)
+    const [showJobCard, setShowJobCard] = useState(false)
+
 
     const [formData, setFormData] = useState({
         jobId: '',
@@ -22,6 +26,10 @@ export default function CreateJob() {
     const [existingScreenshots, setExistingScreenshots] = useState<string[]>([])
     const [isDragging, setIsDragging] = useState(false)
     const [isWalkIn, setIsWalkIn] = useState(false)
+    const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([])
+    const [showDropdown, setShowDropdown] = useState(false)
+    const [highlightedIndex, setHighlightedIndex] = useState(-1)
+    const searchTimeoutRef = useRef<any>(null)
 
     const [viewImage, setViewImage] = useState<string | null>(null)
     const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
@@ -42,6 +50,7 @@ export default function CreateJob() {
                         setCustomerName(job.customerName)
                         setCustomerPhone(job.customerPhone || '')
                         setExistingScreenshots(job.itemScreenshots || [])
+                        setIsWalkIn(job.defaultDeliveryType === 'WALK_IN')
                     }
                 } catch (e) {
                     console.error('Failed to fetch job for edit', e)
@@ -66,6 +75,7 @@ export default function CreateJob() {
         try {
             const data = new FormData()
             data.append('totalItems', String(formData.totalItems))
+            data.append('defaultDeliveryType', isWalkIn ? 'WALK_IN' : 'COURIER')
 
             if (isEdit) {
                 // Send list of kept existing screenshots
@@ -84,7 +94,6 @@ export default function CreateJob() {
                 data.append('jobId', formData.jobId)
                 data.append('customerName', customerName)
                 data.append('customerPhone', customerPhone)
-                data.append('defaultDeliveryType', isWalkIn ? 'WALK_IN' : 'COURIER')
                 await api.post('/api/prepress/jobs', data, {
                     headers: { 'Content-Type': 'multipart/form-data' }
                 })
@@ -103,6 +112,55 @@ export default function CreateJob() {
             const res = await api.get(`/api/prepress/customer/by-phone/${phone}`)
             if (res.data) setCustomerName(res.data.name)
         } catch (e) { /* silent fail */ }
+    }
+
+    const searchCustomers = async (name: string) => {
+        if (searchTimeoutRef.current) {
+            clearTimeout(searchTimeoutRef.current)
+        }
+
+        if (name.length < 2 || isEdit) {
+            setCustomerSearchResults([])
+            setShowDropdown(false)
+            return
+        }
+
+        searchTimeoutRef.current = setTimeout(async () => {
+            try {
+                const res = await api.get(`/api/prepress/customers/search?name=${encodeURIComponent(name)}`)
+                setCustomerSearchResults(res.data)
+                setShowDropdown(res.data.length > 0)
+                setHighlightedIndex(-1)
+            } catch (e) {
+                /* silent fail */
+                setCustomerSearchResults([])
+                setShowDropdown(false)
+            }
+        }, 300) // 300ms debounce
+    }
+
+    const handleSelectCustomer = (customer: any) => {
+        setCustomerName(customer.name)
+        setCustomerPhone(customer.phone)
+        setShowDropdown(false)
+        setCustomerSearchResults([])
+    }
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (!showDropdown) return
+
+        if (e.key === 'ArrowDown') {
+            e.preventDefault()
+            setHighlightedIndex(prev => (prev < customerSearchResults.length - 1 ? prev + 1 : prev))
+        } else if (e.key === 'ArrowUp') {
+            e.preventDefault()
+            setHighlightedIndex(prev => (prev > 0 ? prev - 1 : prev))
+        } else if (e.key === 'Enter' && highlightedIndex >= 0) {
+            e.preventDefault()
+            handleSelectCustomer(customerSearchResults[highlightedIndex])
+        } else if (e.key === 'Escape') {
+            setShowDropdown(false)
+        }
     }
 
     const handlePaste = (e: React.ClipboardEvent) => {
@@ -138,6 +196,32 @@ export default function CreateJob() {
                         </div>
                     </div>
                     <div className="flex items-center gap-4">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                // Validate required fields before opening modal
+                                if (!formData.jobId) {
+                                    alert('Please enter a Job ID before previewing the job card.')
+                                    return
+                                }
+
+                                if (!customerName) {
+                                    alert('Please enter a Customer Name before previewing the job card.')
+                                    return
+                                }
+
+                                if (!formData.totalItems || formData.totalItems <= 0) {
+                                    alert('Please enter a valid Total Items count before previewing the job card.')
+                                    return
+                                }
+
+                                setShowJobCard(true)
+                            }}
+                            className="btn-royal-outline"
+                        >
+
+                            Preview Job Card
+                        </button>
                         <button
                             type="button"
                             onClick={() => navigate('/prepress')}
@@ -189,16 +273,51 @@ export default function CreateJob() {
                                     />
                                 </div>
 
-                                <div className="form-group">
+                                <div className="form-group relative">
                                     <label>Customer Name</label>
-                                    <input
-                                        required
-                                        disabled={isEdit}
-                                        placeholder="Full name"
-                                        className={`form-input ${isEdit ? 'bg-slate-100' : ''}`}
-                                        value={customerName}
-                                        onChange={(e) => setCustomerName(e.target.value)}
-                                    />
+                                    <div className="relative">
+                                        <input
+                                            required
+                                            disabled={isEdit}
+                                            placeholder="Full name"
+                                            className={`form-input ${isEdit ? 'bg-slate-100' : ''}`}
+                                            value={customerName}
+                                            onChange={(e) => {
+                                                setCustomerName(e.target.value)
+                                                searchCustomers(e.target.value)
+                                            }}
+                                            onKeyDown={handleKeyDown}
+                                            onBlur={() => {
+                                                // Short delay to allow click on dropdown
+                                                setTimeout(() => setShowDropdown(false), 200)
+                                            }}
+                                            onFocus={() => {
+                                                if (customerName.length >= 2 && customerSearchResults.length > 0) {
+                                                    setShowDropdown(true)
+                                                }
+                                            }}
+                                        />
+                                        {showDropdown && (
+                                            <div className="customer-dropdown">
+                                                {customerSearchResults.map((customer, idx) => (
+                                                    <div
+                                                        key={customer._id}
+                                                        className={`dropdown-item ${idx === highlightedIndex ? 'highlighted' : ''}`}
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault() // Keep focus on input while selecting
+                                                            handleSelectCustomer(customer)
+                                                        }}
+                                                        onMouseEnter={() => setHighlightedIndex(idx)}
+                                                    >
+                                                        <div className="customer-info">
+                                                            <span className="customer-name">{customer.name}</span>
+                                                            <span className="customer-phone">{customer.phone}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
 
                                 <div className="form-group">
@@ -219,11 +338,10 @@ export default function CreateJob() {
                                         id="walkInCheck"
                                         checked={isWalkIn}
                                         onChange={(e) => setIsWalkIn(e.target.checked)}
-                                        disabled={isEdit}
                                         style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
                                     />
                                     <label htmlFor="walkInCheck" style={{ cursor: 'pointer', fontWeight: 700, color: '#374151', fontSize: '0.875rem' }}>
-                                        Walk-in 
+                                        Walk-in
                                     </label>
                                 </div>
                             </div>
@@ -384,6 +502,20 @@ export default function CreateJob() {
                         </button>
                     </div>
                 </div>
+            )}
+
+            {/* Job Card Modal */}
+            {showJobCard && (
+                <JobCardModal
+                    jobData={{
+                        jobId: formData.jobId,
+                        customerName: customerName,
+                        totalItems: formData.totalItems,
+                        attBy: user?.name || user?.username || 'N/A',
+                        date: new Date()
+                    }}
+                    onClose={() => setShowJobCard(false)}
+                />
             )}
         </div>
     )

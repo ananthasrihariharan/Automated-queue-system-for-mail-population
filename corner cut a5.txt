@@ -1,0 +1,193 @@
+/* =========================================
+   CORNER CHECKBOXES - ISOLATED STYLES
+   ========================================= */
+
+/* 1. CONTAINER LAYOUT (SCREEN & PRINT) */
+.corner-diagram {
+    margin-top: 1rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.corner-box {
+    width: 150px;
+    height: 90px;
+    border: 2px solid var(--primary-color, #0f172a);
+    border-radius: 4px;
+    position: relative;
+    /* Anchor for absolute checkboxes */
+    margin-top: 0.5rem;
+    background: white;
+
+    /* Center Content (Quantity) */
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.corner-label {
+    font-size: 0.8rem;
+    /* Match other labels */
+    font-weight: 700;
+    text-transform: uppercase;
+}
+
+/* 2. CHECKBOX WRAPPER (ANCHOR) */
+/* This element is positioned at the corners */
+.corner-checkbox-wrapper {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    z-index: 20;
+    cursor: pointer;
+    background: transparent;
+    padding: 0;
+    margin: 0;
+    line-height: 0;
+}
+
+/* Positioning Classes */
+.corner-tl {
+    top: -6px;
+    left: -6px;
+}
+
+.corner-tr {
+    top: -6px;
+    right: -6px;
+}
+
+.corner-bl {
+    bottom: -6px;
+    left: -6px;
+}
+
+.corner-br {
+    bottom: -6px;
+    right: -6px;
+}
+
+/* 3. SCREEN STYLES (DEFAULT) */
+/* Use Native Input for best UX on screen */
+.corner-checkbox-wrapper input[type="checkbox"] {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+    opacity: 1;
+    /* Visible on screen */
+    cursor: pointer;
+    accent-color: var(--accent-color, #3b82f6);
+    display: block;
+}
+
+/* Hide the custom "Print" visual on screen */
+.corner-checkbox-wrapper .custom-checkbox-visual {
+    display: none;
+}
+
+/* 4. PRINT STYLES (OVERRIDE) */
+@media print {
+
+    /* 1. LAYOUT ADJUSTMENTS */
+    /* Force top alignment */
+    .card-section[data-section="cornerCutting"] {
+        justify-content: flex-start !important;
+        gap: 0 !important;
+    }
+
+    .corner-diagram {
+        margin: 0 !important;
+        padding: 0 !important;
+        margin-top: 2mm !important;
+        overflow: visible !important;
+    }
+
+    .corner-label {
+        font-size: 8pt !important;
+        color: black !important;
+        margin-bottom: 1.5mm !important;
+    }
+
+    .corner-box {
+        width: 38mm !important;
+        /* Fixed print size */
+        height: 20mm !important;
+        border: 2px solid black !important;
+        background: transparent !important;
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+
+        position: relative !important;
+        display: flex !important;
+        /* RESTORED FLEX for centering */
+        justify-content: center !important;
+        align-items: center !important;
+        overflow: visible !important;
+    }
+
+    /* 2. HIDE CLUTTER */
+    .card-section[data-section="cornerCutting"] .field-row {
+        display: none !important;
+    }
+
+    /* Tighter Positioning for Print (Moved INSIDE to avoid clipping) */
+    .corner-tl {
+        top: 1mm !important;
+        left: 1mm !important;
+    }
+
+    .corner-tr {
+        top: 1mm !important;
+        right: 1mm !important;
+    }
+
+    .corner-bl {
+        bottom: 1mm !important;
+        left: 1mm !important;
+    }
+
+    .corner-br {
+        bottom: 1mm !important;
+        right: 1mm !important;
+    }
+
+    /* 3. SHOW QUANTITY (Natural Flex centering) */
+    .print-corner-qty {
+        display: block !important;
+        position: static !important;
+        transform: none !important;
+        font-size: 14pt !important;
+        font-weight: 900 !important;
+        color: black !important;
+        z-index: 5 !important;
+    }
+
+    /* 4. CHECKBOXES - HIDDEN (Replaced by Shape Method) */
+    .corner-checkbox-wrapper {
+        display: none !important;
+    }
+
+    /* 5. SHAPE METHOD - ROUNDED CORNERS (10mm Radius circular cut) */
+    .corner-box.cut-tl {
+        border-top-left-radius: 5mm !important;
+    }
+
+    .corner-box.cut-tr {
+        border-top-right-radius: 5mm !important;
+    }
+
+    .corner-box.cut-bl {
+        border-bottom-left-radius: 5mm !important;
+    }
+
+    .corner-box.cut-br {
+        border-bottom-right-radius: 5mm !important;
+    }
+
+    /* Cleanup obsolete rules */
+}

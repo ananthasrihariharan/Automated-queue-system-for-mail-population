@@ -53,6 +53,7 @@ app.use("/api/admin", require("./routes/admin"));
 app.use("/api/admin", require("./routes/admin-users"));
 app.use("/api/dispatch", require("./routes/dispatch"));
 app.use("/api/profile", require("./routes/profile"));
+app.use("/api/job-cards", require("./routes/jobCards"));
 
 /* =======================
    SPA FALLBACK

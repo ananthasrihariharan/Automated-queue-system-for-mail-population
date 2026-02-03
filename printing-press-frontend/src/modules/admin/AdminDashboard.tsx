@@ -201,6 +201,7 @@ export default function AdminDashboard() {
                 <table className="dispatch-table">
                   <thead>
                     <tr>
+                      <th>S.No</th>
                       <th>Job ID</th>
                       <th>Customer</th>
                       <th>Submitted By</th>
@@ -217,8 +218,13 @@ export default function AdminDashboard() {
                         </td>
                       </tr>
                     ) : (
-                      paginatedJobs.map((job) => (
+                      paginatedJobs.map((job, index) => (
                         <tr key={job.jobId} className="dispatch-row">
+                          <td>
+                            <span style={{ fontWeight: 600, color: '#64748b' }}>
+                              {(currentPage - 1) * itemsPerPage + index + 1}
+                            </span>
+                          </td>
                           <td>
                             <span style={{ fontWeight: 800 }}>#{job.jobId}</span>
                             {job.defaultDeliveryType === 'WALK_IN' && (
