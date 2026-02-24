@@ -55,7 +55,30 @@
     border: 1px solid var(--border-color);
     display: flex;
     flex-direction: column;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.logo {
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    justify-content: center;
     gap: 1rem;
+    margin-bottom: 0.5rem;
+}
+
+.logo-img img {
+    height: 45px;
+    width: auto;
+    object-fit: contain;
+}
+
+.logo-text {
+    font-size: 1.4rem;
+    font-weight: 800;
+    letter-spacing: 0.1em;
+    color: var(--primary-color);
 }
 
 .header-row {

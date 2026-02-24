@@ -1,0 +1,238 @@
+.only-print {
+    display: none !important;
+}
+
+/* ============================================================================
+   JOB CARD PRINT LAYOUT – 80mm THERMAL ROLL
+   ============================================================================ */
+
+@media print {
+
+    /* 1. PAGE SETUP */
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+        box-sizing: border-box !important;
+        border-radius: 0 !important;
+        box-shadow: none !important;
+        line-height: 1.1 !important;
+    }
+
+    html,
+    body {
+        margin: 0 !important;
+        padding: 0 !important;
+        width: 80mm !important;
+        background: #fff !important;
+        font-family: Arial, sans-serif !important;
+    }
+
+    /* 2. VISIBILITY CONTROL */
+    body * {
+        visibility: hidden;
+    }
+
+    .job-card-container,
+    .job-card-container * {
+        visibility: visible;
+    }
+
+    .job-card-container {
+        position: absolute !important;
+        top: 0 !important;
+        left: 4mm !important;
+        width: 72mm !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        background: #fff !important;
+    }
+
+    .job-card,
+    .job-card-grid,
+    .grid-row-pair {
+        width: 100% !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    /* 3. HEADER */
+    .job-card-header {
+        border-bottom: 3px dashed #000 !important;
+        padding: 2mm 0 !important;
+        margin-bottom: 4mm !important;
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    .header-field {
+        display: flex !important;
+        flex-direction: column !important;
+        align-items: flex-start !important;
+        margin-bottom: 2mm !important;
+    }
+
+    .field-label {
+        font-size: 7.5pt !important;
+        font-weight: 900 !important;
+        text-transform: uppercase !important;
+        margin-bottom: 0.5mm !important;
+    }
+
+    .field-value {
+        font-size: 11pt !important;
+        font-weight: 800 !important;
+        font-family: 'Courier New', monospace !important;
+        display: block !important;
+        width: 100% !important;
+    }
+
+    /* 4. SECTIONS */
+    .card-section {
+        display: flex !important;
+        flex-direction: column !important;
+        width: 100% !important;
+        border-bottom: 3px dashed #000 !important;
+        padding: 5mm 0 !important;
+        margin-bottom: 2mm !important;
+    }
+
+    .section-qr-code {
+        width: 20mm !important;
+        height: 20mm !important;
+        border: 2px dashed #000 !important;
+        display: flex !important;
+        align-items: center !important;
+        justify-content: center !important;
+        margin: 0 auto 3mm auto !important;
+        /* QR AT TOP, CENTERED */
+        font-size: 10pt !important;
+        font-weight: bold !important;
+    }
+
+    .section-header {
+        background: #000 !important;
+        color: #fff !important;
+        text-align: center !important;
+        font-size: 10pt !important;
+        padding: 1.5mm 0 !important;
+        text-transform: uppercase !important;
+        margin-bottom: 3mm !important;
+    }
+
+    .section-identifiers {
+        display: flex !important;
+        flex-direction: column !important;
+        font-size: 8pt !important;
+        border-bottom: 1.5px solid #000 !important;
+        padding-bottom: 2mm !important;
+        margin-bottom: 3mm !important;
+    }
+
+    .identifier-field {
+        font-weight: bold !important;
+        margin-bottom: 1mm !important;
+    }
+
+    /* 5. TABLES */
+    .die-cutting-table,
+    .cutting-grid {
+        width: 100% !important;
+        border: 1.5px solid #000 !important;
+        margin-top: 2mm !important;
+    }
+
+    .die-table-header,
+    .cutting-grid-header {
+        background: #eee !important;
+        font-weight: bold !important;
+        font-size: 8pt !important;
+        display: flex !important;
+    }
+
+    .die-table-row,
+    .cutting-grid-row {
+        display: flex !important;
+        border-top: 1px solid #000 !important;
+    }
+
+    .die-table-cell,
+    .cutting-grid-cell {
+        flex: 1 !important;
+        padding: 1.5mm 1mm !important;
+        border-right: 1px solid #000 !important;
+        font-family: 'Courier New', monospace !important;
+        text-align: center !important;
+    }
+
+    .die-table-cell:last-child,
+    .cutting-grid-cell:last-child {
+        border-right: none !important;
+    }
+
+    /* 6. INPUTS */
+    input[type="text"],
+    input[type="number"],
+    .field-input-inline,
+    .table-input {
+        border: none !important;
+        background: transparent !important;
+        font-weight: bold !important;
+        font-family: 'Courier New', monospace !important;
+        font-size: 10pt !important;
+    }
+
+    /* 7. LAMINATION SIDES */
+    .side-selection {
+        display: flex !important;
+        flex-direction: column !important;
+    }
+
+    .side-selection label {
+        display: none !important;
+    }
+
+    .side-selection label:has(input:checked) {
+        display: block !important;
+        font-weight: 900 !important;
+        text-transform: uppercase !important;
+        margin-top: 1mm !important;
+    }
+
+    /* 8. HIDDEN ELEMENTS */
+    .no-print,
+    .btn-add-row,
+    .top-checkbox-section,
+    input[type="checkbox"],
+    input[type="radio"] {
+        display: none !important;
+    }
+
+    .card-section[data-checked="false"],
+    .binding-type-row[data-row-checked="false"],
+    .lamination-type-row[data-row-checked="false"],
+    .die-table-row[data-has-content="false"] {
+        display: none !important;
+    }
+
+    /* MODAL CLEANUP */
+    .job-card-modal-overlay,
+    .job-card-modal-content,
+    .job-card-modal-body {
+        position: static !important;
+        display: block !important;
+        margin: 0 !important;
+        padding: 0 !important;
+        border: none !important;
+        background: transparent !important;
+        overflow: visible !important;
+    }
+
+    .only-print {
+        display: block !important;
+    }
+}

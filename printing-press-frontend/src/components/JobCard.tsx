@@ -89,6 +89,11 @@ export default function JobCard({ jobData, formData, setFormData, updateProcess 
             <div className="job-card">
                 {/* Header Section with Job Info */}
                 <div className="job-card-header">
+                    <div className='logo only-print'>
+                        <div className='logo-img'> <img src="/SP-minimalist.png" alt="Siva Prints" /></div>
+                        <div className='logo-text'><span>SIVA PRINTS</span></div>
+                        <div className='logo-address'><span>Triplicane,Chennai</span></div>
+                    </div>
                     <div className="header-row">
                         <div className="header-field">
                             <span className="field-label">JOB ID:</span>
@@ -108,7 +113,25 @@ export default function JobCard({ jobData, formData, setFormData, updateProcess 
                             <span className="field-label">TOTAL ITEMS:</span>
                             <span className="field-value">{jobData.totalItems}</span>
                         </div>
-
+                    </div>
+                    {/* Print-only selected processes summary */}
+                    <div className="header-processes only-print">
+                        {[
+                            { key: 'cutting', label: 'CUTTING' },
+                            { key: 'dieCutting', label: 'DIE CUT' },
+                            { key: 'lamination', label: 'LAMINATION' },
+                            { key: 'binding', label: 'BINDING' },
+                            { key: 'creasing_perf', label: 'CREASING / PERF' },
+                            { key: 'cornerCut', label: 'CORNER CUT' },
+                            { key: 'ncBox', label: 'VC BOX' }
+                        ].filter(p => {
+                            if (p.key === 'creasing_perf') {
+                                return formData.processes.creasing || formData.processes.perforation;
+                            }
+                            return (formData.processes as any)[p.key];
+                        }).map(p => (
+                            <span key={p.key} className="process-label-tag">{p.label}</span>
+                        ))}
                     </div>
                     {/* Total Items & VC Box Row */}
                     <div className="header-row header-row-separator">

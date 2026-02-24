@@ -26,12 +26,15 @@ interface SectionProps {
 
 export const BindingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section" data-section="binding" data-checked={String(formData.processes.binding)}>
+        <div className="card-section" data-checked={formData.processes.binding}>
             <div className="section-header">BINDING</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
 
             <BindingRow
@@ -138,18 +141,21 @@ export const BindingSection: React.FC<SectionProps> = ({ jobData, customerName, 
 
 export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section" data-section="cornerCutting" data-checked={String(formData.processes.cornerCut)}>
+        <div className="card-section" data-checked={formData.processes.cornerCut}>
             <div className="section-header">CORNER CUTTING</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
-            <div className="field-row">
-                <span className="field-label-sm">NO OF CARDS</span>
+            <div className="field-row no-print-row no-print">
+                <span className="field-label-sm no-print">NO OF CARDS</span>
                 <input
                     type="text"
-                    className="field-input-inline"
+                    className="field-input-inline no-print"
                     value={formData.cornerCutting.noOfCards}
                     onChange={(e) => setFormData(prev => ({
                         ...prev,
@@ -157,7 +163,7 @@ export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customer
                         processes: { ...prev.processes, cornerCut: true }
                     }))}
                 />
-                <label className="checkbox-item-sm" style={{ marginLeft: '10px' }}>
+                <label className="checkbox-item-sm corner-label-all" style={{ marginLeft: '10px' }}>
                     <input
                         type="checkbox"
                         checked={Object.values(formData.cornerCutting.corners).every(Boolean)}
@@ -218,39 +224,44 @@ export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customer
 
 export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section" data-section="lamination" data-checked={String(formData.processes.lamination)}>
+        <div className="card-section" data-checked={formData.processes.lamination}>
             <div className="section-header">LAMINATION</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
 
-            {(['glossy', 'matt', 'velvet'] as const).map((type, i) => (
-                <LaminationRow
-                    key={type}
-                    label={type.charAt(0).toUpperCase() + type.slice(1)}
-                    isChecked={(formData.lamination as any)[type]}
-                    onChange={(checked) => setFormData(prev => ({
-                        ...prev,
-                        lamination: { ...prev.lamination, [type]: checked },
-                        processes: { ...prev.processes, lamination: true }
-                    }))}
-                    qty={(formData.lamination as any)[`${type}Qty`]}
-                    onQtyChange={(val) => setFormData(prev => ({
-                        ...prev,
-                        lamination: { ...prev.lamination, [`${type}Qty`]: val },
-                        processes: { ...prev.processes, lamination: true }
-                    }))}
-                    side={(formData.lamination as any)[`${type}Side`]}
-                    onSideChange={(val) => setFormData(prev => ({
-                        ...prev,
-                        lamination: { ...prev.lamination, [`${type}Side`]: val },
-                        processes: { ...prev.processes, lamination: true }
-                    }))}
-                    rowIndex={i}
-                />
-            ))}
+            {
+                (['glossy', 'matt', 'velvet'] as const).map((type, i) => (
+                    <LaminationRow
+                        key={type}
+                        label={type.charAt(0).toUpperCase() + type.slice(1)}
+                        isChecked={(formData.lamination as any)[type]}
+                        onChange={(checked) => setFormData(prev => ({
+                            ...prev,
+                            lamination: { ...prev.lamination, [type]: checked },
+                            processes: { ...prev.processes, lamination: true }
+                        }))}
+                        qty={(formData.lamination as any)[`${type}Qty`]}
+                        onQtyChange={(val) => setFormData(prev => ({
+                            ...prev,
+                            lamination: { ...prev.lamination, [`${type}Qty`]: val },
+                            processes: { ...prev.processes, lamination: true }
+                        }))}
+                        side={(formData.lamination as any)[`${type}Side`]}
+                        onSideChange={(val) => setFormData(prev => ({
+                            ...prev,
+                            lamination: { ...prev.lamination, [`${type}Side`]: val },
+                            processes: { ...prev.processes, lamination: true }
+                        }))}
+                        rowIndex={i}
+                    />
+                ))
+            }
 
             {/* Other - Custom Lamination Type */}
             <div className="lamination-type-row" data-row-checked={formData.lamination.other}>
@@ -341,12 +352,15 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
 
 export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section creasing-section" data-section="creasing" data-checked={String(formData.processes.creasing || formData.processes.perforation)}>
-            <div className="section-header">CREASING & PERFORATION</div>
+        <div className="card-section" data-checked={formData.processes.creasing || formData.processes.perforation}>
+            <div className="section-header">CREASING / PERF</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
             <div className="field-row no-print">
                 <span className="field-label-sm">NO OF SHEETS</span>
@@ -403,12 +417,15 @@ export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName,
 
 export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section die-cutting-section" data-section="dieCutting" data-checked={String(formData.processes.dieCutting)}>
+        <div className="card-section" data-checked={formData.processes.dieCutting}>
             <div className="section-header">DIE CUTTING</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
             <div className="field-row no-print">
                 <span className="field-label-sm">NO OF SHEETS</span>
@@ -426,7 +443,7 @@ export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerNam
 
             <div className="die-cutting-table">
                 <div className="die-table-header">
-                    <div className="die-table-cell">NO OF SHEETS</div>
+                    <div className="die-table-cell">SHEETS</div>
                     <div className="die-table-cell">CUT</div>
                     <div className="die-table-cell">TIMING</div>
                 </div>
@@ -523,14 +540,17 @@ export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerNam
 
 export const CuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
     return (
-        <div className="card-section cutting-details-section" data-section="cutting" data-checked={String(formData.processes.cutting)}>
+        <div className="card-section" data-checked={formData.processes.cutting}>
             <div className="section-header">CUTTING</div>
             <div className="section-identifiers">
-                <span className="identifier-field">JOB ID: {jobData.jobId}</span>
-                <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
-                <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
             </div>
-            <div className="field-row no-print">
+            <div className="field-row">
                 <span className="field-label-sm">NO OF CUTTING</span>
                 <input
                     type="text"
