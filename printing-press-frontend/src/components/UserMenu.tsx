@@ -25,37 +25,38 @@ export default function UserMenu() {
     const initial = user.name ? user.name.charAt(0).toUpperCase() : 'U'
 
     return (
-        <div className="user-menu-container" ref={menuRef}>
-            <button className="user-menu-btn" onClick={() => setIsOpen(!isOpen)}>
-                <div className="user-avatar-small">{initial}</div>
-                <div className="user-menu-details">
-                    <span style={{ fontSize: '0.75rem', fontWeight: 600, display: 'block' }}>{user.name.split(' ')[0]}</span>
-                    <span style={{ fontSize: '0.625rem', color: '#6b7280' }}>
-                        {user.roles && user.roles[0] === 'CUSTOMER' ? 'Customer' : 'Staff'}
-                    </span>
+        <div className="user-menu-elite" ref={menuRef}>
+            <button className="user-trigger-pill" onClick={() => setIsOpen(!isOpen)}>
+                <div className="user-avatar-mini">{initial}</div>
+                <div className="user-details-mini">
+                    <span className="user-name">{user.name.split(' ')[0]}</span>
+                    <svg className={`chevron ${isOpen ? 'open' : ''}`} viewBox="0 0 24 24" width="16" height="16">
+                        <path fill="currentColor" d="M7 10l5 5 5-5H7z"/>
+                    </svg>
                 </div>
-                <svg className="user-menu-chevron" width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ transform: isOpen ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 9l-7 7-7-7" />
-                </svg>
             </button>
 
             {isOpen && (
-                <div className="user-dropdown">
-                    <div
+                <div className="user-dropdown-luxury">
+                    <div className="dropdown-info">
+                        <strong>{user.name}</strong>
+                        <span>{user.roles && user.roles[0] === 'CUSTOMER' ? 'Customer' : 'Staff Member'}</span>
+                    </div>
+                    <div style={{ height: '1px', background: '#f1f5f9', margin: '0.5rem 0' }} />
+                    <button
                         className="dropdown-item"
                         onClick={() => { setIsOpen(false); navigate('/profile'); }}
                     >
-                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="mr-2 inline"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
                         My Profile
-                    </div>
-                    <div style={{ height: '1px', background: '#f3f4f6', margin: '0.25rem 0' }}></div>
-                    <div
-                        className="dropdown-item danger"
+                    </button>
+                    <button
+                        className="dropdown-item logout"
                         onClick={() => { setIsOpen(false); logout(); navigate('/login'); }}
                     >
-                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                        <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24" className="mr-2 inline"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
                         Logout
-                    </div>
+                    </button>
                 </div>
             )}
         </div>

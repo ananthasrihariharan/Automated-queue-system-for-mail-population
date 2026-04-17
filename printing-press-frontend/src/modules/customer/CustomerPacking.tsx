@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { api } from '../../services/api'
 import './CustomerPacking.css'
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+const BACKEND_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
 
 type Parcel = {
   parcelNo: number

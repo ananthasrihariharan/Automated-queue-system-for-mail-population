@@ -7,13 +7,6 @@ import './CashierDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchCashierJobs } from '../../services/api'
 
-type Job = {
-  jobId: string
-  customerName: string
-  paymentStatus: 'UNPAID' | 'PAID'
-  jobStatus?: string
-}
-
 import DateFilter from '../../components/DateFilter'
 import Pagination from '../../components/Pagination'
 
@@ -21,22 +14,26 @@ import Pagination from '../../components/Pagination'
 
 export default function CashierDashboard() {
   const queryClient = useQueryClient()
-  const { data: jobs = [], isLoading: loading } = useQuery<Job[]>({
-    queryKey: ['cashier-jobs'],
-    queryFn: fetchCashierJobs,
-    refetchInterval: 5000,
-  })
 
-  // const { logout, user } = useAuth()
-  // const navigate = useNavigate()
-
-  // Filtering & Pagination State
+  // Filtering & Pagination State - MOVE BEFORE useQuery to avoid hoisting error
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
-  const [hideDispatched, setHideDispatched] = useState(true) // Default to true for Cashier
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
-  const [currentPage, setCurrentPage] = useState(1)
-  const itemsPerPage = 25
+  const [hideDispatched, setHideDispatched] = useState(true)
+  const [dateFilter, setDateFilter] = useState('')
+
+  const { data: responseData, isLoading: loading } = useQuery({
+    queryKey: ['cashier-jobs', currentPage],
+    queryFn: () => fetchCashierJobs(currentPage, itemsPerPage),
+    refetchInterval: 10000,
+    staleTime: 30000,
+    placeholderData: (previousData: any) => previousData,
+  })
+
+  // Handle both legacy (array) and new (object) API responses
+  const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
+  const totalPages = responseData?.pages || 1
 
   const markPaid = async (jobId: string) => {
     if (!window.confirm(`Mark Job #${jobId} as PAID?`)) return
@@ -48,31 +45,24 @@ export default function CashierDashboard() {
     }
   }
 
-  // Derived Data: Filtering & Sorting
+  // Derived Data: Filtering & Sorting (Still useful for refined searching within the 30-day window)
   const filteredJobs = jobs
-    .filter(job => {
+    .filter((job: any) => {
       const matchesSearch =
         job.jobId.toLowerCase().includes(search.toLowerCase()) ||
         job.customerName.toLowerCase().includes(search.toLowerCase())
       const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
       const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
 
-      // Date Filtering (Client-Side) - Using createdAt mostly
-      // Assuming jobs have 'createdAt' field.
-      // If a job doesn't have createdAt, we might skip or include. Safest is to include if missing, but typically it exists.
       const jobDate = (job as any).createdAt ? new Date((job as any).createdAt).toISOString().split('T')[0] : ''
       const matchesDate = !dateFilter || jobDate === dateFilter
 
       return matchesSearch && matchesPayment && isNotDispatched && matchesDate
     })
-    .sort((a, b) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true, sensitivity: 'base' })) // Natural Numeric Sort
+    .sort((a: any, b: any) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true, sensitivity: 'base' })) // Natural Numeric Sort
 
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredJobs.length / itemsPerPage)
-  const paginatedJobs = filteredJobs.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+  // Paginated jobs are now the entire 'jobs' from the server, but we keep filteredJobs for the search UI
+  const displayJobs = filteredJobs
 
   if (loading) {
     // ... loading state
@@ -153,15 +143,15 @@ export default function CashierDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {paginatedJobs.length === 0 ? (
+                {displayJobs.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="empty-state">
                       No jobs found matching the filters
                     </td>
                   </tr>
                 ) : (
-                  paginatedJobs.map((job: any, index: number) => ( // Changed from 'jobs' to 'paginatedJobs'
-                    <tr key={job.jobId} className="dispatch-row"> {/* Changed from job._id to job.jobId */}
+                  displayJobs.map((job: any, index: number) => (
+                    <tr key={job.jobId} className="dispatch-row">
                       <td style={{ fontWeight: 600, color: '#64748b' }}>
                         {(currentPage - 1) * itemsPerPage + index + 1}
                       </td>

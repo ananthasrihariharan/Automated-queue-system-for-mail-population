@@ -5,6 +5,9 @@ const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 
 const Job = require('../models/Job')
+const activityTracker = require('../middleware/activityTracker')
+
+router.use(activityTracker)
 
 /**
  * GET JOBS FOR DISPATCH
@@ -17,7 +20,7 @@ router.get(
     authorize('DISPATCH'),
     async (req, res) => {
         try {
-            const { status, date } = req.query
+            const { status, date, search } = req.query
             const page = parseInt(req.query.page) || 1
             const limit = parseInt(req.query.limit) || 50
             const skip = (page - 1) * limit
@@ -35,8 +38,14 @@ router.get(
                 filter.jobStatus = 'DISPATCHED'
             }
 
-            // Date Filtering (Overrides Fresh Daily default)
-            if (date) {
+            if (search) {
+                const searchRegex = new RegExp(search, 'i');
+                filter.$or = [
+                    { jobId: searchRegex },
+                    { customerName: searchRegex }
+                ];
+                // When doing a global search, don't restrict by date
+            } else if (date) {
                 const queryDate = new Date(date)
                 const nextDay = new Date(queryDate)
                 nextDay.setDate(nextDay.getDate() + 1)
@@ -96,6 +105,7 @@ router.get(
                     packingOverride: 1,
                     createdAt: 1,
                     defaultDeliveryType: 1,
+                    contactMe: 1,
                     customerId: 1 // Include customerId for population
                 }
             ).sort({ createdAt: -1 })
@@ -187,6 +197,11 @@ router.patch(
             }
 
             await job.save()
+
+            // Update Activity
+            req.user.lastLoginAt = new Date()
+            await req.user.save()
+
             res.json({ message: 'Parcels reorganized successfully', job })
         } catch (err) {
             res.status(500).json({ message: 'Server error' })
@@ -241,6 +256,8 @@ router.patch(
                 job.rackLocation = rack
             }
 
+            job.packedBy = req.user._id
+
             await job.save()
 
             // Check if all parcels are now PACKED (or DISPATCHED)
@@ -249,6 +266,8 @@ router.patch(
                 job.jobStatus = 'PACKED'
                 await job.save()
             }
+
+            await job.save()
 
             res.json({ message: 'Parcel packed and rack saved', parcel: activeParcel, jobStatus: job.jobStatus })
         } catch (err) {
@@ -367,6 +386,7 @@ router.patch(
             }
 
             await job.save()
+
             res.json({ message: 'Parcel dispatched (Handover/Courier)', parcelNo, jobStatus: job.jobStatus })
         } catch (err) {
             res.status(500).json({ message: 'Server error' })

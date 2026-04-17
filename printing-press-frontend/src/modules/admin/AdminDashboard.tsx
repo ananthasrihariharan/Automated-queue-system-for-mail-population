@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { api } from '../../services/api'
 import UserMenu from '../../components/UserMenu'
 import EmployeeManager from './EmployeeManager'
 import CustomerManager from './CustomerManager'
+import AdminReports from './AdminReports'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './AdminDashboard.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -17,7 +18,9 @@ type Job = {
   createdBy?: { name: string }
   paymentHandledBy?: { name: string }
   dispatchedBy?: { name: string }
+  packedBy?: { name: string }
   defaultDeliveryType?: string
+  contactMe?: boolean
 }
 
 import DateFilter from '../../components/DateFilter'
@@ -27,7 +30,7 @@ import Pagination from '../../components/Pagination'
 
 export default function AdminDashboard() {
 
-  const [activeTab, setActiveTab] = useState<'jobs' | 'employees' | 'customers'>('jobs')
+  const [activeTab, setActiveTab] = useState<'jobs' | 'employees' | 'customers' | 'reports' | 'queue'>('jobs')
 
   // Filtering & Pagination State
   const [search, setSearch] = useState('')
@@ -38,12 +41,18 @@ export default function AdminDashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 10
 
-  const { data: jobs = [], isLoading: loading } = useQuery<Job[]>({
-    queryKey: ['admin-jobs', dateFilter],
-    queryFn: () => fetchAdminJobs(dateFilter),
-    refetchInterval: 5000,
+  const { data: responseData, isLoading: loading } = useQuery({
+    queryKey: ['admin-jobs', dateFilter, currentPage],
+    queryFn: () => fetchAdminJobs(dateFilter, currentPage, itemsPerPage),
+    refetchInterval: 10000,
+    staleTime: 30000,
+    placeholderData: (previousData: any) => previousData,
     enabled: activeTab === 'jobs',
   })
+
+  // Handle both legacy (array) and new (object) API responses
+  const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
+  const totalPages = responseData?.pages || 1
 
   // State for inline approval notes
   const [approvalNotes, setApprovalNotes] = useState<Record<string, string>>({})
@@ -67,8 +76,14 @@ export default function AdminDashboard() {
     }
   }
 
+  // Reset pagination when search or filters change to avoid "empty page" issues
+  // This handles cases where a search narrows results such that the current page no longer exists.
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [search, paymentFilter, statusFilter, hideDispatched, dateFilter])
+
   // Derived Data: Filtering & Sorting
-  const filteredJobs = (jobs || [])
+  const displayJobs = (jobs || [])
     .filter((job: Job) => {
       const matchesSearch =
         job.jobId.toLowerCase().includes(search.toLowerCase()) ||
@@ -77,20 +92,9 @@ export default function AdminDashboard() {
       const matchesStatus = statusFilter === 'ALL' || job.jobStatus === statusFilter
       const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
 
-      // Client-side date filtering is REMOVED because backend handles it now.
-      // If dateFilter is present, backend returns only matching range.
-      // If dateFilter is empty, backend returns Fresh Daily backlog.
-
       return matchesSearch && matchesPayment && matchesStatus && isNotDispatched
     })
-    .sort((a: Job, b: Job) => a.jobId.localeCompare(b.jobId)) // Ascending Sort by Job ID
-
-  // Pagination Logic
-  const totalPages = Math.ceil(filteredJobs.length / itemsPerPage)
-  const paginatedJobs = filteredJobs.slice(
-    (currentPage - 1) * itemsPerPage,
-    currentPage * itemsPerPage
-  )
+    .sort((a: Job, b: Job) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true, sensitivity: 'base' })) // Natural Numeric Sort
 
   return (
     <div className="admin-page">
@@ -123,6 +127,25 @@ export default function AdminDashboard() {
             >
               <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"></path></svg>
               <span className="tab-label">Customers</span>
+            </button>
+
+            <button
+              onClick={() => setActiveTab('reports')}
+              className={`dashboard-tab ${activeTab === 'reports' ? 'active' : ''}`}
+              title="Reports"
+            >
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path></svg>
+              <span className="tab-label">Reports</span>
+            </button>
+
+            <button
+              onClick={() => window.location.href = '/admin/queue'}
+              className="dashboard-tab"
+              style={{ background: 'rgba(96, 165, 250, 0.1)', color: '#60a5fa' }}
+              title="Queue Control"
+            >
+              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 10h16M4 14h16M4 18h16"></path></svg>
+              <span className="tab-label">Queue Control</span>
             </button>
           </div>
         </div>
@@ -205,20 +228,21 @@ export default function AdminDashboard() {
                       <th>Job ID</th>
                       <th>Customer</th>
                       <th>Submitted By</th>
+                      <th>Packed By</th>
                       <th>Payment Status</th>
                       <th>Dispatched By</th>
                       <th className="text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {paginatedJobs.length === 0 ? (
+                    {displayJobs.length === 0 ? (
                       <tr>
-                        <td colSpan={6} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
+                        <td colSpan={8} style={{ textAlign: 'center', padding: '2rem', color: '#6b7280' }}>
                           No jobs found matching the filters.
                         </td>
                       </tr>
                     ) : (
-                      paginatedJobs.map((job, index) => (
+                      displayJobs.map((job: Job, index: number) => (
                         <tr key={job.jobId} className="dispatch-row">
                           <td>
                             <span style={{ fontWeight: 600, color: '#64748b' }}>
@@ -246,8 +270,20 @@ export default function AdminDashboard() {
                             </div>
                           </td>
                           <td>
+                            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                              <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
+                                {job.createdBy?.name || '—'}
+                              </span>
+                              {!!job.contactMe && (
+                                <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#f5f3ff', color: '#6d28d9', borderRadius: '4px', fontWeight: 700, width: 'fit-content' }}>
+                                  CONTACT ME
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                          <td>
                             <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#64748b' }}>
-                              {job.createdBy?.name || '—'}
+                              {job.packedBy?.name || '—'}
                             </span>
                           </td>
                           <td>
@@ -312,6 +348,7 @@ export default function AdminDashboard() {
 
       {activeTab === 'employees' && <EmployeeManager />}
       {activeTab === 'customers' && <CustomerManager />}
+      {activeTab === 'reports' && <AdminReports />}
     </div>
   )
 }

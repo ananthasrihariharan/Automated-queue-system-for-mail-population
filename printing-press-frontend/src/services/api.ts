@@ -13,23 +13,39 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
-export const fetchPrepressJobs = async () => {
-  const res = await api.get('/api/prepress/jobs')
+export const fetchPrepressJobs = async (page: number = 1, limit: number = 50) => {
+  const res = await api.get(`/api/prepress/jobs?page=${page}&limit=${limit}`)
   return res.data
 }
 
-export const fetchDispatchJobs = async (status: string = 'active', page: number = 1, limit: number = 50, date: string = '') => {
-  const res = await api.get(`/api/dispatch/jobs?status=${status}&page=${page}&limit=${limit}&date=${date}`)
+export const fetchDispatchJobs = async (status: string = 'active', page: number = 1, limit: number = 50, date: string = '', search: string = '') => {
+  const res = await api.get(`/api/dispatch/jobs?status=${status}&page=${page}&limit=${limit}&date=${date}&search=${search}`)
   return res.data
 }
 
-export const fetchCashierJobs = async () => {
-  const res = await api.get('/api/cashier/jobs')
+export const fetchCashierJobs = async (page: number = 1, limit: number = 50) => {
+  const res = await api.get(`/api/cashier/jobs?page=${page}&limit=${limit}`)
   return res.data
 }
 
-export const fetchAdminJobs = async (date: string = '') => {
-  const res = await api.get(`/api/admin/jobs?date=${date}`)
+export const fetchAdminJobs = async (date: string = '', page: number = 1, limit: number = 50) => {
+  const res = await api.get(`/api/admin/jobs?date=${date}&page=${page}&limit=${limit}`)
+  return res.data
+}
+
+export const fetchStaffProductivity = async (
+  role: string = 'PREPRESS',
+  timeframe: string = 'today',
+  month?: string,
+  startDate?: string,
+  endDate?: string
+) => {
+  const params = new URLSearchParams({ role, timeframe });
+  if (month) params.append('month', month);
+  if (startDate) params.append('startDate', startDate);
+  if (endDate) params.append('endDate', endDate);
+
+  const res = await api.get(`/api/admin/reports/staff-productivity?${params.toString()}`)
   return res.data
 }
 

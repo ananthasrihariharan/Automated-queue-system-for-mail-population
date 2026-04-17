@@ -1,4 +1,4 @@
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { createPortal } from 'react-dom'
 import { api } from '../../services/api'
 import { endpoints } from '../../services/endpoints'
@@ -31,6 +31,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   const [overrideReason, setOverrideReason] = useState('')
   const [reorgMode, setReorgMode] = useState<'SINGLE' | 'MULTIPLE' | 'MIXED'>('SINGLE')
   const [newParcelType, setNewParcelType] = useState<'COURIER' | 'WALK_IN'>('COURIER')
+  const [visibleItems, setVisibleItems] = useState(20)
 
   const { user } = useAuth()
 
@@ -38,7 +39,7 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
   const isApproved = job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED'
   const isCreditCustomer = job.customerId?.isCreditCustomer || false
 
-  const rackOptions = ['R1', 'R2', 'R3', 'R4', 'CB-VC', 'CB-SM', 'CB-SP', 'OUT PARCEL', 'BIG PARCEL', 'OFFC RACK']
+  const rackOptions = ['R1', 'R2', 'R3', 'R4', 'CB-VC', 'CB-SM', 'CB-SP', 'OUT PARCEL', 'BIG PARCEL', 'OFFC RACK', 'DELIVERED']
 
   const handlePack = async (parcelNo: number) => {
     const rack = parcelRacks[parcelNo]
@@ -145,6 +146,16 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
     )
   }
 
+  // Progressive rendering for large job sets
+  useEffect(() => {
+    if (visibleItems < job.totalItems) {
+      const timer = setTimeout(() => {
+        setVisibleItems(prev => Math.min(prev + 20, job.totalItems))
+      }, 100)
+      return () => clearTimeout(timer)
+    }
+  }, [visibleItems, job.totalItems])
+
 
   return (
     <>
@@ -225,10 +236,13 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                           const imgPath = job.itemScreenshots?.[i - 1]
                           const fullUrl = imgPath ? `${BACKEND_URL}/${imgPath.replace(/\\/g, '/')}` : null
 
+                          // Skip rendering if not in current "progressive" batch
+                          if (i > visibleItems) return <div key={i} style={{ width: '60px', height: '60px' }}></div>
+
                           return (
                             <div key={i} style={{ position: 'relative' }}>
                               <div
-                                className={`item-node ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''}`}
+                                className={`item-node ${isAssigned ? 'assigned' : isSelected ? 'selected' : ''} ${fullUrl ? 'shimmer' : ''}`}
                                 style={{
                                   width: '60px', height: '60px', display: 'flex', alignItems: 'center', justifyContent: 'center',
                                   border: `2px solid ${isAssigned ? '#e5e7eb' : isSelected ? '#000' : '#e5e7eb'}`,
@@ -243,6 +257,9 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                                     src={fullUrl}
                                     style={{ width: '100%', height: '100%', objectFit: 'cover', opacity: isAssigned ? 0.4 : 1 }}
                                     alt={`Item ${i}`}
+                                    loading="lazy"
+                                    decoding="async"
+                                    onLoad={(e) => (e.currentTarget.parentElement as HTMLElement).classList.remove('shimmer')}
                                   />
                                 ) : (
                                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: isAssigned ? '#9ca3af' : '#000' }}>{i}</span>
@@ -377,6 +394,8 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                               className="screenshot-pill"
                               onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
                               alt={`Item ${idx + 1}`}
+                              loading="lazy"
+                              decoding="async"
                             />
                           ))}
                           {job.itemScreenshots.length > 4 && (
@@ -478,11 +497,14 @@ function DispatchParcels({ job, onClose, onDispatched }: any) {
                             return (
                               <div key={idx} style={{ position: 'relative' }}>
                                 {fullUrl ? (
-                                  <div className="item-thumb" onClick={() => setViewImage(fullUrl)}>
+                                  <div className="item-thumb shimmer" onClick={() => setViewImage(fullUrl)}>
                                     <img
                                       src={fullUrl}
                                       style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                                       alt={`Item ${idx}`}
+                                      loading="lazy"
+                                      decoding="async"
+                                      onLoad={(e) => (e.currentTarget.parentElement as HTMLElement).classList.remove('shimmer')}
                                     />
                                   </div>
                                 ) : (
@@ -540,15 +562,17 @@ export default function DispatchDashboard() {
   const [selectedJobId, setSelectedJobId] = useState<string | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [viewMode, setViewMode] = useState<'active' | 'history'>('active')
-  const [dateFilter, setDateFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState(() => new Date().toISOString().split('T')[0])
   const [currentPage, setCurrentPage] = useState(1)
+  const [packFilter, setPackFilter] = useState<'all' | 'packed' | 'not_packed'>('all')
   const itemsPerPage = 50
 
   const queryClient = useQueryClient()
-  const { data: responseData, isLoading: loading } = useQuery({
-    queryKey: ['dispatch-jobs', viewMode, currentPage, dateFilter],
-    queryFn: () => fetchDispatchJobs(viewMode, currentPage, itemsPerPage, dateFilter),
-    refetchInterval: 5000,
+  const { data: responseData, isPlaceholderData } = useQuery({
+    queryKey: ['dispatch-jobs', viewMode, currentPage, dateFilter, searchQuery],
+    queryFn: () => fetchDispatchJobs(viewMode, currentPage, itemsPerPage, dateFilter, searchQuery),
+    refetchInterval: 10000,
+    placeholderData: (previousData: any) => previousData,
   })
 
   // Handle both legacy (array) and new (object) API responses gracefully during migration
@@ -559,18 +583,68 @@ export default function DispatchDashboard() {
 
   const filteredJobs = useMemo(() => {
     return jobs.filter((job: any) => {
-      const query = searchQuery.toLowerCase()
-      return job.jobId.toLowerCase().includes(query) ||
-        job.customerName.toLowerCase().includes(query)
+      if (packFilter === 'packed') {
+        return job.parcels?.some((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED')
+      }
+      if (packFilter === 'not_packed') {
+        return !job.parcels?.some((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED')
+      }
+      return true
     })
-  }, [jobs, searchQuery])
+  }, [jobs, packFilter])
 
   const selectedJob = useMemo(() =>
     jobs.find((j: any) => j.jobId === selectedJobId),
     [jobs, selectedJobId]
   )
 
-  if (loading) return <div className="dispatch-loading"><div className="dispatch-spinner"></div></div>
+  const highlightMatch = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    try {
+      const parts = text.split(new RegExp(`(${query})`, 'gi'));
+      return (
+        <>
+          {parts.map((part, i) =>
+            part.toLowerCase() === query.toLowerCase()
+              ? <mark key={i} style={{ backgroundColor: '#fef08a', color: '#000', borderRadius: '2px', padding: '0 1px' }}>{part}</mark>
+              : part
+          )}
+        </>
+      );
+    } catch (e) {
+      return text;
+    }
+  };
+
+  const getSearchRowStyle = (index: number) => {
+    if (viewMode !== 'active' || !searchQuery.trim()) return {};
+
+    // Base color from user image: #c7d2fe (Approximated Light Indigo/Lavender)
+    const colors = [
+      { bg: '#c7d2fe', text: '#000', sub: '#4338ca' }, // 0: User's requested color
+      { bg: '#ddd6fe', text: '#000', sub: '#5b21b6' }, 
+      { bg: '#e0e7ff', text: '#000', sub: '#4338ca' }, 
+      { bg: '#ede9fe', text: '#000', sub: '#6d28d9' }, 
+      { bg: '#f5f3ff', text: '#000', sub: '#7c3aed' }, 
+      { bg: '#faf5ff', text: '#000', sub: '#9333ea' }, 
+      { bg: '#ffffff', text: '#000', sub: '#a855f7' }, 
+    ];
+
+    const style = colors[Math.min(index, colors.length - 1)];
+    const halftonePattern = `radial-gradient(rgba(0,0,0,0.05) 1px, transparent 0)`;
+    
+    return {
+      backgroundColor: style.bg,
+      backgroundImage: index < 3 ? halftonePattern : 'none',
+      backgroundSize: '4px 4px',
+      color: style.text,
+      '--row-text-color': style.text,
+      '--row-sub-text-color': style.sub,
+      transition: 'all 0.3s ease',
+      borderLeft: `6px solid ${index === 0 ? '#4338ca' : 'transparent'}`
+    };
+  };
+
 
   return (
     <div className="dispatch-page">
@@ -607,6 +681,18 @@ export default function DispatchDashboard() {
       <div className="dispatch-filters-bar">
         <div className="dispatch-header-actions">
           <DateFilter value={dateFilter} onChange={setDateFilter} />
+          <div className="dispatch-sort-wrapper">
+            <label className="dispatch-sort-label">Pack Status</label>
+            <select
+              className="dispatch-sort-control"
+              value={packFilter}
+              onChange={e => setPackFilter(e.target.value as any)}
+            >
+              <option value="all">All Jobs</option>
+              <option value="packed">Packed</option>
+              <option value="not_packed">Not Packed</option>
+            </select>
+          </div>
           <div className="search-wrapper">
             <svg className="search-icon" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -615,104 +701,145 @@ export default function DispatchDashboard() {
               className="filter-input search"
               placeholder="Search jobs..."
               value={searchQuery}
-              onChange={e => setSearchQuery(e.target.value)}
+              onChange={e => { setSearchQuery(e.target.value); setCurrentPage(1); }}
             />
           </div>
         </div>
       </div>
+      {!!searchQuery.trim() && (
+        <div style={{ margin: '0 0 1.5rem 0', padding: '0.625rem 1rem', background: '#f5f3ff', color: '#6d28d9', borderRadius: '0.75rem', border: '1px solid #ddd6fe', fontSize: '0.75rem', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '0.625rem', boxShadow: '0 1px 2px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', width: '20px', height: '20px', background: '#8b5cf6', borderRadius: '50%', color: '#fff' }}>
+            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+          </div>
+          <span style={{ textTransform: 'uppercase', letterSpacing: '0.025em' }}>Global Search Active:</span>
+          <span>Showing {viewMode === 'active' ? 'all undispatched' : 'all dispatched'} jobs for "{searchQuery}" across all dates</span>
+        </div>
+      )}
 
-      <div className="dispatch-table-container">
-        <table className="dispatch-table">
-          <thead>
-            <tr>
-              <th>S.No</th>
-              <th>Job ID</th>
-              <th>Customer</th>
-              <th className="mobile-label-submit">Submitted By</th>
-              <th className="mobile-label-pack">Packing</th>
-              <th>Rack</th>
-              <th>Payment</th>
-              {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
-              {viewMode === 'active' && <th className="action-header">Actions</th>}
-            </tr>
-          </thead>
-
-          <tbody>
-            {filteredJobs.length === 0 ? (
+      {!responseData ? (
+        <div className="dispatch-loading">
+          <div className="dispatch-spinner"></div>
+        </div>
+      ) : (
+        <div className={`dispatch-table-container ${isPlaceholderData ? 'stale-search' : ''}`}>
+          <table className="dispatch-table">
+            <thead>
               <tr>
-                <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
-                  No jobs found
-                </td>
+                <th>S.No</th>
+                <th>Job ID</th>
+                <th>Customer</th>
+                <th className="mobile-label-submit">Submitted By</th>
+                <th className="mobile-label-pack">Packing</th>
+                <th>Rack</th>
+                <th>Payment</th>
+                {viewMode === 'history' ? <th>Dispatched At</th> : <th>Status</th>}
+                {viewMode === 'active' && <th className="action-header">Actions</th>}
               </tr>
-            ) : (
-              filteredJobs.map((job: any, index: number) => {
-                return (
-                  <tr key={job.jobId} className="dispatch-row" onClick={() => setSelectedJobId(job.jobId)}>
-                    <td>
-                      <span style={{ fontWeight: 600, color: '#64748b' }}>
-                        {(currentPage - 1) * itemsPerPage + index + 1}
-                      </span>
-                    </td>
-                    <td>{job.jobId}</td>
-                    <td>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                        <span style={{ fontWeight: 600, color: job.customerId?.isCreditCustomer ? '#047857' : 'inherit' }}>
-                          {job.customerName}
+            </thead>
+
+            <tbody>
+              {filteredJobs.length === 0 ? (
+                <tr>
+                  <td colSpan={8} style={{ textAlign: 'center', padding: '2rem' }}>
+                    No jobs found
+                  </td>
+                </tr>
+              ) : (
+                filteredJobs.map((job: any, index: number) => {
+                  // Dynamic styling for search results (recency scale)
+                  const isSearchResult = !!searchQuery.trim();
+                  const rowStyle = getSearchRowStyle(index);
+
+                  return (
+                    <tr
+                      key={job.jobId}
+                      className={`dispatch-row ${isSearchResult ? 'search-result-row' : ''}`}
+                      style={rowStyle}
+                      onClick={() => setSelectedJobId(job.jobId)}
+                    >
+                      <td>
+                        <span style={{ fontWeight: 600, color: 'var(--row-sub-text-color, #64748b)' }}>
+                          {(currentPage - 1) * itemsPerPage + index + 1}
                         </span>
-                        {job.customerId?.isCreditCustomer && (
-                          <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#d1fae5', color: '#047857', borderRadius: '4px', fontWeight: 700 }}>
-                            CREDIT
+                      </td>
+                      <td>
+                        <span style={{ fontWeight: 800 }}>
+                          {isSearchResult ? highlightMatch(job.jobId, searchQuery) : job.jobId}
+                        </span>
+                        {job.defaultDeliveryType === 'WALK_IN' && (
+                          <span style={{ display: 'block', fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#e0f2fe', color: '#0369a1', borderRadius: '4px', fontWeight: 700, width: 'fit-content', marginTop: '0.25rem' }}>
+                            WALK-IN
                           </span>
                         )}
-                      </div>
-                    </td>
-                    <td className="submit-cell">{job.createdBy?.name || '—'}</td>
-                    <td className="pack-cell">{job.packingPreference || 'SINGLE'}</td>
-                    <td className="rack-cell">
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
-                        {[...new Set(job.parcels?.map((p: any) => p.rack).filter(Boolean) || [])].map((r: any) => (
-                          <span key={r} className="status-badge" style={{ background: '#f8fafc', border: '1px solid #e1e4e8', color: '#475569', padding: '0.125rem 0.375rem', fontSize: '0.625rem' }}>{r}</span>
-                        ))}
-                      </div>
-                    </td>
-                    <td>
-                      <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
-                        {job.paymentStatus}
-                      </span>
-                    </td>
-                    {viewMode === 'history' ? (
-                      <td>
-                        {job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                       </td>
-                    ) : (
                       <td>
-                        <div style={{ fontSize: '0.75rem' }}>
-                          <div><span className="status-badge status-packed" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>P</span> {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
-                          <div style={{ marginTop: '0.25rem' }}><span className="status-badge status-dispatched" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>D</span> {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                          <span style={{ fontWeight: 600, color: job.customerId?.isCreditCustomer ? ((rowStyle as any).color === '#fff' ? '#10b981' : '#047857') : 'inherit' }}>
+                            {isSearchResult ? highlightMatch(job.customerName, searchQuery) : job.customerName}
+                          </span>
+                          {job.customerId?.isCreditCustomer && (
+                            <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#d1fae5', color: '#047857', borderRadius: '4px', fontWeight: 700 }}>
+                              CREDIT
+                            </span>
+                          )}
                         </div>
                       </td>
-                    )}
-                    {viewMode === 'active' && (
-                      <td>
-                        <button
-                          className="btn-primary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedJobId(job.jobId);
-                          }}
-                        >
-                          Manage
-                        </button>
+                      <td className="submit-cell">
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                          <span style={{ fontWeight: 600, color: 'var(--row-sub-text-color, #64748b)' }}>{job.createdBy?.name || '—'}</span>
+                          {!!job.contactMe && (
+                            <span style={{ fontSize: '0.625rem', padding: '0.125rem 0.375rem', background: '#f5f3ff', color: '#6d28d9', borderRadius: '4px', fontWeight: 700, width: 'fit-content' }}>
+                              CONTACT ME
+                            </span>
+                          )}
+                        </div>
                       </td>
-                    )}
-                  </tr>
-                )
-              })
-            )}
-          </tbody>
-        </table>
-
-      </div >
+                      <td className="pack-cell">{job.packingPreference || 'SINGLE'}</td>
+                      <td className="rack-cell">
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.25rem' }}>
+                          {[...new Set(job.parcels?.map((p: any) => p.rack).filter(Boolean) || [])].map((r: any) => (
+                            <span key={r} className="status-badge" style={{ background: '#f8fafc', border: '1px solid #e1e4e8', color: '#475569', padding: '0.125rem 0.375rem', fontSize: '0.625rem' }}>{r}</span>
+                          ))}
+                        </div>
+                      </td>
+                      <td>
+                        <span className={`status-badge ${(job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED') ? 'status-paid' : 'status-unpaid'}`}>
+                          {job.paymentStatus}
+                        </span>
+                      </td>
+                      {viewMode === 'history' ? (
+                        <td>
+                          {job.dispatchedAt ? new Date(job.dispatchedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : 'N/A'}
+                        </td>
+                      ) : (
+                        <td>
+                          <div style={{ fontSize: '0.75rem' }}>
+                            <div><span className="status-badge status-packed" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>P</span> {job.parcels?.filter((p: any) => p.status === 'PACKED' || p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
+                            <div style={{ marginTop: '0.25rem' }}><span className="status-badge status-dispatched" style={{ padding: '0.1rem 0.3rem', fontSize: '0.625rem' }}>D</span> {job.parcels?.filter((p: any) => p.status === 'DISPATCHED').length || 0}/{job.parcels?.length || 1}</div>
+                          </div>
+                        </td>
+                      )}
+                      {viewMode === 'active' && (
+                        <td>
+                          <button
+                            className="btn-primary"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedJobId(job.jobId);
+                            }}
+                          >
+                            Manage
+                          </button>
+                        </td>
+                      )}
+                    </tr>
+                  )
+                })
+              )}
+            </tbody>
+          </table>
+        </div>
+      )}
 
       {/* Pagination Controls */}
       <Pagination

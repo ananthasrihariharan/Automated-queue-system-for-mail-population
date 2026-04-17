@@ -11,6 +11,7 @@ interface JobCardModalProps {
         totalItems: number
         attBy?: string
         date?: Date
+        isWalkIn?: boolean
     }
     onClose: () => void
 }
@@ -124,7 +125,10 @@ export default function JobCardModal({ jobData, onClose }: JobCardModalProps) {
 
                 <div className="job-card-modal-body">
                     <JobCard
-                        jobData={jobData}
+                        jobData={{
+                            ...jobData,
+                            isWalkIn: jobData.isWalkIn
+                        }}
                         formData={formData}
                         setFormData={setFormData}
                         updateProcess={updateProcess}

@@ -7,6 +7,9 @@ const authorize = require('../middleware/authorize')
 const Job = require('../models/Job')
 const Customer = require('../models/Customer')
 const { generateInitialPassword } = require('../utils/password')
+const activityTracker = require('../middleware/activityTracker')
+
+router.use(activityTracker)
 
 /**
  * GET PREPRESS JOBS (LAST 30 DAYS)
@@ -18,15 +21,20 @@ router.get(
   authorize('PREPRESS'),
   async (req, res) => {
     try {
+      const { page = 1, limit = 50 } = req.query
+      const skip = (Number(page) - 1) * Number(limit)
+
       const last30Days = new Date(
         Date.now() - 30 * 24 * 60 * 60 * 1000
       )
 
+      const filter = {
+        createdBy: req.user._id,
+        createdAt: { $gte: last30Days }
+      }
+
       const jobs = await Job.find(
-        {
-          createdBy: req.user._id,          // 🔒 ownership filter
-          createdAt: { $gte: last30Days }
-        },
+        filter,
         {
           _id: 0,
           jobId: 1,
@@ -37,12 +45,22 @@ router.get(
           packingPreference: 1,
           paymentStatus: 1,
           createdAt: 1,
-          defaultDeliveryType: 1
+          defaultDeliveryType: 1,
+          contactMe: 1
         }
-      ).sort({ createdAt: -1 })
+      )
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(Number(limit))
 
+      const total = await Job.countDocuments(filter)
 
-      res.json(jobs)
+      res.json({
+        jobs,
+        total,
+        pages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page)
+      })
     } catch (err) {
       res.status(500).json({ message: 'Server error' })
     }
@@ -110,7 +128,7 @@ router.post(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      let { jobId, customerName, customerPhone, totalItems, defaultDeliveryType = 'COURIER' } = req.body
+      let { jobId, customerName, customerPhone, totalItems, defaultDeliveryType = 'COURIER', contactMe = false } = req.body
 
       // ✅ Auto-Append Date Suffix (DDMMYY)
       const date = new Date()
@@ -184,8 +202,11 @@ router.post(
         packingPreference: req.body.packingPreference,
         paymentStatus: 'UNPAID',
         createdBy: req.user._id,
-        defaultDeliveryType
+        defaultDeliveryType,
+        contactMe: contactMe === 'true' || contactMe === true
       })
+
+      await job.save()
 
       res.status(201).json(job)
     } catch (err) {
@@ -206,7 +227,7 @@ router.patch(
   upload.array('screenshots'),
   async (req, res) => {
     try {
-      const { totalItems, keptScreenshots: keptJson, defaultDeliveryType } = req.body
+      const { totalItems, keptScreenshots: keptJson, defaultDeliveryType, contactMe } = req.body
       const files = req.files || []
       const job = await Job.findOne({ jobId: req.params.jobId, createdBy: req.user._id })
 
@@ -223,6 +244,10 @@ router.patch(
 
       if (defaultDeliveryType) {
         job.defaultDeliveryType = defaultDeliveryType
+      }
+
+      if (contactMe !== undefined) {
+        job.contactMe = contactMe === 'true' || contactMe === true
       }
 
       // Validation: Total images must match totalItems
@@ -271,6 +296,9 @@ router.patch(
       job.itemScreenshots = [...keptScreenshots, ...newImagePaths]
 
       await job.save()
+
+      await job.save()
+
       res.json({ message: 'Job updated successfully', job })
     } catch (err) {
       console.error('UPDATE JOB ERROR:', err)

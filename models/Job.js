@@ -57,6 +57,11 @@ const JobSchema = new mongoose.Schema(
       default: 'COURIER'
     },
 
+    contactMe: {
+      type: Boolean,
+      default: false
+    },
+
     paymentStatus: {
       type: String,
       enum: ['UNPAID', 'PAID', 'ADMIN_APPROVED'],
@@ -80,7 +85,8 @@ const JobSchema = new mongoose.Schema(
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',
-      required: true
+      required: true,
+      index: true
     },
     adminApprovalNote: {
       type: String
@@ -90,11 +96,18 @@ const JobSchema = new mongoose.Schema(
     },
     paymentHandledBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
+      ref: 'User',
+      index: true
     },
     dispatchedBy: {
       type: mongoose.Schema.Types.ObjectId, // Top-level final dispatch user
-      ref: 'User'
+      ref: 'User',
+      index: true
+    },
+    packedBy: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User',
+      index: true
     },
     parcels: [
       {
@@ -147,6 +160,12 @@ const JobSchema = new mongoose.Schema(
     timestamps: true
   }
 )
+
+// Compound Indices for high-performance productivity reporting
+JobSchema.index({ createdBy: 1, createdAt: -1 })
+JobSchema.index({ paymentHandledBy: 1, createdAt: -1 })
+JobSchema.index({ dispatchedBy: 1, createdAt: -1 })
+JobSchema.index({ customerId: 1, createdAt: -1 })
 
 JobSchema.pre('save', function (next) {
   if (this.parcels && this.parcels.length > 0) {

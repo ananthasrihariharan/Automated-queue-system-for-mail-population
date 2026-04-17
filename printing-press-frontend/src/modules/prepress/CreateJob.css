@@ -111,6 +111,79 @@
     font-weight: 900;
 }
 
+/* ===== Premium Checkbox Pills ===== */
+.checkbox-pills-container {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.checkbox-pill {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    padding: 0.6rem 1.25rem;
+    background: #f1f5f9;
+    border: 1px solid #e2e8f0;
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+}
+
+.checkbox-pill:hover {
+    background: #e2e8f0;
+    border-color: #cbd5e1;
+    transform: translateY(-1px);
+}
+
+.checkbox-pill input[type="checkbox"] {
+    display: none;
+}
+
+.checkbox-pill span {
+    font-size: 0.75rem;
+    font-weight: 800;
+    color: #475569;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+}
+
+/* Active State */
+.checkbox-pill[data-checked="true"] {
+    background: #0f172a;
+    border-color: #0f172a;
+    box-shadow: 0 4px 12px rgba(15, 23, 42, 0.15);
+}
+
+.checkbox-pill[data-checked="true"] span {
+    color: #ffffff;
+}
+
+/* Specific colors for flags if needed */
+.checkbox-pill[data-checked="true"].walk-in {
+    background: #2563eb;
+    /* Blue for Walk-in */
+    border-color: #2563eb;
+}
+
+.checkbox-pill[data-checked="true"].contact-me {
+    background: #7c3aed;
+    /* Purple for Contact Me */
+    border-color: #7c3aed;
+}
+
+.checkbox-pill svg {
+    width: 1rem;
+    height: 1rem;
+    transition: transform 0.2s;
+}
+
+.checkbox-pill[data-checked="true"] svg {
+    transform: scale(1.1);
+}
+
 /* ===== Autocomplete Dropdown ===== */
 .relative {
     position: relative;

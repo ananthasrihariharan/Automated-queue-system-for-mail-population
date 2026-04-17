@@ -59,6 +59,36 @@
     align-items: center;
 }
 
+.header-id-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.walk-in-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.15rem 0.5rem;
+    background: #0f172a;
+    color: white;
+    border-radius: 4px;
+    font-weight: 900;
+    font-size: 0.65rem;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    margin-left: 0.5rem;
+}
+
+@media print {
+    .walk-in-badge-inline {
+        background: #000 !important;
+        color: #fff !important;
+        border: 1px solid #000 !important;
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}
+
 .logo {
     display: flex;
     flex-direction: row;

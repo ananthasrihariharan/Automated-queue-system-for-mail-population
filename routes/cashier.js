@@ -5,6 +5,9 @@ const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 
 const Job = require('../models/Job')
+const activityTracker = require('../middleware/activityTracker')
+
+router.use(activityTracker)
 
 /**
  * GET JOBS FOR CASHIER (LAST 30 DAYS)
@@ -16,11 +19,13 @@ router.get(
   authorize('CASHIER'),
   async (req, res) => {
     try {
-      const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const { page = 1, limit = 50 } = req.query
+      const skip = (Number(page) - 1) * Number(limit)
 
-      const jobs = await Job.find({
-        createdAt: { $gte: last30Days }
-      }, {
+      const last30Days = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
+      const filter = { createdAt: { $gte: last30Days } }
+
+      const jobs = await Job.find(filter, {
         _id: 0,
         jobId: 1,
         customerName: 1,
@@ -31,8 +36,17 @@ router.get(
       }
       ).sort({ createdAt: -1 })
         .populate('customerId', 'isCreditCustomer')
+        .skip(skip)
+        .limit(Number(limit))
 
-      res.json(jobs)
+      const total = await Job.countDocuments(filter)
+
+      res.json({
+        jobs,
+        total,
+        pages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page)
+      })
     } catch (err) {
       res.status(500).json({ message: 'Server error' })
     }

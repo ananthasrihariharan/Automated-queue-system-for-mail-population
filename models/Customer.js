@@ -22,6 +22,10 @@ const CustomerSchema = new mongoose.Schema(
         isCreditCustomer: {
             type: Boolean,
             default: false
+        },
+        isPremium: {
+            type: Boolean,
+            default: false
         }
     },
     { timestamps: true }

@@ -49,23 +49,21 @@ export default function ModuleNavigation() {
     if (accessibleModules.length <= 1) return null
 
     return (
-        <div className="flex gap-1 items-center mr-2">
+        <div className="nav-segmented-pill">
             {accessibleModules.map(m => {
                 const isActive = location.pathname.startsWith(m.path)
-                if (isActive) return null
-
                 return (
                     <button
                         key={m.role}
                         onClick={() => navigate(m.path)}
-                        title={m.label}
-                        className="flex items-center gap-1 px-1.5 py-1.5 text-xs font-bold text-gray-500 rounded-md hover:bg-gray-100 hover:text-gray-900 transition-all sm:px-3 sm:gap-2"
+                        className={`nav-item-luxury ${isActive ? 'active' : ''}`}
                     >
-                        {m.icon}
-                        <span className="hidden md:inline">{m.label}</span>
+                        <span className="icon">{m.icon}</span>
+                        <span className="label">{m.label}</span>
                     </button>
                 )
             })}
+            <div className="nav-glider" />
         </div>
     )
 }

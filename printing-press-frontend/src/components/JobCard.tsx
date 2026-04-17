@@ -18,6 +18,7 @@ interface JobCardProps {
         totalItems: number
         attBy?: string
         date?: Date
+        isWalkIn?: boolean
     }
     formData: JobCardState
     setFormData: React.Dispatch<React.SetStateAction<JobCardState>>
@@ -95,9 +96,14 @@ export default function JobCard({ jobData, formData, setFormData, updateProcess 
                         <div className='logo-address'><span>Triplicane,Chennai</span></div>
                     </div>
                     <div className="header-row">
-                        <div className="header-field">
+                        <div className="header-field header-id-row">
                             <span className="field-label">JOB ID:</span>
                             <span className="field-value">{jobData.jobId}</span>
+                            {jobData.isWalkIn && (
+                                <span className="walk-in-badge-inline">
+                                    WALK-IN
+                                </span>
+                            )}
                         </div>
                         <div className="header-field">
                             <span className="field-label">CUS NAME:</span>
@@ -143,6 +149,7 @@ export default function JobCard({ jobData, formData, setFormData, updateProcess 
                         )}
 
                     </div>
+
                 </div>
 
                 {/* Top Checkbox Section */}

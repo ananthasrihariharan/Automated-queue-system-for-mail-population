@@ -16,45 +16,63 @@ type Job = {
 }
 
 
-const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
-
+import Pagination from '../../components/Pagination'
 import DateFilter from '../../components/DateFilter'
+
+const BACKEND_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
 
 // ... existing imports
 
 export default function PrepressDashboard() {
+  const [currentPage, setCurrentPage] = useState(1)
+  const itemsPerPage = 50
+
   const {
-    data: jobs = [],
+    data: responseData,
     isLoading,
-  } = useQuery<Job[]>({
-    queryKey: ['prepress-jobs'],
-    queryFn: fetchPrepressJobs,
-    refetchInterval: 5000,
+  } = useQuery({
+    queryKey: ['prepress-jobs', currentPage],
+    queryFn: () => fetchPrepressJobs(currentPage, itemsPerPage),
+    refetchInterval: 10000, // Reduced refresh frequency for better performance
+    staleTime: 30000,
+    placeholderData: (previousData: any) => previousData,
   })
+
+  // Handle both legacy (array) and new (object) API responses
+  const jobs = Array.isArray(responseData) ? responseData : (responseData?.jobs || [])
+  const totalPages = responseData?.pages || 1
 
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
   const [viewImage, setViewImage] = useState<string | null>(null)
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
-  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0]) // Default Today
+  const [dateFilter, setDateFilter] = useState('') // No default to Today for server-side search
 
   const navigate = useNavigate()
 
+  const handleDownload = (url: string, filename: string) => {
+    const link = document.createElement('a')
+    link.href = url
+    link.download = filename
+    document.body.appendChild(link)
+    link.click()
+    document.body.removeChild(link)
+  }
 
-
-  const filteredJobs = jobs.filter(job => {
+  const filteredJobs = jobs.filter((job: Job) => {
     const matchesSearch = job.jobId.toLowerCase().includes(search.toLowerCase()) ||
       job.customerName.toLowerCase().includes(search.toLowerCase())
     const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
 
-    // Date Filtering
+    // If dateFilter is present, we still do client-side filtering on the 30-day window
+    // but the core "Vast Data" protection comes from the 50-item pages.
     const jobDate = new Date(job.createdAt).toISOString().split('T')[0]
     const matchesDate = !dateFilter || jobDate === dateFilter
 
     return matchesSearch && matchesPayment && matchesDate
   })
 
-  if (isLoading) return <div className="prepress-page">Loading...</div>
+  if (isLoading && !responseData) return <div className="prepress-page">Loading...</div>
 
   return (
     <div className="prepress-page">
@@ -67,6 +85,13 @@ export default function PrepressDashboard() {
             style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem' }}
           >
             + NEW JOB
+          </button>
+          <button
+            onClick={() => navigate('/prepress/queue')}
+            className="btn-primary"
+            style={{ padding: '0.4rem 0.8rem', fontSize: '0.75rem', background: 'linear-gradient(to right, #6366f1, #8b5cf6)', border: 'none' }}
+          >
+            QUEUE MODE
           </button>
         </div>
 
@@ -190,7 +215,7 @@ export default function PrepressDashboard() {
           </thead>
 
           <tbody>
-            {filteredJobs.map((job, index) => (
+            {filteredJobs.map((job: Job, index: number) => (
               <tr key={job.jobId}>
                 <td><span style={{ fontWeight: 600, color: '#64748b' }}>{index + 1}</span></td>
                 <td>{job.jobId}</td>
@@ -216,6 +241,18 @@ export default function PrepressDashboard() {
                     >
                       Edit
                     </button>
+                    {job.itemScreenshots && job.itemScreenshots.length > 1 && (
+                      <button
+                        className="btn-download-premium btn-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          const url = `${BACKEND_URL}/api/attachments/${job.jobId}/download-all`;
+                          handleDownload(url, `${job.jobId}_all.zip`);
+                        }}
+                      >
+                        Download All
+                      </button>
+                    )}
                   </div>
                 </td>
               </tr>
@@ -223,6 +260,12 @@ export default function PrepressDashboard() {
           </tbody>
         </table>
       </div>
+
+      <Pagination
+        currentPage={currentPage}
+        totalPages={totalPages}
+        onPageChange={setCurrentPage}
+      />
 
       {/* Lightbox Modal */}
       {viewImage && (

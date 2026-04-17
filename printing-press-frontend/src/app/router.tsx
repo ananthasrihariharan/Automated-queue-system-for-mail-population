@@ -5,8 +5,10 @@ import CashierDashboard from '../modules/cashier/CashierDashboard'
 import { RoleGuard } from './role-guard'
 import DispatchDashboard from '../modules/despatch/DispatchDashboard'
 import PrepressDashboard from '../modules/prepress/PrepressDashBoard'
+import QueueDashboard from '../modules/prepress/QueueDashboard'
 import CreateJob from '../modules/prepress/CreateJob'
 import AdminDashboard from '../modules/admin/AdminDashboard'
+import AdminQueuePanel from '../modules/admin/AdminQueuePanel'
 import Unauthorized from '../pages/unauthorized'
 import CustomerPacking from '../modules/customer/CustomerPacking'
 import ProfilePage from '../pages/Profile'
@@ -49,6 +51,14 @@ export const router = createBrowserRouter([
         )
     },
     {
+        path: '/prepress/queue',
+        element: (
+            <RoleGuard allowed={['PREPRESS']}>
+                <QueueDashboard />
+            </RoleGuard>
+        )
+    },
+    {
         path: '/prepress/create',
         element: (
             <RoleGuard allowed={['PREPRESS']}>
@@ -69,6 +79,14 @@ export const router = createBrowserRouter([
         element: (
             <RoleGuard allowed={['ADMIN']}>
                 <AdminDashboard />
+            </RoleGuard>
+        )
+    },
+    {
+        path: '/admin/queue',
+        element: (
+            <RoleGuard allowed={['ADMIN']}>
+                <AdminQueuePanel />
             </RoleGuard>
         )
     },

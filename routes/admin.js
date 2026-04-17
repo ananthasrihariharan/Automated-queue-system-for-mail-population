@@ -10,6 +10,9 @@ const {
   generateInitialPassword,
   hashPassword
 } = require('../utils/password')
+const activityTracker = require('../middleware/activityTracker')
+
+router.use(activityTracker)
 
 
 
@@ -22,7 +25,8 @@ router.get(
   authorize('ADMIN'),
   async (req, res) => {
     try {
-      const { date } = req.query
+      const { page = 1, limit = 50, date } = req.query
+      const skip = (Number(page) - 1) * Number(limit)
 
       let filter = {}
 
@@ -58,15 +62,27 @@ router.get(
           createdAt: 1,
           adminApprovalNote: 1,
           customerId: 1,
-          defaultDeliveryType: 1
+          defaultDeliveryType: 1,
+          contactMe: 1,
+          packedBy: 1
         }
       ).sort({ createdAt: -1 })
         .populate('createdBy', 'name')
         .populate('paymentHandledBy', 'name')
         .populate('dispatchedBy', 'name')
+        .populate('packedBy', 'name')
         .populate('customerId', 'isCreditCustomer')
+        .skip(skip)
+        .limit(Number(limit))
 
-      res.json(jobs)
+      const total = await Job.countDocuments(filter)
+
+      res.json({
+        jobs,
+        total,
+        pages: Math.ceil(total / Number(limit)),
+        currentPage: Number(page)
+      })
     } catch (err) {
       res.status(500).json({ message: 'Server error' })
     }
@@ -98,8 +114,13 @@ router.patch(
       job.paymentStatus = 'ADMIN_APPROVED'
       job.adminApprovalNote = note || 'Approved by admin'
       job.adminApprovedAt = new Date()
+      job.paymentHandledBy = req.user._id
 
       await job.save()
+
+      // Update Activity
+      req.user.lastLoginAt = new Date()
+      await req.user.save()
 
       res.json({
         message: 'Dispatch approved by admin',

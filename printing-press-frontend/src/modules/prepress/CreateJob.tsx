@@ -26,13 +26,14 @@ export default function CreateJob() {
     const [existingScreenshots, setExistingScreenshots] = useState<string[]>([])
     const [isDragging, setIsDragging] = useState(false)
     const [isWalkIn, setIsWalkIn] = useState(false)
+    const [isContactMe, setIsContactMe] = useState(false)
     const [customerSearchResults, setCustomerSearchResults] = useState<any[]>([])
     const [showDropdown, setShowDropdown] = useState(false)
     const [highlightedIndex, setHighlightedIndex] = useState(-1)
     const searchTimeoutRef = useRef<any>(null)
 
     const [viewImage, setViewImage] = useState<string | null>(null)
-    const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || ''
+    const BACKEND_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
 
     // Load existing job details if in Edit Mode
     useEffect(() => {
@@ -51,6 +52,7 @@ export default function CreateJob() {
                         setCustomerPhone(job.customerPhone || '')
                         setExistingScreenshots(job.itemScreenshots || [])
                         setIsWalkIn(job.defaultDeliveryType === 'WALK_IN')
+                        setIsContactMe(!!job.contactMe)
                     }
                 } catch (e) {
                     console.error('Failed to fetch job for edit', e)
@@ -76,6 +78,7 @@ export default function CreateJob() {
             const data = new FormData()
             data.append('totalItems', String(formData.totalItems))
             data.append('defaultDeliveryType', isWalkIn ? 'WALK_IN' : 'COURIER')
+            data.append('contactMe', String(isContactMe))
 
             if (isEdit) {
                 // Send list of kept existing screenshots
@@ -332,16 +335,29 @@ export default function CreateJob() {
                                     />
                                 </div>
 
-                                <div className="form-group" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginTop: '1rem' }}>
-                                    <input
-                                        type="checkbox"
-                                        id="walkInCheck"
-                                        checked={isWalkIn}
-                                        onChange={(e) => setIsWalkIn(e.target.checked)}
-                                        style={{ width: '1.25rem', height: '1.25rem', cursor: 'pointer' }}
-                                    />
-                                    <label htmlFor="walkInCheck" style={{ cursor: 'pointer', fontWeight: 700, color: '#374151', fontSize: '0.875rem' }}>
-                                        Walk-in
+                                <div className="checkbox-pills-container">
+                                    <label className="checkbox-pill walk-in" data-checked={String(isWalkIn)}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isWalkIn}
+                                            onChange={(e) => setIsWalkIn(e.target.checked)}
+                                        />
+                                        <svg fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z"></path>
+                                        </svg>
+                                        <span>Walk-in</span>
+                                    </label>
+
+                                    <label className="checkbox-pill contact-me" data-checked={String(isContactMe)}>
+                                        <input
+                                            type="checkbox"
+                                            checked={isContactMe}
+                                            onChange={(e) => setIsContactMe(e.target.checked)}
+                                        />
+                                        <svg fill="currentColor" viewBox="0 0 20 20">
+                                            <path d="M2 3a1 1 0 011-1h2.153a1 1 0 01.986.836l.74 4.435a1 1 0 01-.54 1.06l-1.548.773a11.037 11.037 0 006.105 6.105l.774-1.548a1 1 0 011.059-.54l4.435.74a1 1 0 01.836.986V17a1 1 0 01-1 1h-2C7.82 18 2 12.18 2 5V3z"></path>
+                                        </svg>
+                                        <span>Contact Me</span>
                                     </label>
                                 </div>
                             </div>
@@ -512,7 +528,8 @@ export default function CreateJob() {
                         customerName: customerName,
                         totalItems: formData.totalItems,
                         attBy: user?.name || user?.username || 'N/A',
-                        date: new Date()
+                        date: new Date(),
+                        isWalkIn: isWalkIn
                     }}
                     onClose={() => setShowJobCard(false)}
                 />

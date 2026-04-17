@@ -36,6 +36,11 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ message: 'Invalid credentials' })
     }
 
+    if (!isCustomer) {
+      user.lastLoginAt = new Date()
+      await user.save()
+    }
+
     // Recover roles from legacy 'role' field if 'roles' array is empty
     let roles = []
     if (isCustomer) {
@@ -67,6 +72,7 @@ router.post('/', async (req, res) => {
     res.json({
       token,
       user: {
+        id: user._id.toString(),
         name: user.name,
         roles: roles
       }
