@@ -29,8 +29,9 @@ io.on("connection", (socket) => {
     // Staff joins their personal room for targeted job push
     socket.on("join:staff", (staffId) => {
         if (!staffId) return;
-        socket.join(`staff:${staffId}`);
-        console.log(`[Socket.io] Staff ${staffId} joined room`);
+        const room = `staff:${String(staffId).trim().toLowerCase()}`;
+        socket.join(room);
+        console.log(`[Socket.io] Staff ${staffId} joined room: ${room}`);
     });
 
     // Admin joins the admin queue room
@@ -138,12 +139,6 @@ app.use((req, res, next) => {
 // uploads (images)
 app.use("/uploads", express.static(process.env.UPLOAD_PATH || path.join(__dirname, "uploads")));
 
-// ✅ SERVE N8N JOB FILES (SECURED)
-if (process.env.N8N_WATCH_PATH) {
-    const auth = require("./middleware/auth");
-    app.use("/job-files", auth, express.static(process.env.N8N_WATCH_PATH));
-}
-
 // ✅ SERVE REACT BUILD (THIS IS THE KEY)
 app.use(
     express.static(
@@ -171,6 +166,7 @@ app.use("/api/queue", require("./routes/queue"));
 app.use("/api/admin/queue", require("./routes/admin-queue"));
 app.use("/api/messages", require("./routes/messages"));
 app.use("/api/attachments", require("./routes/attachments"));
+app.use("/job-files", require("./routes/fileProxy"));
 
 /* =======================
    SPA FALLBACK
@@ -197,9 +193,18 @@ connectDB().then(() => {
     const eventHandlers = require("./services/eventHandlers");
     eventHandlers.init(io);
 
-    // 4. Run stale session cleanup every 2 minutes
+    // 4. Run stale session cleanup (Resilient recursive loop)
     const { cleanupStaleSessions } = require("./services/queueEngine");
-    setInterval(cleanupStaleSessions, 2 * 60 * 1000);
+    const runCleanup = async () => {
+        try {
+            await cleanupStaleSessions();
+        } catch (err) {
+            console.error('[Cleanup] Loop Error:', err.message);
+        }
+        setTimeout(runCleanup, 2 * 60 * 1000); // Wait 2 mins after completion before next run
+    };
+    runCleanup();
+
     console.log('[Server] All subsystems started.');
 });
 

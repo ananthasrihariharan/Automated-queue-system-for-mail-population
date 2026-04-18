@@ -21,16 +21,48 @@ router.get(
   authorize('PREPRESS'),
   async (req, res) => {
     try {
-      const { page = 1, limit = 50 } = req.query
+      const { 
+        page = 1, 
+        limit = 50, 
+        search = '', 
+        paymentStatus = 'ALL', 
+        date = '' 
+      } = req.query
       const skip = (Number(page) - 1) * Number(limit)
 
-      const last30Days = new Date(
-        Date.now() - 30 * 24 * 60 * 60 * 1000
-      )
-
       const filter = {
-        createdBy: req.user._id,
-        createdAt: { $gte: last30Days }
+        createdBy: req.user._id
+      }
+
+      // Apply Search Filter (JobId, Name, or Phone)
+      if (search) {
+        const searchRegex = { $regex: search.trim(), $options: 'i' }
+        filter.$or = [
+          { jobId: searchRegex },
+          { customerName: searchRegex },
+          { customerPhone: searchRegex }
+        ]
+      }
+
+      // Apply Payment Filter
+      if (paymentStatus && paymentStatus !== 'ALL') {
+        filter.paymentStatus = paymentStatus
+      }
+
+      // Apply Date Filter (Exact day or default to Today)
+      if (date) {
+        // Robust parsing of YYYY-MM-DD to avoid timezone shifting
+        const [y, m, d] = date.split('-').map(Number)
+        const startOfDay = new Date(y, m - 1, d, 0, 0, 0, 0)
+        const endOfDay = new Date(y, m - 1, d, 23, 59, 59, 999)
+        filter.createdAt = { $gte: startOfDay, $lte: endOfDay }
+      } else {
+        // Default to TODAY only (User's specific requirement)
+        const startOfToday = new Date()
+        startOfToday.setHours(0, 0, 0, 0)
+        const endOfToday = new Date()
+        endOfToday.setHours(23, 59, 59, 999)
+        filter.createdAt = { $gte: startOfToday, $lte: endOfToday }
       }
 
       const jobs = await Job.find(

@@ -1,4 +1,5 @@
 const fs = require('fs')
+const fsp = require('fs').promises
 const path = require('path')
 const crypto = require('crypto')
 const IngestionTask = require('../models/IngestionTask')
@@ -8,29 +9,34 @@ const eventBus = require('./eventBus')
 /**
  * Heavy-duty worker for parsing folders, hashing files, 
  * and identifying duplicates.
+ * Refactored to use non-blocking Asynchronous I/O.
  */
 class ProcessingWorker {
   constructor() {
     this.isProcessing = false
   }
 
-  // Generic recursive file walker
-  _getAllFiles(dirPath, arrayOfFiles = []) {
-    const files = fs.readdirSync(dirPath);
-    files.forEach(file => {
-      const fullPath = path.join(dirPath, file);
-      if (fs.statSync(fullPath).isDirectory()) {
-        this._getAllFiles(fullPath, arrayOfFiles);
-      } else {
-        arrayOfFiles.push(fullPath);
+  // Generic recursive file walker (Async)
+  async _getAllFiles(dirPath, arrayOfFiles = []) {
+    try {
+      const files = await fsp.readdir(dirPath, { withFileTypes: true });
+      for (const file of files) {
+        const fullPath = path.join(dirPath, file.name);
+        if (file.isDirectory()) {
+          await this._getAllFiles(fullPath, arrayOfFiles);
+        } else {
+          arrayOfFiles.push(fullPath);
+        }
       }
-    });
+    } catch (err) {
+      console.error(`[Worker] Walker error at ${dirPath}:`, err.message);
+    }
     return arrayOfFiles;
   }
 
   async start() {
     console.log('[Worker] Starting Ingestion Worker...')
-    // Continuous polling or triggered by events
+    // Continuous polling
     setInterval(() => this.processNextTask(), 5000)
     
     eventBus.on('task:new', () => {
@@ -72,8 +78,8 @@ class ProcessingWorker {
         throw new Error('Folder does not exist')
       }
 
-      // 1. Calculate File Hashes
-      const fileData = this.getFolderFingerprint(task.folderPath)
+      // 1. Calculate File Hashes (Async)
+      const fileData = await this.getFolderFingerprint(task.folderPath)
       const fingerprint = this.computeHash(fileData)
 
       // 2. Parse Metadata
@@ -81,15 +87,10 @@ class ProcessingWorker {
       const subfolderName = path.basename(task.folderPath)
       const customerEmail = parentFolder.replace(/\s*\(\d+\)$/, '').trim()
       
-      // Detect spam type (Marketing vs No-Reply)
       const spamType = this.getSpamCategory(customerEmail, subfolderName)
       const isSpam = !!spamType;
 
-
       // 3. Duplicate & Smart Threading Logic
-      // Tier 1: Find any RECENT active job from this sender to keep them in the same thread
-      // We look for jobs currently being worked on or assigned
-      // FIX: Ensure it only groups if the subject is similar or it's an exact duplicate
       const activeJobsMatch = await QueueJob.find({
         customerEmail,
         status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }
@@ -97,7 +98,7 @@ class ProcessingWorker {
 
       let activeJobForCustomer = null;
       for (const aj of activeJobsMatch) {
-         if (aj.fingerprint === fingerprint || aj.emailSubject === subfolderName) {
+         if (aj.fingerprint === fingerprint || aj.emailSubject.toLowerCase() === subfolderName.toLowerCase()) {
              activeJobForCustomer = aj;
              break;
          }
@@ -109,25 +110,21 @@ class ProcessingWorker {
       let parentJobId = null;
       let nextVersion = 1;
 
-      // Handle Continuity & Versioning Context
       if (activeJobForCustomer) {
         existingThreadId = activeJobForCustomer.threadId || activeJobForCustomer._id.toString();
         preferredStaff = activeJobForCustomer.assignedTo?._id || activeJobForCustomer.assignedTo;
         parentJobId = activeJobForCustomer._id;
         
-        // Calculate version number
         const versionCount = await QueueJob.countDocuments({ threadId: existingThreadId });
         nextVersion = versionCount + 1;
 
-        // If the fingerprint matches exactly, it's a suspicious identical resend
         if (activeJobForCustomer.fingerprint === fingerprint) {
           isTrueDuplicate = true;
         }
       } else {
-        // If no active job, check for ANY recent job from this sender for subject-matching thread link
         const recentJob = await QueueJob.findOne({
           customerEmail,
-          emailSubject: subfolderName,
+          emailSubject: { $regex: new RegExp(`^${subfolderName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
           createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
         }).sort({ createdAt: -1 });
 
@@ -138,43 +135,43 @@ class ProcessingWorker {
         }
       }
 
-      // Check if the preferred staff is actually ONLINE right now (Availability Guard)
       let staffIsOnline = false;
       if (preferredStaff) {
         const QueueSession = require('../models/QueueSession');
-        const threeMinsAgo = new Date(Date.now() - 3 * 60 * 1000);
+        const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000);
         const activeSession = await QueueSession.findOne({
           staffId: preferredStaff,
           isActive: true,
-          lastSeenAt: { $gte: threeMinsAgo }
+          lastSeenAt: { $gte: ninetyMinsAgo }
         });
         if (activeSession) staffIsOnline = true;
       }
 
-      // 4. Calculate SLA (Default 4 hours from now)
       const dueBy = new Date()
       dueBy.setHours(dueBy.getHours() + 4)
 
-      // 5. Build Job Data
       const watchPath = process.env.N8N_WATCH_PATH
       const nextPosition = Date.now()
 
-      // 5. Read files from folder
-      const allFiles = fs.readdirSync(task.folderPath);
-      // Filter hidden files and only include real files (not subdirs)
-      // ALSO: Filter out text/html files because their content is ingested into mailBody (Redundancy Removal)
-      const attachments = allFiles.filter(f => {
-        if (f.startsWith('.')) return false;
-        if (/\.(txt|html|htm)$/i.test(f)) return false; // Redundancy Removal
-        try { return fs.statSync(path.join(task.folderPath, f)).isFile(); } catch { return false; }
-      });
+      // 5. Read files (Async)
+      const allFilesList = await fsp.readdir(task.folderPath);
+      const attachments = [];
+      const txtFiles = [];
 
-      // Separate text files for mail body ingestion — sorted for predictable order
-      const txtFiles = allFiles
-        .filter(f => /\.(txt|html|htm)$/i.test(f))
-        .sort()
+      for (const f of allFilesList) {
+        if (f.startsWith('.')) continue;
+        const full = path.join(task.folderPath, f);
+        const stat = await fsp.stat(full);
+        if (stat.isDirectory()) continue;
 
-      // Simple HTML tag stripper for .html email files
+        if (/\.(txt|html|htm)$/i.test(f)) {
+          txtFiles.push(f);
+        } else {
+          attachments.push(f);
+        }
+      }
+      txtFiles.sort();
+
       const stripHtml = (html) => html
         .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
         .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -182,12 +179,10 @@ class ProcessingWorker {
         .replace(/&amp;/g,'&').replace(/&lt;/g,'<').replace(/&gt;/g,'>')
         .replace(/&nbsp;/g,' ').replace(/\s{3,}/g, '\n\n').trim()
 
-      // Read and concatenate all text file content to form the mailBody
       let mailBody = '';
       for (const txtFile of txtFiles) {
         try {
-          let content = fs.readFileSync(path.join(task.folderPath, txtFile), 'utf-8');
-          // Strip HTML tags if it's an HTML file
+          let content = await fsp.readFile(path.join(task.folderPath, txtFile), 'utf-8');
           if (/\.html?$/i.test(txtFile)) content = stripHtml(content)
           if (content.trim()) mailBody += content.trim() + '\n\n---\n\n';
         } catch (readErr) {
@@ -197,14 +192,10 @@ class ProcessingWorker {
       mailBody = mailBody.replace(/---\n\n$/, '').trim()
 
       const isFollowUp = !!activeJobForCustomer;
-      // Rule: Different Files + Known Active Staff + Online -> AUTO-ASSIGN
       const shouldAutoAssign = isFollowUp && preferredStaff && staffIsOnline;
       
-      // Rule: Same Files + Active Session -> ADMIN_REVIEW
-      // Normal path -> QUEUED
       let jobStatus = isTrueDuplicate ? 'ADMIN_REVIEW' : (shouldAutoAssign ? 'ASSIGNED' : 'QUEUED');
       
-      // Categorize spam: Marketing -> JUNK, No-Reply -> ADMIN_REVIEW
       if (spamType === 'MARKETING') {
         jobStatus = 'JUNK';
       } else if (spamType === 'NOREPLY') {
@@ -229,10 +220,10 @@ class ProcessingWorker {
         version: nextVersion,
         parentJobId: parentJobId,
         isAutoAssigned: shouldAutoAssign,
-        continuityContext: shouldAutoAssign ? `Continuity: Auto-assigned to ${activeJobForCustomer.assignedTo?.name || 'original handler'}` : (isTrueDuplicate ? 'Identical files detected. Verify if accident or deliberate resend.' : ''),
+        continuityContext: shouldAutoAssign ? `Continuity: Auto-assigned to ${activeJobForCustomer.assignedTo?.name || 'original handler'}` : (isTrueDuplicate ? 'Identical content detected. System suggests duplicate arrival.' : ''),
         assignedTo: shouldAutoAssign ? preferredStaff : null,
         assignedAt: shouldAutoAssign ? new Date() : null,
-        returnReason: spamType === 'MARKETING' ? 'Auto-detected Marketing/Spam' : (spamType === 'NOREPLY' ? 'System No-Reply (Admin Review Required)' : (isTrueDuplicate ? 'Suspicious Duplicate (Review Required)' : (isFollowUp ? `Revision v${nextVersion} detected` : ''))),
+        returnReason: spamType === 'MARKETING' ? 'Auto-detected Marketing/Spam' : (spamType === 'NOREPLY' ? 'System No-Reply (Admin Review Required)' : (isTrueDuplicate ? 'Content Duplicate (Review Required)' : (isFollowUp ? `Revision v${nextVersion} detected` : ''))),
         externalLinks: this.extractExternalLinks(mailBody),
         auditLog: [{
           action: 'JOB_INGESTED',
@@ -240,28 +231,16 @@ class ProcessingWorker {
           details: { 
             textFilesIngested: txtFiles.length, 
             attachmentsIngested: attachments.length,
-            linksExtracted: (this.extractExternalLinks(mailBody)).length,
             fingerprint: fingerprint.substring(0, 8)
           }
         }]
       }
 
-      if (isFollowUp) {
-        jobData.auditLog.push({
-          action: 'FOLLOW_UP_DETECTED',
-          timestamp: new Date(),
-          details: { parentThread: existingThreadId, originalStaff: preferredStaff }
-        })
-      }
-
       const job = await QueueJob.create(jobData)
-
-      // 6. Update Task
       task.status = 'COMPLETED'
       task.completedAt = new Date()
       await task.save()
 
-      // 6. AUTO-CLEANUP: If this is a new arrival for an active thread, supersede any older QUEUED jobs
       if (isFollowUp && existingThreadId) {
         const supersedeType = isTrueDuplicate ? 'Identical Resend' : `Revision v${nextVersion}`;
         const superseded = await QueueJob.updateMany(
@@ -301,23 +280,21 @@ class ProcessingWorker {
     }
   }
 
-  getFolderFingerprint(folderPath) {
-    const files = this._getAllFiles(folderPath);
-    // Sort files to ensure stable fingerprinting
+  async getFolderFingerprint(folderPath) {
+    const files = await this._getAllFiles(folderPath);
     files.sort();
 
     let summary = [`SUBJECT:${path.basename(folderPath)}`, `COUNT:${files.length}`];
     
     for (const fullPath of files) {
       try {
-        const stats = fs.statSync(fullPath);
-        let contentSample = '';
-        
-        // Filter: Ignore volatile email body files (.txt, .html) for stable fingerprinting
+        const stat = await fsp.stat(fullPath);
         const isVolatile = /\.(txt|html|htm)$/i.test(fullPath);
         if (isVolatile) continue;
 
-        summary.push(`${path.relative(folderPath, fullPath)}:${stats.size}:${contentSample}`);
+        // Robust Identification: Hash the first 8KB (Sample) + Size
+        const sampleHash = await this._getFileSampleHash(fullPath, stat.size);
+        summary.push(`${path.relative(folderPath, fullPath)}:${stat.size}:${sampleHash}`);
       } catch (err) {
         console.error(`[Worker] Fingerprint error for ${fullPath}:`, err.message);
       }
@@ -325,66 +302,66 @@ class ProcessingWorker {
     return summary.join('|');
   }
 
+  /**
+   * Reads a slice of the file to generate a content-based sample hash.
+   * Prevents collisions while being performant for large assets.
+   */
+  async _getFileSampleHash(filePath, totalSize) {
+    if (totalSize === 0) return 'empty';
+    
+    try {
+      const handle = await fsp.open(filePath, 'r');
+      const sampleSize = Math.min(totalSize, 8192); // 8KB sample
+      const buffer = Buffer.alloc(sampleSize);
+      
+      await handle.read(buffer, 0, sampleSize, 0);
+      await handle.close();
+      
+      return crypto.createHash('md5').update(buffer).digest('hex');
+    } catch (err) {
+      return `read-error-${totalSize}`;
+    }
+  }
+
   computeHash(data) {
     return crypto.createHash('md5').update(data).digest('hex')
   }
 
   getSpamCategory(email, subject) {
-    const marketingKeywords = ['subscribe', 'newsletter', 'unsubscribe', 'marketing', 'promo', 'ads']
+    const marketingKeywords = ['subscribe', 'newsletter', 'unsubscribe', 'marketing', 'promo', 'ads', 'alerts@', 'notifications@', 'updates@']
     const noreplyKeywords = ['noreply', 'no-reply', 'no_reply', 'do-not-reply']
     const whitelistKeywords = ['wetransfer.com', 'we.tl', 'transferxl.com', 'sendgb.com']
     
     const combined = (email + ' ' + subject).toLowerCase()
-
-    // Priority 1: Whitelist specific trusted transfer services even if they use no-reply
     if (whitelistKeywords.some(kw => combined.includes(kw))) return null
-    
     if (noreplyKeywords.some(kw => combined.includes(kw))) return 'NOREPLY'
     if (marketingKeywords.some(kw => combined.includes(kw))) return 'MARKETING'
-    
     return null
   }
 
   extractExternalLinks(text) {
     if (!text) return []
     const links = []
+    const rawMatches = text.match(/https?:\/\/[^\s<>"]+/g) || []
+    const uniqueMatches = Array.from(new Set(rawMatches))
     
-    // Generic URL detection
-    const genericRegex = /https?:\/\/[^\s<>"]+/g
-    const rawMatches = text.match(genericRegex) || []
-    const uniqueMatches = Array.from(new Set(rawMatches)) // De-duplicate raw URLs
-    
-    const junkKeywords = [
-      '/legal', '/terms', '/explore', '/account', 'about.wetransfer.com', 
-      'notification', 'utm_', 'princip', 'sign-up', 'login', 
-      'cookie', 'privacy', 'help', 'twitter.com', 'facebook.com', 'instagram.com',
-      'youtube.com', 'linkedin.com', 'sendgrid.net', '/en-us/'
-    ]
+    const junkKeywords = ['/legal', '/terms', '/explore', '/account', 'about.wetransfer.com', 'notification', 'utm_', 'sign-up', 'login', 'cookie', 'privacy', 'help']
 
     for (const url of uniqueMatches) {
       const lowerUrl = url.toLowerCase()
-      
-      // Filter out junk platform/social links
-      const isJunk = junkKeywords.some(kw => lowerUrl.includes(kw))
-      if (isJunk) continue
+      if (junkKeywords.some(kw => lowerUrl.includes(kw))) continue
 
-      if (url.includes('drive.google.com')) {
-        links.push({ title: 'Google Drive File', url })
-      } else if (url.includes('dropbox.com')) {
-        links.push({ title: 'Dropbox File', url })
-      } else if (url.includes('we.tl') || url.includes('wetransfer.com')) {
-        // More robust detection for WeTransfer links
-        // Matches: we.tl/t-..., wetransfer.com/downloads/..., wetransfer.com/t/...
-        const isTransfer = url.includes('/downloads/') || url.includes('/t/') || url.includes('we.tl/') || url.includes('wetransfer.com/s/')
-        
-        if (isTransfer) {
-           links.push({ title: 'WeTransfer File', url })
+      if (url.includes('drive.google.com')) links.push({ title: 'Google Drive File', url })
+      else if (url.includes('dropbox.com')) links.push({ title: 'Dropbox File', url })
+      else if (url.includes('we.tl') || url.includes('wetransfer.com')) {
+        if (url.includes('/downloads/') || url.includes('/t/') || url.includes('we.tl/') || url.includes('wetransfer.com/s/')) {
+          links.push({ title: 'WeTransfer File', url })
         }
       }
     }
-    
     return links
   }
 }
 
 module.exports = new ProcessingWorker()
+

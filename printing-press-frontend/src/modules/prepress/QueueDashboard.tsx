@@ -185,7 +185,16 @@ export default function QueueDashboard() {
     }
     const onJobPaused  = () => { queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }); queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] }) }
     const onJobResumed = () => { queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }) }
-    const onJobRemoved = () => { queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }); queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] }) }
+    const onJobRemoved = () => {
+      // Instant cache clear for removed jobs - don't wait for refetch
+      queryClient.setQueryData(['current-queue-job'], (prev: any) => ({
+        ...(prev || {}),
+        queueJob: null,
+        active: true
+      }))
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] })
+      queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
+    }
     const onChatReceived = (msg: any) => {
       if (String(msg.sender).trim() !== String(profile?._id || profile?.id).trim()) setHasUnread(true)
     }
@@ -240,11 +249,27 @@ export default function QueueDashboard() {
   })
   const reassignMutation = useMutation({
     mutationFn: ({ jobId, reason }: { jobId: string; reason: string }) => queueApi.requestReassignment({ jobId, reason }),
-    onSuccess: () => { 
-      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] })
+    onMutate: () => {
+      // 1. Immediately wipe from screen at the moment of click
+      queryClient.setQueryData(['current-queue-job'], (prev: any) => ({
+        ...(prev || {}),
+        queueJob: null,
+        walkinJob: prev?.walkinJob ?? null,
+        active: true
+      }))
       setShowReassignModal(null)
       setReassignReason('')
-      setToast('Reassignment request sent to admin')
+    },
+    onSuccess: () => { 
+      // 2. Force fresh data to load the next job
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] })
+      queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
+      setToast('Reassignment request sent')
+    },
+    onError: (err: any) => {
+      setToast(`Failed: ${err?.response?.data?.message || 'Could not send request'}`)
+      // On error, we might want to refetch to restore the job if it wasn't actually moved
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] })
     }
   })
   const requestWalkinMutation = useMutation({
@@ -418,9 +443,9 @@ export default function QueueDashboard() {
             <div className="screenshots-grid">
               {visibleAtts(job.attachments).map((file: string, idx: number) => {
                 // fileUrl has token in query string — needed for <img src> (img tags can't send custom headers)
-                const fileUrl = `${BACKEND_URL}/job-files/${job.relativeFolderPath}/${file}?token=${localStorage.getItem('token')}`
+                const fileUrl = `${BACKEND_URL}/api/queue/files/${job._id}/${file}?token=${localStorage.getItem('token')}`
                 // cleanUrl has NO token in URL — downloadWithAuth sends it via Authorization header instead
-                const cleanUrl = `${BACKEND_URL}/job-files/${job.relativeFolderPath}/${file}`
+                const cleanUrl = `${BACKEND_URL}/api/queue/files/${job._id}/${file}`
                 const dlId = `file-${job._id}-${idx}`
                 return (
                   <div key={idx} className="screenshot-item">

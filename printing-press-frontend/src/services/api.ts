@@ -13,8 +13,14 @@ api.interceptors.request.use((config) => {
   }
   return config
 })
-export const fetchPrepressJobs = async (page: number = 1, limit: number = 50) => {
-  const res = await api.get(`/api/prepress/jobs?page=${page}&limit=${limit}`)
+export const fetchPrepressJobs = async (
+  page: number = 1, 
+  limit: number = 50, 
+  search: string = '', 
+  paymentStatus: string = 'ALL', 
+  date: string = ''
+) => {
+  const res = await api.get(`/api/prepress/jobs?page=${page}&limit=${limit}&search=${search}&paymentStatus=${paymentStatus}&date=${date}`)
   return res.data
 }
 

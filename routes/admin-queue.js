@@ -24,15 +24,34 @@ router.get('/jobs', auth, authorize('ADMIN'), async (req, res) => {
     const skip = (Number(page) - 1) * Number(limit)
  
     const filter = {}
-    if (status) filter.status = status
-    if (assignedTo && assignedTo !== 'undefined') filter.assignedTo = assignedTo
+    if (status && status !== 'undefined' && status !== 'null') filter.status = status
+
+    // Staff filter: jobs assigned to them OR in ADMIN_REVIEW requested by them
+    let staffOr = null
+    if (assignedTo && assignedTo !== 'undefined' && assignedTo !== 'null') {
+      staffOr = [
+        { assignedTo: assignedTo },
+        { reassignedFrom: assignedTo, status: 'ADMIN_REVIEW' }
+      ]
+    }
     
+    // Search filter
+    let searchOr = null
     if (search && search.trim() !== '') {
-      filter.$or = [
+      searchOr = [
         { customerName: { $regex: search.trim(), $options: 'i' } },
         { customerEmail: { $regex: search.trim(), $options: 'i' } },
         { emailSubject: { $regex: search.trim(), $options: 'i' } }
       ]
+    }
+
+    // Combine without overwriting each other
+    if (staffOr && searchOr) {
+      filter.$and = [{ $or: staffOr }, { $or: searchOr }]
+    } else if (staffOr) {
+      filter.$or = staffOr
+    } else if (searchOr) {
+      filter.$or = searchOr
     }
  
     const total = await QueueJob.countDocuments(filter)
@@ -90,11 +109,11 @@ router.get('/sessions', auth, authorize('ADMIN'), async (req, res) => {
       .populate('staffId', 'name phone')
       .populate({
         path: 'currentQueueJob',
-        select: 'status customerName'
+        select: 'status customerName emailSubject relativeFolderPath'
       })
       .populate({
         path: 'currentWalkinJob',
-        select: 'status customerName'
+        select: 'status customerName description relativeFolderPath'
       })
 
     res.json(sessions)
@@ -318,7 +337,7 @@ router.delete('/jobs/:id', auth, authorize('ADMIN'), async (req, res) => {
 
     // Fix #2: Use eventBus to maintain the audit trail instead of raw io push
     const eventBus = require('../services/eventBus')
-    eventBus.emit('job:deleted', { jobId: req.params.id, assignedTo: job.assignedTo })
+    eventBus.emit('job:deleted', { jobId: req.params.id, assignedTo: job.assignedTo, status: job.status })
 
     res.json({ message: 'Job deleted permanently' })
   } catch (err) {
@@ -377,10 +396,62 @@ router.post('/jobs/bulk-delete', auth, authorize('ADMIN'), async (req, res) => {
       }
 
       const eventBus = require('../services/eventBus');
-      eventBus.emit('job:deleted', { jobId: job._id, assignedTo: job.assignedTo });
+      eventBus.emit('job:deleted', { jobId: job._id, assignedTo: job.assignedTo, status: job.status });
     }
 
     res.json({ message: `${jobs.length} jobs deleted permanently` });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+})
+
+/**
+ * POST /jobs/bulk-status — Move multiple jobs to a new status (e.g. JUNK, ADMIN_REVIEW)
+ */
+router.post('/jobs/bulk-status', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const { jobIds, status } = req.body;
+    if (!Array.isArray(jobIds) || jobIds.length === 0 || !status) {
+       return res.status(400).json({ message: 'jobIds array and status are required' });
+    }
+
+    const jobs = await QueueJob.find({ _id: { $in: jobIds } });
+    if (jobs.length === 0) {
+       return res.status(404).json({ message: 'No matching jobs found' });
+    }
+
+    const eventBus = require('../services/eventBus');
+    let movedCount = 0;
+
+    for (const job of jobs) {
+       if (job.status === status) continue;
+       
+       // Clean session and anti-strand if being removed from active duty
+       if (job.assignedTo && ['JUNK', 'ADMIN_REVIEW', 'QUEUED'].includes(status)) {
+         const session = await QueueSession.findOne({ staffId: job.assignedTo, isActive: true });
+         if (session) {
+           if (String(session.currentQueueJob) === String(job._id)) session.currentQueueJob = null;
+           if (String(session.currentWalkinJob) === String(job._id)) session.currentWalkinJob = null;
+           await session.save();
+           await queueEngine.assignNextJob(job.assignedTo).catch(e => console.error(e));
+         }
+         job.assignedTo = null;
+         job.assignedAt = null;
+       }
+
+       job.status = status;
+       job.returnReason = `Bulk moved to ${status} by admin`;
+       await job.save();
+       movedCount++;
+       
+       // Log audit natively via JobEvent to keep UI robust
+       require('../models/JobEvent').create({ jobId: job._id, actionType: 'CREATED', details: { action: `MOVED_TO_${status}` } }).catch(() => {});
+    }
+
+    // Force stats to recalculate dynamically rather than manually adjusting them
+    await require('../services/statsService').recalculate();
+
+    res.json({ message: `${movedCount} jobs moved to ${status}` });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
@@ -406,65 +477,34 @@ router.get('/customer-preferences', auth, authorize('ADMIN'), async (req, res) =
  */
 router.get('/stats', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const now = new Date()
-    const startOfDay = new Date(now)
-    startOfDay.setHours(0, 0, 0, 0)
+    const QueueStats = require('../models/QueueStats')
+    let stats = await QueueStats.findOne({})
+    
+    // Auto-recovery if stats are missing
+    if (!stats) {
+      const statsService = require('../services/statsService')
+      await statsService.recalculate()
+      stats = await QueueStats.findOne({})
+    }
 
-    // SLA windows — jobs whose dueBy is within the next N minutes
-    const in5mins  = new Date(Date.now() + 5  * 60 * 1000)
-     const in15mins = new Date(Date.now() + 15 * 60 * 1000)
-    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
-
-    const [
-      totalQueued,
-      totalInProgress,
-      totalCompletedToday,
-      activeSessions,
-      avgCompletionTime,
-      adminReview,
-      breachRisk15,
-      breachRisk5,
-      totalJunk,
-      staleJobs
-    ] = await Promise.all([
-      QueueJob.countDocuments({ status: 'QUEUED' }),
-      QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] } }),
-      QueueJob.countDocuments({ status: 'COMPLETED', completedAt: { $gte: startOfDay } }),
-      QueueSession.countDocuments({ isActive: true }),
-      QueueJob.aggregate([
-        { $match: { status: 'COMPLETED', assignedAt: { $ne: null }, completedAt: { $ne: null } } },
-        { $project: { duration: { $subtract: ['$completedAt', '$assignedAt'] } } },
-        { $group: { _id: null, avg: { $avg: '$duration' } } }
-      ]),
-      QueueJob.countDocuments({ status: 'ADMIN_REVIEW' }),
-      // Jobs due within next 15 minutes (not already overdue)
-      QueueJob.countDocuments({
-        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] },
-        dueBy: { $gte: now, $lte: in15mins }
-      }),
-      // Jobs due within next 5 minutes (critical)
-      QueueJob.countDocuments({
-        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] },
-        dueBy: { $gte: now, $lte: in5mins }
-      }),
-      QueueJob.countDocuments({ status: 'JUNK' }),
-      QueueJob.countDocuments({ 
-        status: 'QUEUED', 
-        createdAt: { $lt: twoHoursAgo } 
-      })
+    // Still need to aggregate avgCompletionTime as it's truly dynamic
+    const avgCompletionTime = await QueueJob.aggregate([
+      { $match: { status: 'COMPLETED', assignedAt: { $ne: null }, completedAt: { $ne: null } } },
+      { $project: { duration: { $subtract: ['$completedAt', '$assignedAt'] } } },
+      { $group: { _id: null, avg: { $avg: '$duration' } } }
     ])
 
     res.json({
-      totalQueued,
-      totalInProgress,
-      completed: totalCompletedToday,
-      activeSessions,
+      totalQueued: stats.queued,
+      totalInProgress: stats.assigned,
+      completed: stats.completedToday,
+      activeSessions: stats.activeSessions,
       avgCompletionTimeMs: avgCompletionTime[0]?.avg || 0,
-      adminReview,
-      breachRisk15,
-      breachRisk5,
-      junk: totalJunk,
-      staleJobs
+      adminReview: stats.adminReview,
+      breachRisk15: stats.breachRisk15,
+      breachRisk5: stats.breachRisk5,
+      junk: stats.junk,
+      staleJobs: stats.staleJobs
     })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -555,21 +595,20 @@ router.get('/stats/staff-leaderboard', auth, authorize('ADMIN'), async (req, res
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
 
-    const leaderboard = await QueueJob.aggregate([
+    const JobEvent = require('../models/JobEvent')
+    const leaderboard = await JobEvent.aggregate([
       {
         $match: {
-          status: 'COMPLETED',
-          completedAt: { $gte: startOfDay },
-          assignedTo: { $ne: null }
+          actionType: 'COMPLETED',
+          timestamp: { $gte: startOfDay },
+          'details.staffId': { $exists: true, $ne: null }
         }
       },
       {
         $group: {
-          _id: '$assignedTo',
+          _id: '$details.staffId',
           count: { $sum: 1 },
-          avgDurationMs: {
-            $avg: { $subtract: ['$completedAt', '$assignedAt'] }
-          }
+          avgDurationMs: { $avg: 0 }
         }
       },
       { $sort: { count: -1 } }

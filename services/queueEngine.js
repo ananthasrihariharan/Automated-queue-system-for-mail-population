@@ -8,6 +8,7 @@
 const QueueJob = require('../models/QueueJob')
 const QueueSession = require('../models/QueueSession')
 const eventBus = require('./eventBus')
+const statsService = require('./statsService')
 
 /**
  * Get the next available job for a specific staff member.
@@ -302,7 +303,22 @@ async function reassignJob(jobId, fromStaffId, toStaffId, notes) {
   if (toStaffId) {
     newSession = await QueueSession.findOne({ staffId: toStaffId, isActive: true })
     if (!newSession) {
-      throw new Error('Target staff is offline. Cannot reassign directly to an offline user.');
+      // Feature Addition: Allow reassigning to offline staff as a pin (Matches frontend expectation)
+      job.status = 'QUEUED'
+      job.assignedTo = null
+      job.assignedAt = null
+      job.pinnedToStaff = toStaffId
+      job.reassignedFrom = fromStaffId
+      job.handoffNotes = notes || ''
+      await job.save()
+
+      const QueueRequest = require('../models/QueueRequest')
+      await QueueRequest.updateMany(
+        { jobId, type: 'REASSIGN', status: 'PENDING' },
+        { status: 'APPROVED', adminAction: 'Assigned to offline queue (Target Staff is Offline)' }
+      )
+      eventBus.emit('job:reassigned', { jobId, fromStaffId, toStaffId, notes })
+      return job
     }
     
     if (newSession.currentQueueJob) {
@@ -365,6 +381,7 @@ async function reassignJob(jobId, fromStaffId, toStaffId, notes) {
     await newSession.save()
   }
 
+  // Notify both parties (eventHandlers handles the socket room logic)
   eventBus.emit('job:reassigned', { jobId, fromStaffId, toStaffId, notes })
 
   return job
@@ -382,6 +399,25 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
     request.status = 'REJECTED'
     request.adminAction = adminAction
     await request.save()
+
+    // If a reassignment was rejected, we MUST restore the job to the general pool
+    // so it doesn't stay stuck in ADMIN_REVIEW forever.
+    if (request.type === 'REASSIGN') {
+      const job = await QueueJob.findById(request.jobId)
+      if (job && job.status === 'ADMIN_REVIEW') {
+        job.status = 'QUEUED'
+        job.assignedTo = null
+        job.returnReason = `Reassignment Rejected: ${adminAction || 'No reason provided'}`
+        await job.save()
+        
+        // Ensure stats and dashboard are synced
+        const statsService = require('./statsService')
+        await statsService.recalculate()
+        
+        eventBus.emit('queue:reordered', { reason: 'Reassignment Rejected' })
+      }
+    }
+
     return { request }
   }
   if (request.type === 'WALKIN') {
@@ -403,10 +439,10 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
 
       request.status = 'APPROVED'
       request.resultJobId = walkinJob._id
+      request.adminAction = adminAction || 'Approved by Admin'
       await request.save()
 
       eventBus.emit('walkin:approved', { requestId, job: walkinJob })
-      assignIdleStaff().catch(e => console.error('[Walkin] Sweep failed:', e))
       return { request, job: walkinJob }
     } else {
       const walkinJob = await QueueJob.create({
@@ -422,10 +458,10 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
       })
       request.status = 'APPROVED'
       request.resultJobId = walkinJob._id
+      request.adminAction = adminAction || 'Approved for offline queue'
       await request.save()
 
       eventBus.emit('walkin:approved', { requestId, job: walkinJob })
-      assignIdleStaff().catch(e => console.error('[Walkin-Offline] Sweep failed:', e))
       return { request, job: walkinJob }
     }
 
@@ -434,7 +470,7 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
     if (!originalJob) throw new Error('Original job not found')
 
     // Unified logic: Use reassignJob which handles session logic, ghost job prevention, and busy-target parking.
-    await reassignJob(
+    const updatedJob = await reassignJob(
       request.jobId,
       request.requestedBy._id,
       targetStaffId || null,
@@ -442,14 +478,62 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
     )
 
     request.status = 'APPROVED'
+    request.adminAction = adminAction || (targetStaffId ? 'Reassigned to specifically selected staff' : 'Returned to general pool')
     await request.save()
 
-    // Trigger assignment sweep for the requester who is now idle
-    assignIdleStaff().catch(e => console.error('[Request] Sweep failed:', e))
-
     eventBus.emit('reassign:approved', { requestId, jobId: request.jobId, targetStaffId })
-    return { request, job: originalJob }
+    return { request, job: updatedJob }
   }
+}
+
+/**
+ * Atomic Staff Request: Reassign the current job to Admin Review
+ * frees the staff member and triggers their next assignment.
+ */
+async function requestReassignment(staffId, jobId, reason) {
+  console.log(`[Engine] Incoming requestReassignment for job ${jobId} from staff ${staffId}. Reason: ${reason}`);
+  const QueueRequest = require('../models/QueueRequest')
+  const job = await QueueJob.findById(jobId)
+  if (!job) throw new Error('Job not found')
+
+  // 1. Clear session slot immediately
+  const session = await QueueSession.findOne({ staffId, isActive: true })
+  if (session) {
+    if (String(session.currentQueueJob) === String(jobId)) session.currentQueueJob = null
+    if (String(session.currentWalkinJob) === String(jobId)) session.currentWalkinJob = null
+    await session.save()
+  }
+
+  // 2. Move job to Review
+  job.status = 'ADMIN_REVIEW'
+  job.assignedTo = null
+  job.reassignedFrom = staffId
+  job.handoffNotes = reason
+  await job.save()
+
+  // 3. Create historical request record
+  const qReq = await QueueRequest.create({
+    type: 'REASSIGN',
+    jobId,
+    description: reason,
+    requestedBy: staffId,
+  })
+
+  const populated = await QueueRequest.findById(qReq._id)
+    .populate('requestedBy', 'name')
+    .populate('jobId', 'customerName emailSubject')
+
+  // 4. Emit event for stats and socket updates
+  eventBus.emit('reassign:requested', { 
+    request: populated, 
+    fromStaffId: staffId 
+  })
+
+  // 5. Trigger next assignment for this staff member
+  console.log(`[Engine] Triggering assignNextJob for staff ${staffId} after reassignment`);
+  assignNextJob(staffId).catch(err => console.error('[Engine] Auto-assign after reassign-request failed:', err))
+
+  return { request: populated }
 }
 
 /**
@@ -564,7 +648,38 @@ async function cleanupStaleSessions() {
       }
     }
 
-    // 3. Priority Escalation: DISABLED (Admin requested total manual control)
+    // 3. Ingestion Recovery: Recover tasks stuck in PROCESSING (Crash recovery)
+    const IngestionTask = require('../models/IngestionTask')
+    const tenMinsAgo = new Date(Date.now() - 10 * 60 * 1000)
+    const stuckTasks = await IngestionTask.updateMany(
+      { status: 'PROCESSING', updatedAt: { $lt: tenMinsAgo } },
+      { $set: { status: 'PENDING', error: 'Stale Task Recovered (System Restart/Crash)' } }
+    )
+    if (stuckTasks.modifiedCount > 0) {
+      console.log(`[Cleanup] Recovered ${stuckTasks.modifiedCount} stuck ingestion tasks.`)
+    }
+
+    // 4. Update Time-Sensitive Stats (SLA Breach & Staleness)
+    const now = new Date()
+    const in5mins  = new Date(Date.now() + 5  * 60 * 1000)
+    const in15mins = new Date(Date.now() + 15 * 60 * 1000)
+    const twoHoursAgo = new Date(Date.now() - 2 * 60 * 60 * 1000)
+    
+    const [br15, br5, stale] = await Promise.all([
+      QueueJob.countDocuments({ status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] }, dueBy: { $gte: now, $lte: in15mins } }),
+      QueueJob.countDocuments({ status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] }, dueBy: { $gte: now, $lte: in5mins } }),
+      QueueJob.countDocuments({ status: 'QUEUED', createdAt: { $lt: twoHoursAgo } })
+    ])
+    
+    const QueueStats = require('../models/QueueStats')
+    await QueueStats.findOneAndUpdate({}, { 
+      breachRisk15: br15, 
+      breachRisk5: br5, 
+      staleJobs: stale,
+      lastUpdated: new Date()
+    })
+
+    // 5. Priority Escalation: DISABLED (Admin requested total manual control)
     // await escalatePriorities()
 
     // 4. Daily Chat Purge: Remove messages older than 24 hours
@@ -675,6 +790,8 @@ module.exports = {
   unpinJob,
   reassignJob,
   handleRequest,
+  requestReassignment,
+  recalculateStats: statsService.recalculate,
   pauseJob,
   resumeJob,
   assignIdleStaff,

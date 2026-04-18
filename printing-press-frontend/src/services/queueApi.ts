@@ -194,6 +194,11 @@ export const queueApi = {
     return res.data
   },
 
+  bulkUpdateStatus: async (jobIds: string[], status: string) => {
+    const res = await api.post('/api/admin/queue/jobs/bulk-status', { jobIds, status })
+    return res.data
+  },
+
   getStaffLeaderboard: async () => {
     const res = await api.get('/api/admin/queue/stats/staff-leaderboard')
     return res.data

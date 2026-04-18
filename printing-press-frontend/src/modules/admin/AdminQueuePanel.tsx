@@ -202,6 +202,16 @@ export default function AdminQueuePanel() {
     }
   })
 
+  const bulkStatusMutation = useMutation({
+    mutationFn: ({ jobIds, status }: { jobIds: string[], status: string }) => 
+      queueApi.bulkUpdateStatus(jobIds, status),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['admin-queue-jobs'] })
+      queryClient.invalidateQueries({ queryKey: ['queue-stats'] })
+      setSelectedJobs(new Set())
+    }
+  })
+
   const handleBulkDelete = () => {
     if (selectedJobs.size === 0) return;
     if (window.confirm(`CAUTION: Are you sure you want to PERMANENTLY delete these ${selectedJobs.size} jobs?`)) {
@@ -515,14 +525,29 @@ export default function AdminQueuePanel() {
                {selectedJobs.size > 0 && (
                  <>
                    <span style={{ fontSize: '0.85rem', color: '#64748b' }}>{selectedJobs.size} selected</span>
-                   <button className="btn-icon" style={{ background: '#fef2f2', color: '#ef4444', borderColor: '#fecaca', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 800 }} onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
-                     {bulkDeleteMutation.isPending ? 'DELETING...' : 'DELETE SELECTED'}
-                   </button>
+                   
+                   {activeTab !== 'JUNK' && (
+                      <button className="btn-icon" style={{ background: '#fef2f2', color: '#ef4444', borderColor: '#fccaca', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 800 }} onClick={() => bulkStatusMutation.mutate({ jobIds: Array.from(selectedJobs), status: 'JUNK' })} disabled={bulkStatusMutation.isPending}>
+                        MOVE TO SPAM
+                      </button>
+                   )}
+                   {activeTab !== 'ADMIN_REVIEW' && (
+                      <button className="btn-icon" style={{ background: '#fffbeb', color: '#d97706', borderColor: '#fde68a', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 800 }} onClick={() => bulkStatusMutation.mutate({ jobIds: Array.from(selectedJobs), status: 'ADMIN_REVIEW' })} disabled={bulkStatusMutation.isPending}>
+                        MOVE TO REVIEW
+                      </button>
+                   )}
+                   
                    {(activeTab === 'JUNK' || activeTab === 'ADMIN_REVIEW') && (
                       <button className="btn-icon" style={{ background: '#dcfce7', color: '#166534', borderColor: '#bbf7d0', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 800 }} onClick={handleBulkRestore} disabled={bulkRestoreMutation.isPending}>
                         {bulkRestoreMutation.isPending ? 'RESTORING...' : 'RESTORE SELECTED'}
                       </button>
                    )}
+                   
+                   <div style={{ width: '1px', height: '1.25rem', background: '#cbd5e1', marginLeft: 'auto' }} />
+                   
+                   <button className="btn-icon" style={{ background: '#f8fafc', color: '#64748b', borderColor: '#cbd5e1', padding: '0.25rem 0.75rem', borderRadius: '0.5rem', fontSize: '0.8rem', fontWeight: 800 }} onClick={handleBulkDelete} disabled={bulkDeleteMutation.isPending}>
+                     {bulkDeleteMutation.isPending ? 'DELETING...' : 'DELETE PERMANENTLY'}
+                   </button>
                  </>
                )}
             </div>
@@ -566,6 +591,14 @@ export default function AdminQueuePanel() {
                                  PRIOR WORK: {job.lastPausedBy.name.toUpperCase()}
                               </span>
                            )}
+                           {job.status === 'ADMIN_REVIEW' && job.reassignedFrom && (
+                               <span className="badge-prior-work" style={{ background: '#fee2e2', color: '#991b1b', borderColor: '#fecaca' }} title={`Reassignment requested by ${job.reassignedFrom.name}`}>
+                                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24" style={{ marginRight: '4px' }}>
+                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                  </svg>
+                                  REASSIGN REQUEST: {job.reassignedFrom.name.toUpperCase()}
+                               </span>
+                            )}
                         </div>
                        <div className="admin-job-meta">
                           {subjectTime && (

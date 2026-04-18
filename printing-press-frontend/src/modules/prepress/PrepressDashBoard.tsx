@@ -26,14 +26,23 @@ const BACKEND_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_UR
 export default function PrepressDashboard() {
   const [currentPage, setCurrentPage] = useState(1)
   const itemsPerPage = 50
+  const [search, setSearch] = useState('')
+  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
+  const [dateFilter, setDateFilter] = useState(() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = String(now.getMonth() + 1).padStart(2, '0');
+    const day = String(now.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }) 
 
   const {
     data: responseData,
     isLoading,
   } = useQuery({
-    queryKey: ['prepress-jobs', currentPage],
-    queryFn: () => fetchPrepressJobs(currentPage, itemsPerPage),
-    refetchInterval: 10000, // Reduced refresh frequency for better performance
+    queryKey: ['prepress-jobs', currentPage, search, paymentFilter, dateFilter],
+    queryFn: () => fetchPrepressJobs(currentPage, itemsPerPage, search, paymentFilter, dateFilter),
+    refetchInterval: 10000, 
     staleTime: 30000,
     placeholderData: (previousData: any) => previousData,
   })
@@ -44,9 +53,6 @@ export default function PrepressDashboard() {
 
   const [previewJob, setPreviewJob] = useState<Job | null>(null)
   const [viewImage, setViewImage] = useState<string | null>(null)
-  const [search, setSearch] = useState('')
-  const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
-  const [dateFilter, setDateFilter] = useState('') // No default to Today for server-side search
 
   const navigate = useNavigate()
 
@@ -59,18 +65,8 @@ export default function PrepressDashboard() {
     document.body.removeChild(link)
   }
 
-  const filteredJobs = jobs.filter((job: Job) => {
-    const matchesSearch = job.jobId.toLowerCase().includes(search.toLowerCase()) ||
-      job.customerName.toLowerCase().includes(search.toLowerCase())
-    const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
-
-    // If dateFilter is present, we still do client-side filtering on the 30-day window
-    // but the core "Vast Data" protection comes from the 50-item pages.
-    const jobDate = new Date(job.createdAt).toISOString().split('T')[0]
-    const matchesDate = !dateFilter || jobDate === dateFilter
-
-    return matchesSearch && matchesPayment && matchesDate
-  })
+  // Server-side filtering is now handled by the query above.
+  const filteredJobs = jobs
 
   if (isLoading && !responseData) return <div className="prepress-page">Loading...</div>
 
