@@ -741,6 +741,9 @@ export default function QueueDashboard() {
               <option value="Requires Specialist Designer">Requires Specialist Designer</option>
               <option value="Too complex for current workload">Too complex for workload</option>
               <option value="Customer requested stop / pause">Customer requested stop / pause</option>
+               <option value="Customer not responding ">Customer not responding </option>
+                <option value="Designer sent mail">Designer sent mail</option>
+                 <option value="Customer contact NA">Customer contact NA</option>
             </select>
             <div className="modal-actions">
               <button
