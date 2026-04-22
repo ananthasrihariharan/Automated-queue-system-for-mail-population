@@ -10,7 +10,7 @@ const QueueJob = require('../models/QueueJob')
  * GET /job-files/* — Secure Proxy for Legacy & Archive Job Files
  * Handles files in N8N_WATCH_PATH and COMPLETED_JOBS_PATH
  */
-router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), (req, res) => {
+router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req, res) => {
   try {
     const requestedPath = req.params[0]
     const watchRoot = process.env.N8N_WATCH_PATH || ''
