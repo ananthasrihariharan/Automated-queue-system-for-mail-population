@@ -55,6 +55,11 @@ export const fetchStaffProductivity = async (
   return res.data
 }
 
+export const fetchActivityJournal = async (date: string = '') => {
+  const res = await api.get(`/api/admin/reports/activity-journal?date=${date}`)
+  return res.data
+}
+
 export const fetchCustomerJobs = async (status: string = 'active') => {
   const res = await api.get(`/api/customer/jobs?status=${status}`)
   return res.data

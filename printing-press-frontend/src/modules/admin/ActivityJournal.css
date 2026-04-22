@@ -1,0 +1,163 @@
+/* Activity Journal Component Styles */
+.journal-section {
+    padding: 0 1.5rem 1.5rem;
+    animation: fadeIn 0.3s ease-out;
+}
+
+.journal-header-area {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.journal-table-wrapper {
+    background: white;
+    border-radius: 1rem;
+    border: 1px solid #e2e8f0;
+    overflow: hidden;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+}
+
+.journal-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.8125rem;
+}
+
+.journal-table th {
+    background: #f8fafc;
+    padding: 1rem;
+    text-align: left;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.journal-table td {
+    padding: 1rem;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: middle;
+}
+
+.journal-table tr:hover {
+    background: #fcfdfe;
+}
+
+/* Identifiers */
+.email-cell {
+    font-weight: 700;
+    color: #1e293b;
+    display: block;
+    max-width: 200px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.subject-subtext {
+    display: block;
+    font-size: 0.7rem;
+    color: #94a3b8;
+    margin-top: 0.25rem;
+    font-weight: 500;
+}
+
+/* Durations & Metrics */
+.duration-badge {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.25rem 0.6rem;
+    border-radius: 2rem;
+    font-weight: 700;
+    font-size: 0.75rem;
+    background: #f1f5f9;
+    color: #475569;
+}
+
+.duration-badge.urgent-highlight {
+    background: #fef2f2;
+    color: #ef4444;
+    border: 1px solid #fee2e2;
+    animation: alertPulse 2s infinite;
+}
+
+.duration-badge.working {
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.duration-badge.hold {
+    background: #fffbeb;
+    color: #d97706;
+}
+
+/* Timeline Icons */
+.timeline-item {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.timeline-time {
+    font-weight: 800;
+    color: #0f172a;
+}
+
+.timeline-label {
+    font-size: 0.65rem;
+    text-transform: uppercase;
+    color: #94a3b8;
+    font-weight: 700;
+}
+
+/* Handoff Chain */
+.handoff-chain {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-width: 250px;
+}
+
+.handoff-step {
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    padding: 0.5rem;
+    border-radius: 0.5rem;
+    position: relative;
+}
+
+.handoff-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 0.25rem;
+    font-size: 0.7rem;
+}
+
+.handoff-reason {
+    font-style: italic;
+    color: #64748b;
+    font-size: 0.7rem;
+    line-height: 1.2;
+}
+
+/* Animations */
+@keyframes alertPulse {
+    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+    70% { box-shadow: 0 0 0 6px rgba(239, 68, 68, 0); }
+    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); }
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Responsive Table */
+@media (max-width: 1024px) {
+    .journal-table td, .journal-table th {
+        padding: 0.75rem 0.5rem;
+    }
+}

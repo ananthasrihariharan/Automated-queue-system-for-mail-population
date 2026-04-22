@@ -8,6 +8,7 @@ import ModuleNavigation from '../../components/ModuleNavigation'
 import { MessagingTray } from '../../shared/components/MessagingTray'
 import LinkifiedText from '../../shared/components/LinkifiedText'
 import { elapsed, formatSubject } from '../../shared/utils/queueHelpers'
+import DateFilter from '../../components/DateFilter'
 import './AdminQueuePanel.css'
 
 interface AdminJobsResponse {
@@ -16,6 +17,8 @@ interface AdminJobsResponse {
   pages: number;
   stats: any;
 }
+
+const getLocalToday = () => new Date().toLocaleDateString('en-CA');
 
 export default function AdminQueuePanel() {
   const queryClient = useQueryClient()
@@ -27,6 +30,7 @@ export default function AdminQueuePanel() {
   const [searchInput, setSearchInput] = useState('')
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const [assignedToFilter, setAssignedToFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState(getLocalToday())
   const [viewImage, setViewImage] = useState<string | null>(null)
   const [isSelectionMode, setIsSelectionMode] = useState(false)
   const [selectedJobs, setSelectedJobs] = useState<Set<string>>(new Set())
@@ -75,13 +79,24 @@ export default function AdminQueuePanel() {
 
   // 1. Data Fetching
   const { data: queueData, isLoading: queueLoading } = useQuery<AdminJobsResponse>({
-    queryKey: ['admin-queue-jobs', activeTab, page, debouncedSearch, assignedToFilter],
-    queryFn: () => queueApi.getAdminJobs({ 
-      status: activeTab, 
-      page, 
-      search: debouncedSearch || undefined, 
-      assignedTo: assignedToFilter || undefined 
-    }),
+    queryKey: ['admin-queue-jobs', activeTab, page, debouncedSearch, assignedToFilter, dateFilter],
+    queryFn: () => {
+      // DATE LOGIC: Only apply date filters to the COMPLETED tab.
+      // Other tabs (Review, Spam, Pool) always show full backlog for accuracy.
+      let effectiveDate = undefined;
+      
+      if (activeTab === 'COMPLETED') {
+        effectiveDate = dateFilter;
+      }
+
+      return queueApi.getAdminJobs({ 
+        status: activeTab, 
+        page, 
+        search: debouncedSearch || undefined, 
+        assignedTo: assignedToFilter || undefined,
+        date: effectiveDate
+      })
+    },
     placeholderData: keepPreviousData,
     refetchInterval: 10000
   })
@@ -266,8 +281,8 @@ export default function AdminQueuePanel() {
   })
 
   const reassignJobMutation = useMutation({
-    mutationFn: ({ jobId, toStaffId, notes }: { jobId: string, toStaffId: string, notes: string }) => 
-      queueApi.reassignJob(jobId, { toStaffId, notes }),
+    mutationFn: ({ jobId, toStaffId, notes, forceMode, batchMode }: { jobId: string, toStaffId: string | null, notes: string, forceMode?: 'PUSH' | 'PARK', batchMode?: boolean }) => 
+      queueApi.reassignJob(jobId, { toStaffId, notes, forceMode, batchMode }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['admin-queue-jobs'] })
       setShowReassignModal(null)
@@ -355,6 +370,15 @@ export default function AdminQueuePanel() {
              <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
              <span className="btn-label">JOURNAL</span>
           </button>
+
+          <Link 
+            to="/admin/whatsapp-job"
+            className="btn-header-luxury" 
+            title="Upload WhatsApp Job"
+          >
+             <svg width="20" height="20" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 18h.01M8 21h8a2 2 0 002-2V5a2 2 0 00-2-2H8a2 2 0 00-2 2v14a2 2 0 002 2z"></path></svg>
+             <span className="btn-label">WHATSAPP</span>
+          </Link>
 
           <div className="vertical-divider" />
 
@@ -445,13 +469,34 @@ export default function AdminQueuePanel() {
         <div className="queue-section">
           <div className="queue-controls-elite-bar">
             <div className="tabs-container-premium">
-              <button className={`tab-btn-luxury ${activeTab === 'QUEUED' ? 'active' : ''}`} onClick={() => { setActiveTab('QUEUED'); setPage(1); setSelectedJobs(new Set()); }}>Waiting Pool</button>
-              <button className={`tab-btn-luxury ${activeTab === 'ASSIGNED' ? 'active' : ''}`} onClick={() => { setActiveTab('ASSIGNED'); setPage(1); setSelectedJobs(new Set()); }}>In Progress</button>
-              <button className={`tab-btn-luxury ${activeTab === 'COMPLETED' ? 'active' : ''}`} onClick={() => { setActiveTab('COMPLETED'); setPage(1); setSelectedJobs(new Set()); }}>Finished</button>
+              <button className={`tab-btn-luxury ${activeTab === 'QUEUED' ? 'active' : ''}`} onClick={() => { setActiveTab('QUEUED'); setPage(1); setSelectedJobs(new Set()); }}>
+                Waiting Pool
+                {stats?.totalQueued > 0 && (
+                  <span style={{ background:'#3b82f6', color:'white', fontSize:'0.6rem', fontWeight: 800, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1, marginLeft:'0.4rem' }}>
+                    {stats.totalQueued}
+                  </span>
+                )}
+              </button>
+              <button className={`tab-btn-luxury ${activeTab === 'ASSIGNED' ? 'active' : ''}`} onClick={() => { setActiveTab('ASSIGNED'); setPage(1); setSelectedJobs(new Set()); }}>
+                In Progress
+                {stats?.totalInProgress > 0 && (
+                  <span style={{ background:'#10b981', color:'white', fontSize:'0.6rem', fontWeight: 800, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1, marginLeft:'0.4rem' }}>
+                    {stats.totalInProgress}
+                  </span>
+                )}
+              </button>
+              <button className={`tab-btn-luxury ${activeTab === 'COMPLETED' ? 'active' : ''}`} onClick={() => { setActiveTab('COMPLETED'); setPage(1); setSelectedJobs(new Set()); }}>
+                Finished
+                {activeTab !== 'COMPLETED' && stats?.completed > 0 && (
+                  <span style={{ background:'#64748b', color:'white', fontSize:'0.6rem', fontWeight: 800, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1, marginLeft:'0.4rem' }}>
+                    {stats.completed}
+                  </span>
+                )}
+              </button>
               <button className={`tab-btn-luxury ${activeTab === 'ADMIN_REVIEW' ? 'active' : ''}`} onClick={() => { setActiveTab('ADMIN_REVIEW'); setPage(1); setSelectedJobs(new Set()); }} style={{ color: activeTab !== 'ADMIN_REVIEW' && (stats?.adminReview > 0) ? '#f59e0b' : undefined }}>
                 ⚠ Review
                 {stats?.adminReview > 0 && (
-                  <span style={{ background:'#ef4444', color:'white', fontSize:'0.6rem', fontWeight:900, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1 }}>
+                  <span style={{ background:'#ef4444', color:'white', fontSize:'0.6rem', fontWeight: 800, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1 }}>
                     {stats.adminReview}
                   </span>
                 )}
@@ -463,7 +508,7 @@ export default function AdminQueuePanel() {
               >
                 Junk / Spam
                 {(stats?.junk ?? 0) > 0 && (
-                  <span style={{ background:'#ef4444', color:'white', fontSize:'0.6rem', fontWeight:900, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1 }}>
+                  <span style={{ background:'#ef4444', color:'white', fontSize:'0.6rem', fontWeight: 800, padding:'0.1rem 0.4rem', borderRadius:'2rem', lineHeight:1 }}>
                     {stats.junk}
                   </span>
                 )}
@@ -497,23 +542,23 @@ export default function AdminQueuePanel() {
                     </>
                   )}
                </button>
-               
-               <div className="filter-select-wrapper" style={{ display:'flex', alignItems:'center', gap:'0.5rem' }}>
-                 <select className="select-elite" value={assignedToFilter} onChange={(e) => { setAssignedToFilter(e.target.value); setPage(1); }}>
-                   <option value="">All Designers</option>
-                   {staffList?.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
-                 </select>
-                 {assignedToFilter && (
-                   <button
-                     onClick={() => { setAssignedToFilter(''); setPage(1); }}
-                     style={{ background:'#dbeafe', color:'#1e40af', border:'1px solid #bfdbfe', borderRadius:'2rem', fontSize:'0.65rem', fontWeight:900, padding:'0.2rem 0.6rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.25rem', whiteSpace:'nowrap' }}
-                     title="Clear filter"
-                   >
-                     FILTERED ×
-                   </button>
-                 )}
-               </div>
-            </div>
+                <div className="filter-select-wrapper" style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+                  {/* Date picker removed from common bar - now controlled per-tab internally */}
+                  <select className="select-elite" value={assignedToFilter} onChange={(e) => { setAssignedToFilter(e.target.value); setPage(1); }}>
+                    <option value="">All Designers</option>
+                    {staffList?.map((s: any) => <option key={s._id} value={s._id}>{s.name}</option>)}
+                  </select>
+                  {(assignedToFilter || (activeTab === 'COMPLETED' && dateFilter !== getLocalToday())) && (
+                    <button
+                      onClick={() => { setAssignedToFilter(''); setDateFilter(getLocalToday()); setPage(1); }}
+                      style={{ background:'#dbeafe', color:'#1e40af', border:'1px solid #bfdbfe', borderRadius:'2rem', fontSize:'0.65rem', fontWeight: 800, padding:'0.2rem 0.6rem', cursor:'pointer', display:'flex', alignItems:'center', gap:'0.25rem', whiteSpace:'nowrap' }}
+                      title="Clear all filters"
+                    >
+                      RESET ×
+                    </button>
+                  )}
+                </div>
+             </div>
           </div>
 
           {isSelectionMode && (queueData?.jobs?.length || 0) > 0 && (
@@ -554,6 +599,14 @@ export default function AdminQueuePanel() {
           )}
 
           <div className="queue-items">
+            {activeTab === 'COMPLETED' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '1rem', padding: '1rem', marginBottom: '1rem', background: 'linear-gradient(135deg, #f8fafc, #f1f5f9)', borderRadius: '1rem', border: '1px solid #e2e8f0' }}>
+                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#475569' }}>VIEWING FINISHED JOBS FOR:</span>
+                <DateFilter value={dateFilter} onChange={(d) => { setDateFilter(d); setPage(1); }} />
+                {!dateFilter && <span style={{ fontSize: '0.65rem', fontWeight: 800, color: '#2563eb' }}>AUTO-DEFAULT: TODAY</span>}
+              </div>
+            )}
+
             {queueData?.jobs?.map((job: any, index: number) => {
               const { time: subjectTime, clean: subjectClean } = formatSubject(job.emailSubject || '')
               const ageLabel = job.createdAt ? elapsed(job.createdAt) : ''
@@ -563,7 +616,18 @@ export default function AdminQueuePanel() {
                     <div style={{ flex: 1 }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginBottom: '0.5rem', flexWrap: 'wrap' }}>
                            {isSelectionMode && <input type="checkbox" checked={selectedJobs.has(job._id)} onChange={() => toggleSelection(job._id)} style={{ width: '1.2rem', height: '1.2rem', marginTop: '2px', cursor: 'pointer' }} />}
-                           <h4 className="job-title-premium">{job.customerName}</h4>
+                           
+                           {job.type === 'WHATSAPP' && job.customerEmail ? (
+                             <h4 className="job-title-premium" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                                {job.customerName}
+                                <span style={{ fontSize: '0.75rem', fontWeight: 800, color: '#10b981', background: '#ecfdf5', padding: '0.2rem 0.5rem', borderRadius: '2rem', border: '1px solid #d1fae5' }}>
+                                   📱 {job.customerEmail.split('@')[0]}
+                                </span>
+                             </h4>
+                           ) : (
+                             <h4 className="job-title-premium">{job.customerName}</h4>
+                           )}
+
                            <span className="job-id">#{job._id.substring(18).toUpperCase()}</span>
                            {ageLabel && (
                              <span style={{ fontSize:'0.65rem', fontWeight:800, color:'#64748b', background:'#f1f5f9', padding:'0.15rem 0.5rem', borderRadius:'2rem', border:'1px solid #e2e8f0' }}
@@ -599,10 +663,45 @@ export default function AdminQueuePanel() {
                                   REASSIGN REQUEST: {job.reassignedFrom.name.toUpperCase()}
                                </span>
                             )}
+                            {job.status === 'PAUSED' && (
+                               <span style={{ fontSize:'0.65rem', fontWeight: 800, color:'#d97706', background:'#fef3c7', padding:'0.15rem 0.5rem', borderRadius:'2rem', border:'1px solid #fde68a' }} title="Staff has put this job on hold (likely to work on another)">
+                                 ⏸ ON HOLD
+                               </span>
+                            )}
+                            {job.status === 'IN_PROGRESS' && (
+                               <span style={{ fontSize:'0.65rem', fontWeight: 800, color:'#2563eb', background:'#dbeafe', padding:'0.15rem 0.5rem', borderRadius:'2rem', border:'1px solid #bfdbfe' }} title="Staff is actively working on this right now">
+                                 ▶ IN PROGRESS
+                               </span>
+                            )}
+                            {job.status === 'COMPLETED' && (
+                               <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap' }}>
+                                  {job.complexityTag && (
+                                     <span className={`badge-complexity ${job.complexityTag.toLowerCase()}`}>
+                                        {job.complexityTag.toUpperCase()}
+                                     </span>
+                                  )}
+                                  {job.completedAt && (
+                                     <span style={{ fontSize:'0.65rem', fontWeight: 800, color:'#059669', background:'#ecfdf5', padding:'0.15rem 0.5rem', borderRadius:'2rem', border:'1px solid #d1fae5' }}>
+                                        ✓ FINISHED {new Date(job.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                     </span>
+                                  )}
+                               </div>
+                            )}
                         </div>
                        <div className="admin-job-meta">
                           {subjectTime && (
-                            <span style={{ fontSize:'0.65rem', fontWeight:800, color:'#64748b', background:'#f1f5f9', padding:'0.1rem 0.4rem', borderRadius:'0.35rem', border:'1px solid #e2e8f0', marginRight:'0.35rem' }}>
+                            <span style={{ 
+                              fontSize: '0.95rem', 
+                              fontWeight: 800, 
+                              color: '#0f172a', 
+                              background: '#f8fafc', 
+                              padding: '0.2rem 0.5rem', 
+                              borderRadius: '0.5rem', 
+                              border: '1px solid #e2e8f0',
+                              boxShadow: '0 2px 4px rgba(0,0,0,0.04)',
+                              marginRight: '0.8rem',
+                              letterSpacing: '-0.01em'
+                            }}>
                               {subjectTime}
                             </span>
                           )}
@@ -721,8 +820,11 @@ export default function AdminQueuePanel() {
                              {attsToShow.map((file: any, sIdx: number) => {
                                 const fileUrl = `${BACKEND_URL}/job-files/${job.relativeFolderPath}/${file}?token=${localStorage.getItem('token')}`
                                 return (
-                                  <div key={sIdx} className="admin-screenshot-item" onClick={() => isImage(file) ? setViewImage(fileUrl) : window.open(fileUrl)}>
-                                    {isImage(file) ? <img src={fileUrl} alt={file} /> : <div className="admin-file-badge">{file.split('.').pop()?.toUpperCase()}</div>}
+                                  <div key={sIdx} className="admin-attachment-wrapper" onClick={() => isImage(file) ? setViewImage(fileUrl) : window.open(fileUrl)} title={file}>
+                                    <div className="admin-screenshot-item">
+                                      {isImage(file) ? <img src={fileUrl} alt={file} /> : <div className="admin-file-badge">{file.split('.').pop()?.toUpperCase()}</div>}
+                                    </div>
+                                    <div className="admin-file-label">{file}</div>
                                   </div>
                                 )
                              })}
@@ -840,6 +942,16 @@ export default function AdminQueuePanel() {
                           </div>
                        </div>
                     </div>
+                    {(sess.currentQueueJob || sess.currentWalkinJob) && (
+                       <div className="session-job-info animate-in fade-in slide-in-from-top-1">
+                          <div className="job-customer-mini">
+                            {sess.currentQueueJob?.customerName || sess.currentWalkinJob?.customerName || 'Customer'}
+                          </div>
+                          <div className="job-subject-mini">
+                            {sess.currentQueueJob?.emailSubject || sess.currentWalkinJob?.description || 'Active Assignment'}
+                          </div>
+                       </div>
+                    )}
                  </div>
               ))}
             </div>
@@ -871,7 +983,7 @@ export default function AdminQueuePanel() {
                          const dt = formatLogDate(log.updatedAt);
                          return (
                            <tr key={log._id}>
-                             <td><strong>{log.customerName}</strong><br/><small>{log._id.substring(18)}</small></td>
+                             <td><strong>{log.customerName}</strong><br/><small>{(log.jobId || log._id).substring(18)}</small></td>
                              <td><span className={`log-status-badge ${log.status.toLowerCase()}`}>{log.status}</span></td>
                              <td>{log.assignedTo?.name || '—'}</td>
                              <td><span className="log-date">{dt.date}</span> <span className="log-time">{dt.time}</span></td>
@@ -899,7 +1011,10 @@ export default function AdminQueuePanel() {
                     <div key={i} style={{ paddingLeft: '1.5rem', borderLeft: '2px solid #e2e8f0', position: 'relative', marginBottom: '1.5rem' }}>
                        <div style={{ position: 'absolute', left: '-6px', top: '0', width: '10px', height: '10px', background: '#2563eb', borderRadius: '50%' }}></div>
                        <div style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 700 }}>{new Date(log.timestamp).toLocaleString()}</div>
-                       <div style={{ fontSize: '0.875rem', fontWeight: 800 }}>{log.action}</div>
+                       <div style={{ fontSize: '0.875rem', fontWeight: 800 }}>
+                          {log.action} 
+                          {log.actor?.name && <span style={{ marginLeft: '0.5rem', fontSize: '0.75rem', color: '#64748b', fontWeight: 500 }}>— by {log.actor.name}</span>}
+                       </div>
                        {log.details && <pre style={{ fontSize: '0.7rem', background: '#f8fafc', padding: '0.5rem', marginTop: '0.5rem', borderRadius: '0.5rem', overflowX: 'auto' }}>{JSON.stringify(log.details, null, 2)}</pre>}
                     </div>
                   ))}
@@ -967,7 +1082,7 @@ export default function AdminQueuePanel() {
           <div className="modal-content-luxury" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>Live Workload Detail</h2>
+                <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Live Workload Detail</h2>
                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>Current active jobs being processed</p>
               </div>
               <button onClick={() => setShowLiveLoadDetail(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
@@ -1003,7 +1118,7 @@ export default function AdminQueuePanel() {
           <div className="modal-content-luxury" onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '2rem' }}>
               <div>
-                <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>Roster Activity</h2>
+                <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Roster Activity</h2>
                 <p style={{ margin: '0.25rem 0 0 0', fontSize: '0.75rem', color: '#64748b' }}>Live staff utilization status</p>
               </div>
               <button onClick={() => setShowDesignersDetail(false)} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
@@ -1012,7 +1127,7 @@ export default function AdminQueuePanel() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem' }}>
                {/* Utilized List */}
                <div>
-                 <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#3b82f6', letterSpacing: '0.1em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                 <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#3b82f6', letterSpacing: '0.1em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#3b82f6' }}></div>
                     UTILIZED STAFF
                  </div>
@@ -1021,8 +1136,8 @@ export default function AdminQueuePanel() {
                       <div style={{ fontSize: '0.875rem', color: '#94a3b8', paddingLeft: '1rem' }}>No busy designers at the moment.</div>
                     ) : (
                       (sessions || []).filter((s:any) => s.currentQueueJob || s.currentWalkinJob).map((s:any) => (
-                        <div key={s.userId} style={{ padding: '0.75rem 1rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #dbeafe', display: 'flex', justifyContent: 'space-between' }}>
-                           <span style={{ fontWeight: 800, color: '#1e40af' }}>{s.userName}</span>
+                        <div key={s.staffId?._id || s._id} style={{ padding: '0.75rem 1rem', background: '#eff6ff', borderRadius: '0.75rem', border: '1px solid #dbeafe', display: 'flex', justifyContent: 'space-between' }}>
+                           <span style={{ fontWeight: 800, color: '#1e40af' }}>{s.staffId?.name || 'Unknown'}</span>
                            <span style={{ fontSize: '0.75rem', color: '#3b82f6', fontWeight: 600 }}>Working on Job</span>
                         </div>
                       ))
@@ -1032,7 +1147,7 @@ export default function AdminQueuePanel() {
 
                {/* Ready List */}
                <div>
-                  <div style={{ fontSize: '0.65rem', fontWeight: 900, color: '#10b981', letterSpacing: '0.1em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <div style={{ fontSize: '0.65rem', fontWeight: 800, color: '#10b981', letterSpacing: '0.1em', marginBottom: '1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                     <div style={{ width: 8, height: 8, borderRadius: '50%', background: '#10b981' }}></div>
                     READY STAFF (ON STANDBY)
                   </div>
@@ -1041,8 +1156,8 @@ export default function AdminQueuePanel() {
                        <div style={{ fontSize: '0.875rem', color: '#94a3b8', paddingLeft: '1rem' }}>All staff are currently busy.</div>
                     ) : (
                       (sessions || []).filter((s:any) => !s.currentQueueJob && !s.currentWalkinJob).map((s:any) => (
-                        <div key={s.userId} style={{ padding: '0.75rem 1rem', background: '#ecfdf5', borderRadius: '0.75rem', border: '1px solid #d1fae5', display: 'flex', justifyContent: 'space-between' }}>
-                           <span style={{ fontWeight: 800, color: '#065f46' }}>{s.userName}</span>
+                        <div key={s.staffId?._id || s._id} style={{ padding: '0.75rem 1rem', background: '#ecfdf5', borderRadius: '0.75rem', border: '1px solid #d1fae5', display: 'flex', justifyContent: 'space-between' }}>
+                           <span style={{ fontWeight: 800, color: '#065f46' }}>{s.staffId?.name || 'Unknown'}</span>
                            <span style={{ fontSize: '0.75rem', color: '#10b981', fontWeight: 600 }}>Available</span>
                         </div>
                       ))
@@ -1083,15 +1198,15 @@ export default function AdminQueuePanel() {
                         borderRadius: '1rem', padding: '1rem 1.25rem',
                         boxShadow: isTop ? '0 4px 12px rgba(0,0,0,0.06)' : 'none'
                       }}>
-                        <span style={{ fontSize: idx < 3 ? '1.75rem' : '0.9rem', fontWeight: 900, minWidth: '2.5rem', textAlign: 'center' }}>{medal}</span>
+                        <span style={{ fontSize: idx < 3 ? '1.75rem' : '0.9rem', fontWeight: 800, minWidth: '2.5rem', textAlign: 'center' }}>{medal}</span>
                         <div style={{ flex: 1 }}>
-                          <div style={{ fontWeight: 900, fontSize: '1rem', color: '#0f172a' }}>{entry.name}</div>
+                          <div style={{ fontWeight: 800, fontSize: '1rem', color: '#0f172a' }}>{entry.name}</div>
                           {avgMins !== null && (
                             <div style={{ fontSize: '0.7rem', color: '#64748b', marginTop: '0.15rem' }}>avg {avgMins}m per job</div>
                           )}
                         </div>
                         <div style={{ textAlign: 'right' }}>
-                          <div style={{ fontSize: '2rem', fontWeight: 900, lineHeight: 1, color: idx === 0 ? '#b45309' : '#0f172a' }}>{entry.count}</div>
+                          <div style={{ fontSize: '2rem', fontWeight: 800, lineHeight: 1, color: idx === 0 ? '#b45309' : '#0f172a' }}>{entry.count}</div>
                           <div style={{ fontSize: '0.65rem', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase' }}>jobs</div>
                         </div>
                       </div>
@@ -1131,11 +1246,16 @@ export default function AdminQueuePanel() {
 function ReassignModal({ 
   job, targetId, setTargetId, notes, setNotes, onClose, onSubmit, isPending, onlineStaffIds, busyStaffIds, assignmentStaffList
 }: any) {
+  const [forceMode, setForceMode] = useState<'PUSH' | 'PARK'>('PARK')
+  const [batchMode, setBatchMode] = useState(true)
+
+  const isTargetBusy = targetId && busyStaffIds.has(targetId)
+
   return (
     <div className="modal-overlay">
-      <div className="modal-content-luxury">
+      <div className="modal-content-luxury animate-in zoom-in-95" style={{ maxWidth: '520px' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.5rem' }}>
-          <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 900, color: '#0f172a' }}>Force Reassign Job</h2>
+          <h2 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 800, color: '#0f172a' }}>Force Reassign Job</h2>
           <button onClick={onClose} style={{ background: 'none', border: 'none', fontSize: '1.5rem', cursor: 'pointer', color: '#94a3b8' }}>&times;</button>
         </div>
         
@@ -1167,15 +1287,57 @@ function ReassignModal({
             </select>
           </div>
           <div>
-            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 800, fontSize: '0.875rem', color: '#475569' }}>Reassignment Notes (Optional)</label>
+            <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 800, fontSize: '0.875rem', color: '#475569' }}>Reassignment Notes (Instructions)</label>
             <textarea 
               className="search-input-elite" 
               style={{ width: '100%', minHeight: '80px', padding: '0.75rem', resize: 'vertical' }}
-              placeholder="e.g., 'Take over while John is on break...'"
+              placeholder="Provide context for the next designer..."
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
             />
           </div>
+
+          <div style={{ background: '#f0f9ff', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #e0f2fe' }}>
+            <label style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', cursor: 'pointer', marginBottom: '0.5rem' }}>
+              <input 
+                type="checkbox" 
+                checked={batchMode} 
+                onChange={(e) => setBatchMode(e.target.checked)} 
+                style={{ width: '1.2rem', height: '1.2rem' }}
+              />
+              <span style={{ fontSize: '0.875rem', fontWeight: 800, color: '#0369a1' }}>Move all pending jobs for this customer</span>
+            </label>
+            <p style={{ margin: 0, fontSize: '0.7rem', color: '#0ea5e9', paddingLeft: '2rem' }}>
+              Ensures the entire conversation stays with one person.
+            </p>
+          </div>
+
+          {isTargetBusy && (
+            <div style={{ background: '#fffbeb', padding: '1rem', borderRadius: '0.75rem', border: '1px solid #fef3c7', animation: 'shake 0.4s' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                <span style={{ fontSize: '1.2rem' }}>⚠️</span>
+                <span style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#92400e' }}>DESIGNER IS CURRENTLY BUSY</span>
+              </div>
+              
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', background: forceMode === 'PARK' ? 'white' : 'transparent', border: forceMode === 'PARK' ? '1px solid #fcd34d' : '1px solid transparent' }}>
+                  <input type="radio" name="forceBehavior" checked={forceMode === 'PARK'} onChange={() => setForceMode('PARK')} />
+                  <div>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#b45309' }}>Park as Next Job (Recommended)</div>
+                    <div style={{ fontSize: '0.65rem', color: '#d97706' }}>Work stays reserved in their queue. No interruption.</div>
+                  </div>
+                </label>
+                
+                <label style={{ display: 'flex', alignItems: 'center', gap: '0.6rem', cursor: 'pointer', padding: '0.5rem', borderRadius: '0.5rem', background: forceMode === 'PUSH' ? '#fef2f2' : 'transparent', border: forceMode === 'PUSH' ? '1px solid #fca5a5' : '1px solid transparent' }}>
+                  <input type="radio" name="forceBehavior" checked={forceMode === 'PUSH'} onChange={() => setForceMode('PUSH')} />
+                  <div>
+                    <div style={{ fontSize: '0.8125rem', fontWeight: 800, color: '#991b1b' }}>Interruption: Force to Active Slot</div>
+                    <div style={{ fontSize: '0.65rem', color: '#ef4444' }}>Pauses their current job. They must do this NOW.</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
         </div>
 
         <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '1rem' }}>
@@ -1187,17 +1349,17 @@ function ReassignModal({
             onClick={() => {
               if (targetId === 'pool') {
                 if (window.confirm('Return this job to the general pool? It will be unassigned from everyone.')) {
-                   onSubmit({ jobId: job._id, toStaffId: null, notes });
+                   onSubmit({ jobId: job._id, toStaffId: null, notes, batchMode });
                 }
                 return;
               }
               const isOnline = onlineStaffIds.has(targetId);
               if (!isOnline && !window.confirm('Target staff is OFFLINE. Force-reassigning will create a pending pin for them instead of an immediate active assignment. Proceed?')) return;
-              onSubmit({ jobId: job._id, toStaffId: targetId, notes });
+              onSubmit({ jobId: job._id, toStaffId: targetId, notes, forceMode, batchMode });
             }}
-            style={{ padding: '0.75rem 1.5rem', borderRadius: '2rem', border: 'none', background: '#d97706', color: 'white', fontWeight: 800, cursor: targetId && targetId !== job.assignedTo?._id ? 'pointer' : 'not-allowed', opacity: targetId && targetId !== job.assignedTo?._id ? 1 : 0.5 }}
+            style={{ padding: '0.75rem 1.75rem', borderRadius: '2rem', border: 'none', background: '#d97706', color: 'white', fontWeight: 800, cursor: targetId && targetId !== job.assignedTo?._id ? 'pointer' : 'not-allowed', opacity: targetId && targetId !== job.assignedTo?._id ? 1 : 0.5, boxShadow: '0 4px 12px rgba(217,119,6,0.2)' }}
           >
-            {isPending ? 'Reassigning...' : 'Force Reassign ⤨'}
+            {isPending ? 'Processing...' : 'Execute Reassignment ⤨'}
           </button>
         </div>
       </div>

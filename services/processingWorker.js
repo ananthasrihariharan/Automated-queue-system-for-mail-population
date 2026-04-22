@@ -4,6 +4,7 @@ const path = require('path')
 const crypto = require('crypto')
 const IngestionTask = require('../models/IngestionTask')
 const QueueJob = require('../models/QueueJob')
+const CustomerPreference = require('../models/CustomerPreference')
 const eventBus = require('./eventBus')
 
 /**
@@ -19,6 +20,7 @@ class ProcessingWorker {
   // Generic recursive file walker (Async)
   async _getAllFiles(dirPath, arrayOfFiles = []) {
     try {
+      if (!fs.existsSync(dirPath)) return []
       const files = await fsp.readdir(dirPath, { withFileTypes: true });
       for (const file of files) {
         const fullPath = path.join(dirPath, file.name);
@@ -32,6 +34,45 @@ class ProcessingWorker {
       console.error(`[Worker] Walker error at ${dirPath}:`, err.message);
     }
     return arrayOfFiles;
+  }
+
+  /**
+   * ROBUSTNESS: Stability Guard
+   * Checks if a folder has stopped growing in size/file count.
+   * Prevents ingestion race conditions where worker reads a partial folder.
+   */
+  async ensureFolderStability(folderPath, maxAttempts = 3, interval = 1500) {
+    let lastStats = { size: -1, count: -1 };
+    
+    for (let i = 0; i < maxAttempts; i++) {
+      const currentStats = await this._getFolderStats(folderPath);
+      
+      // If folder is empty, we must wait at least once to be sure
+      // If size and count match the previous check, we consider it "Stable"
+      if (currentStats.size > 0 && currentStats.size === lastStats.size && currentStats.count === lastStats.count) {
+        return true; 
+      }
+      
+      lastStats = currentStats;
+      await new Promise(r => setTimeout(r, interval));
+    }
+    return true; // Proceed anyway after max attempts
+  }
+
+  async _getFolderStats(folderPath) {
+    try {
+      const files = await this._getAllFiles(folderPath, []);
+      let totalSize = 0;
+      for (const f of files) {
+        try {
+          const s = await fsp.stat(f);
+          totalSize += s.size;
+        } catch (e) {}
+      }
+      return { size: totalSize, count: files.length };
+    } catch (e) {
+      return { size: 0, count: 0 };
+    }
   }
 
   async start() {
@@ -78,6 +119,9 @@ class ProcessingWorker {
         throw new Error('Folder does not exist')
       }
 
+      // 0. STABILITY GUARD: Wait for files to finish landing
+      await this.ensureFolderStability(task.folderPath)
+
       // 1. Calculate File Hashes (Async)
       const fileData = await this.getFolderFingerprint(task.folderPath)
       const fingerprint = this.computeHash(fileData)
@@ -87,32 +131,95 @@ class ProcessingWorker {
       const subfolderName = path.basename(task.folderPath)
       const customerEmail = parentFolder.replace(/\s*\(\d+\)$/, '').trim()
       
+      let isTrueDuplicate = false;
       const spamType = this.getSpamCategory(customerEmail, subfolderName)
       const isSpam = !!spamType;
+
 
       // 3. Duplicate & Smart Threading Logic
       const activeJobsMatch = await QueueJob.find({
         customerEmail,
-        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }
+        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'ADMIN_REVIEW'] }
       }).sort({ createdAt: -1 }).populate('assignedTo');
 
       let activeJobForCustomer = null;
+      let subjectMatch = null;
       for (const aj of activeJobsMatch) {
-         if (aj.fingerprint === fingerprint || aj.emailSubject.toLowerCase() === subfolderName.toLowerCase()) {
-             activeJobForCustomer = aj;
-             break;
-         }
+        if (aj.fingerprint === fingerprint) {
+          activeJobForCustomer = aj;
+          break; // Fingerprint match is authoritative
+        }
+        if (!subjectMatch && aj.emailSubject.toLowerCase() === subfolderName.toLowerCase()) {
+          subjectMatch = aj; // Remember first subject match as fallback
+        }
+      }
+      if (!activeJobForCustomer) {
+        activeJobForCustomer = subjectMatch;
       }
 
-      let isTrueDuplicate = false;
-      let existingThreadId = null;
+      // FIX 1: If the matched parent job is actively PAUSED, we must return it to the queue
+      // Otherwise, it gets skipped by supersede AND block the staff member's next job auto-assignment
+      if (activeJobForCustomer && activeJobForCustomer.status === 'PAUSED') {
+        activeJobForCustomer.status = 'QUEUED';
+        activeJobForCustomer.returnReason = 'Superseded by incoming revision — returned to pool';
+        await activeJobForCustomer.save();
+
+        // Also clear the session so the staff member isn't blocked resuming stale work
+        const QueueSession = require('../models/QueueSession');
+        await QueueSession.updateMany(
+          { currentQueueJob: activeJobForCustomer._id },
+          { $set: { currentQueueJob: null } }
+        );
+      }
+
+      // 4. Metadata Overrides (for manual uploads / WhatsApp)
+      // PATIENCE LOOP: On Windows systems, metadata.json might still be locked by the writer.
+      // We retry to ensure we don't fall back to "Phone Number" prematurely.
+      let metadata = null;
+      const metadataPath = path.join(task.folderPath, 'metadata.json');
+      
+      for (let attempt = 1; attempt <= 3; attempt++) {
+        if (fs.existsSync(metadataPath)) {
+          try {
+            const raw = fs.readFileSync(metadataPath, 'utf8');
+            if (raw && raw.trim()) {
+                metadata = JSON.parse(raw);
+                break; 
+            }
+          } catch (e) {
+            console.warn(`[Worker] Metadata read attempt ${attempt} for ${subfolderName} failed: ${e.message}`);
+          }
+        }
+        if (attempt < 3) await new Promise(r => setTimeout(r, 1000));
+      }
+
+      // SMART FALLBACK: If metadata reading STILL failed (or it was a non-manual upload), 
+      // extract the customer name from the descriptive folder name if possible.
+      const folderParts = subfolderName.split('_WhatsApp_');
+      const folderNameFallback = folderParts.length > 1 ? folderParts[1].replace(/_/g, ' ') : null;
+
+      const finalCustomerName = metadata?.customerName || folderNameFallback || customerEmail.split('@')[0];
+
+      const manualJobTitle = metadata?.jobTitle; // Override subject if provided manually
+
+      let jobStatus = 'QUEUED';
       let preferredStaff = null;
+      if (metadata?.preferredStaffId) {
+          preferredStaff = metadata.preferredStaffId;
+          console.log(`[Worker] Manual override: Using preferred staff from metadata: ${preferredStaff}`);
+      }
+      let existingThreadId = null;
       let parentJobId = null;
       let nextVersion = 1;
 
       if (activeJobForCustomer) {
         existingThreadId = activeJobForCustomer.threadId || activeJobForCustomer._id.toString();
-        preferredStaff = activeJobForCustomer.assignedTo?._id || activeJobForCustomer.assignedTo;
+        
+        // If not manually overridden by metadata, follow existing thread handler
+        if (!preferredStaff) {
+            preferredStaff = activeJobForCustomer.assignedTo?._id || activeJobForCustomer.assignedTo || activeJobForCustomer.pinnedToStaff;
+        }
+
         parentJobId = activeJobForCustomer._id;
         
         const versionCount = await QueueJob.countDocuments({ threadId: existingThreadId });
@@ -121,55 +228,99 @@ class ProcessingWorker {
         if (activeJobForCustomer.fingerprint === fingerprint) {
           isTrueDuplicate = true;
         }
+
       } else {
         const recentJob = await QueueJob.findOne({
           customerEmail,
           emailSubject: { $regex: new RegExp(`^${subfolderName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') },
-          createdAt: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+          createdAt: { $gte: new Date(Date.now() - 5 * 60 * 60 * 1000) }
         }).sort({ createdAt: -1 });
 
         if (recentJob) {
           existingThreadId = recentJob.threadId || recentJob._id.toString();
           const vCount = await QueueJob.countDocuments({ threadId: existingThreadId });
           nextVersion = vCount + 1;
+        } else {
+          // 4. Check CustomerPreference if no recent job exists (Restricted to 5 hours)
+          const fiveHoursAgo = new Date(Date.now() - 5 * 60 * 60 * 1000);
+          const preference = await CustomerPreference.findOne({ 
+            customerEmail,
+            updatedAt: { $gte: fiveHoursAgo }
+          });
+          if (preference) {
+             preferredStaff = preference.preferredStaff;
+             console.log(`[Worker] Found within-day preference for ${customerEmail}: ${preferredStaff}`);
+          }
         }
       }
 
+      let isRelativelyOnline = false;
       let staffIsOnline = false;
+      let staffIsFree = false;
+      let activeSession = null;
+
       if (preferredStaff) {
         const QueueSession = require('../models/QueueSession');
+        // 1. Check for Active Session (Strictly Online)
         const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000);
-        const activeSession = await QueueSession.findOne({
+        activeSession = await QueueSession.findOne({
           staffId: preferredStaff,
           isActive: true,
           lastSeenAt: { $gte: ninetyMinsAgo }
         });
-        if (activeSession) staffIsOnline = true;
+        
+        if (activeSession) {
+          staffIsOnline = true;
+          isRelativelyOnline = true;
+          // IMPORTANT: Check if staff is currently free (no active job)
+          if (!activeSession.currentQueueJob) {
+            staffIsFree = true;
+          }
+        } else {
+          // 2. Check for recent activity (Relatively Online/In-Shift - 5 Hours)
+          const fiveHoursAgoSession = new Date(Date.now() - 5 * 60 * 60 * 1000);
+          const recentSession = await QueueSession.findOne({
+            staffId: preferredStaff,
+            lastSeenAt: { $gte: fiveHoursAgoSession }
+          }).sort({ lastSeenAt: -1 });
+          if (recentSession) isRelativelyOnline = true;
+        }
       }
 
       const dueBy = new Date()
       dueBy.setHours(dueBy.getHours() + 4)
 
-      const watchPath = process.env.N8N_WATCH_PATH
       const nextPosition = Date.now()
 
-      // 5. Read files (Async)
-      const allFilesList = await fsp.readdir(task.folderPath);
+      // 5. Read files (Recursive discovery for attachments)
+      const allFilesList = await this._getAllFiles(task.folderPath);
       const attachments = [];
       const txtFiles = [];
 
-      for (const f of allFilesList) {
-        if (f.startsWith('.')) continue;
-        const full = path.join(task.folderPath, f);
-        const stat = await fsp.stat(full);
-        if (stat.isDirectory()) continue;
+      for (const fullPath of allFilesList) {
+        const filename = path.basename(fullPath);
+        if (filename.startsWith('.') || filename === 'metadata.json') continue;
 
-        if (/\.(txt|html|htm)$/i.test(f)) {
-          txtFiles.push(f);
+        const relativePath = path.relative(task.folderPath, fullPath).replace(/\\/g, '/');
+        
+        if (/\.(txt|html|htm)$/i.test(filename)) {
+          // Only include top-level text files in txtFiles for mail body to avoid pollution
+          if (!relativePath.includes('/')) {
+            txtFiles.push(relativePath);
+          }
         } else {
-          attachments.push(f);
+          attachments.push(relativePath);
         }
       }
+
+      // 🚨 CRITICAL SAFETY: If the worker found ZERO attachments after its stability checks, 
+      // it means the files are having significant trouble landing. We abort and let it retry 
+      // rather than creating an empty, broken job.
+      if (attachments.length === 0 && !isTrueDuplicate && task.attempts < 3) {
+         console.warn(`[Worker] Stability Guard passed but ZERO attachments found for ${subfolderName}. Aborting to retry.`);
+         throw new Error('Assets not yet detected in folder structure');
+      }
+
       txtFiles.sort();
 
       const stripHtml = (html) => html
@@ -192,38 +343,71 @@ class ProcessingWorker {
       mailBody = mailBody.replace(/---\n\n$/, '').trim()
 
       const isFollowUp = !!activeJobForCustomer;
-      const shouldAutoAssign = isFollowUp && preferredStaff && staffIsOnline;
       
-      let jobStatus = isTrueDuplicate ? 'ADMIN_REVIEW' : (shouldAutoAssign ? 'ASSIGNED' : 'QUEUED');
-      
-      if (spamType === 'MARKETING') {
-        jobStatus = 'JUNK';
-      } else if (spamType === 'NOREPLY') {
-        jobStatus = 'ADMIN_REVIEW';
+      const isWhatsApp = customerEmail.endsWith('@whatsapp.local');
+      const jobType = isWhatsApp ? 'WHATSAPP' : 'EMAIL';
+
+      // WHATSAPP OVERRIDE: No spam review, direct to queue or assignment
+      if (isWhatsApp) {
+        jobStatus = 'QUEUED';
+      }
+
+      // Priority Calculation from Metadata
+      let priorityScore = isFollowUp ? 5 : 0;
+      if (metadata?.priority === 'IMMEDIATE') {
+        priorityScore = 20;
+      } else if (metadata?.priority === 'CRITICAL') {
+        priorityScore = 10;
+      } else if (metadata?.priority === 'URGENT') {
+        priorityScore = 5;
+      } else if (metadata?.priority === 'NORMAL') {
+        priorityScore = 0;
       }
       
+      const shouldAssignImmediately = !!(isWhatsApp && preferredStaff && staffIsOnline && staffIsFree);
+      const shouldPin = !!(preferredStaff && isRelativelyOnline && !shouldAssignImmediately);
+
+      if (shouldAssignImmediately) {
+        jobStatus = 'ASSIGNED';
+      }
+      
+      // ROBUST PATH HANDLING: Normalize roots for Windows (ensures case-insensitive start detection)
+      const n8nRoot = process.env.N8N_WATCH_PATH ? path.resolve(process.env.N8N_WATCH_PATH) : null;
+      const waRoot = process.env.WHATSAPP_WATCH_PATH ? path.resolve(process.env.WHATSAPP_WATCH_PATH) : null;
+      const absoluteFolder = path.resolve(task.folderPath);
+      
+      let finalBase = path.dirname(absoluteFolder);
+      if (n8nRoot && absoluteFolder.toLowerCase().startsWith(n8nRoot.toLowerCase())) {
+        finalBase = n8nRoot;
+      } else if (waRoot && absoluteFolder.toLowerCase().startsWith(waRoot.toLowerCase())) {
+        finalBase = waRoot;
+      }
+
       const jobData = {
         customerEmail,
-        customerName: customerEmail.split('@')[0],
-        emailSubject: subfolderName,
+        customerName: finalCustomerName,
+        emailSubject: manualJobTitle || subfolderName,
         mailBody: mailBody,
-        folderPath: task.folderPath,
-        relativeFolderPath: path.relative(watchPath || path.dirname(task.folderPath), task.folderPath).replace(/\\/g, '/'),
+        folderPath: absoluteFolder,
+        relativeFolderPath: path.relative(finalBase, absoluteFolder).replace(/\\/g, '/'),
         attachments,
+        attachmentMeta: metadata?.originalNamesMap || {},
         status: jobStatus,
         fingerprint,
-        priorityScore: isFollowUp ? 5 : 0,
+        priorityScore,
         queuePosition: nextPosition,
-        type: 'EMAIL',
+        type: jobType,
         dueBy,
         threadId: existingThreadId,
         version: nextVersion,
         parentJobId: parentJobId,
-        isAutoAssigned: shouldAutoAssign,
-        continuityContext: shouldAutoAssign ? `Continuity: Auto-assigned to ${activeJobForCustomer.assignedTo?.name || 'original handler'}` : (isTrueDuplicate ? 'Identical content detected. System suggests duplicate arrival.' : ''),
-        assignedTo: shouldAutoAssign ? preferredStaff : null,
-        assignedAt: shouldAutoAssign ? new Date() : null,
-        returnReason: spamType === 'MARKETING' ? 'Auto-detected Marketing/Spam' : (spamType === 'NOREPLY' ? 'System No-Reply (Admin Review Required)' : (isTrueDuplicate ? 'Content Duplicate (Review Required)' : (isFollowUp ? `Revision v${nextVersion} detected` : ''))),
+        isAutoAssigned: shouldAssignImmediately,
+        continuityContext: shouldAssignImmediately ? `WhatsApp Auto-Assign: Handling ${finalCustomerName}` : (shouldPin ? (isFollowUp ? `Continuity: Another job arrived from ${finalCustomerName}` : `Sticky Routing: Reserved for ${finalCustomerName}'s preferred handler`) : (isTrueDuplicate ? 'Identical content detected. System suggests duplicate arrival.' : (preferredStaff ? 'Previous handler identified but currently offline/out of shift.' : ''))),
+        assignedTo: shouldAssignImmediately ? preferredStaff : null,
+        assignedAt: shouldAssignImmediately ? new Date() : null,
+        pinnedToStaff: shouldPin ? preferredStaff : null,
+        department: metadata?.department || null,
+        returnReason: isWhatsApp ? (metadata?.description || 'WhatsApp Job Upload') : (spamType === 'MARKETING' ? 'Auto-detected Marketing/Spam' : (spamType === 'NOREPLY' ? 'System No-Reply (Admin Review Required)' : (isTrueDuplicate ? 'Content Duplicate (Review Required)' : (isFollowUp ? `Revision v${nextVersion} detected` : '')))),
         externalLinks: this.extractExternalLinks(mailBody),
         auditLog: [{
           action: 'JOB_INGESTED',
@@ -236,17 +420,45 @@ class ProcessingWorker {
         }]
       }
 
+      // Final Deduplication check (protects against last-millisecond races between watcher and manual routes)
+      const exactDuplicate = await QueueJob.findOne({ 
+        folderPath: task.folderPath,
+        createdAt: { $gte: new Date(Date.now() - 60 * 1000) } // Match any job for this folder in the last minute
+      });
+      if (exactDuplicate) {
+        console.log(`[Worker] Aborting: Exact folderPath already exists in DB within 60s: ${task.folderPath}`);
+        task.status = 'COMPLETED';
+        task.completedAt = new Date();
+        await task.save();
+        return null;
+      }
+
       const job = await QueueJob.create(jobData)
       task.status = 'COMPLETED'
       task.completedAt = new Date()
       await task.save()
 
+      // SUPERSEDE FIRST: Mark older queued jobs for this thread as JUNK *before* emitting
+      // job:created, so the admin dashboard never briefly shows two live jobs for the same thread.
       if (isFollowUp && existingThreadId) {
         const supersedeType = isTrueDuplicate ? 'Identical Resend' : `Revision v${nextVersion}`;
+
+        // KEY FIX: The parent job was created before threadId was assigned to itself.
+        // Patch its own threadId to itself so future supersede queries can find it by threadId.
+        if (parentJobId) {
+          await QueueJob.findOneAndUpdate(
+            { _id: parentJobId, threadId: null },
+            { $set: { threadId: existingThreadId } }
+          )
+        }
+
         const superseded = await QueueJob.updateMany(
           { 
-            threadId: existingThreadId, 
-            status: 'QUEUED', 
+            $or: [
+              { threadId: existingThreadId },  // Matches all siblings who know their threadId
+              { _id: parentJobId }             // Directly matches the parent (threadId was null)
+            ],
+            status: { $in: ['QUEUED', 'ADMIN_REVIEW'] }, 
             _id: { $ne: job._id } 
           },
           { 
@@ -265,7 +477,19 @@ class ProcessingWorker {
           }
         )
         if (superseded.modifiedCount > 0) {
-          console.log(`[Worker] Superseded ${superseded.modifiedCount} older queued jobs for thread ${existingThreadId}`)
+          console.log(`[Worker] Superseded ${superseded.modifiedCount} older jobs for thread ${existingThreadId}`)
+        }
+      }
+
+      // SESSION UPDATE: If this job was assigned immediately, update their
+      // session immediately so the assignment engine knows they are busy and won't double-assign.
+      if (shouldAssignImmediately && preferredStaff && activeSession) {
+        try {
+          activeSession.currentQueueJob = job._id;
+          await activeSession.save();
+          console.log(`[Worker] Session updated for immediately assigned staff ${preferredStaff}`);
+        } catch (sessErr) {
+          console.error('[Worker] Session update after instant-assign failed:', sessErr.message);
         }
       }
 

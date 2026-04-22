@@ -5,6 +5,8 @@
 
 const express = require('express')
 const router = express.Router()
+const path = require('path')
+const fs = require('fs')
 
 const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
@@ -67,7 +69,10 @@ router.get('/my-jobs-today', auth, authorize('PREPRESS'), async (req, res) => {
         { status: 'COMPLETED', completedAt: { $gte: startOfToday } },
         { status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] } }
       ]
-    }).sort({ createdAt: -1 }).populate('assignedTo', 'name')
+    })
+      .sort({ createdAt: -1 })
+      .populate('assignedTo', 'name')
+      .populate('reassignedFrom', 'name')
 
     res.json(jobs)
   } catch (err) {
@@ -97,7 +102,10 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
       staffId: req.user._id,
       isActive: true
     })
-      .populate('currentQueueJob')
+      .populate({
+        path: 'currentQueueJob',
+        populate: { path: 'reassignedFrom', select: 'name' }
+      })
       .populate('currentWalkinJob')
 
     if (!session) {
@@ -341,20 +349,42 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
       return res.status(403).json({ message: 'Access denied. You are not assigned to this job.' })
     }
 
-    // 3. Resolve Real Path
-    const path = require('path')
-    const fs = require('fs')
-    const watchPath = process.env.N8N_WATCH_PATH
-    if (!watchPath) return res.status(500).json({ message: 'Watch path not configured' })
+    // 3. Resolve Real Path (ROBUST Multi-Root)
+    const watchRoot = process.env.N8N_WATCH_PATH || ''
+    const whatsappRoot = process.env.WHATSAPP_WATCH_PATH || ''
+    const archiveRoot = process.env.COMPLETED_JOBS_PATH || ''
 
-    // Build absolute path: watchPath / relativeFolderPath / requestedFile
-    // Use the relativeFolderPath from the job document to ensure consistency
-    const absolutePath = path.join(watchPath, job.relativeFolderPath, filePath)
+    if (!watchRoot && !whatsappRoot) {
+      return res.status(500).json({ message: 'Storage paths not configured' })
+    }
 
-    // 🧹 Prevention of path traversal
-    const normalizedPath = path.normalize(absolutePath)
-    if (!normalizedPath.startsWith(path.normalize(watchPath))) {
-      return res.status(400).json({ message: 'Invalid path' })
+    // Sanitize sub-path to prevent Windows drive-root resets (strips leading slashes)
+    const cleanSubPath = filePath.replace(/^[\\/]+/, ''); 
+    
+    // Attempt to resolve against Watch Path first, then Whatsapp Path, then Archive Path
+    let absolutePath = path.join(watchRoot, job.relativeFolderPath, cleanSubPath)
+    
+    if (!fs.existsSync(absolutePath) && whatsappRoot) {
+      absolutePath = path.join(whatsappRoot, job.relativeFolderPath, cleanSubPath)
+    }
+
+    if (!fs.existsSync(absolutePath) && archiveRoot) {
+      absolutePath = path.join(archiveRoot, job.relativeFolderPath, cleanSubPath)
+    }
+
+    // 🧹 Prevention of path traversal (Case-insensitive for Windows)
+    const normalizedPath = path.resolve(absolutePath);
+    const nRoot = watchRoot ? path.resolve(watchRoot) : null;
+    const aRoot = archiveRoot ? path.resolve(archiveRoot) : null;
+    const wRoot = whatsappRoot ? path.resolve(whatsappRoot) : null;
+
+    const isUnderWatch = nRoot ? normalizedPath.toLowerCase().startsWith(nRoot.toLowerCase()) : false;
+    const isUnderArchive = aRoot ? normalizedPath.toLowerCase().startsWith(aRoot.toLowerCase()) : false;
+    const isUnderWhatsapp = wRoot ? normalizedPath.toLowerCase().startsWith(wRoot.toLowerCase()) : false;
+
+    if (!isUnderWatch && !isUnderArchive && !isUnderWhatsapp) {
+      console.warn(`[Security] Blocked traversal attempt in Prepress: ${filePath}`);
+      return res.status(400).json({ message: 'Invalid path' });
     }
 
     if (!fs.existsSync(normalizedPath)) {
@@ -362,6 +392,14 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
     }
 
     const stats = fs.statSync(normalizedPath)
+
+    // FRIENDLY FILENAME PRESERVATION
+    // Use the on-disk filename (now preserved as original) for the user's download
+    const filename = path.basename(normalizedPath)
+    const safeName = filename.replace(/[/\\?%*:|"<>]/g, '-')
+    // Use 'inline' so images still preview, but 'Save As' uses the friendly name
+    res.setHeader('Content-Disposition', `inline; filename="${safeName}"`)
+
     if (stats.isDirectory()) {
       // Return a simple HTML file list if it's a directory
       const files = fs.readdirSync(normalizedPath)

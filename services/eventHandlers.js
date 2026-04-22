@@ -2,6 +2,7 @@ const eventBus = require('./eventBus')
 const JobEvent = require('../models/JobEvent')
 const QueueJob = require('../models/QueueJob')
 const QueueSession = require('../models/QueueSession')
+const User = require('../models/User')
 const statsService = require('./statsService')
 
 /**
@@ -16,6 +17,7 @@ class EventHandlers {
     this.io = null
     this.syncInterval = null
     this.isSyncing = false
+    this.sweepTimer = null  // Debounce timer for assignIdleStaff sweeps
   }
 
   async init(io) {
@@ -39,18 +41,19 @@ class EventHandlers {
       else if (job.status === 'ADMIN_REVIEW') await statsService.increment('adminReview')
       else if (job.status === 'JUNK') await statsService.increment('junk')
 
+      // Debounced sweep: multiple rapid job:created events coalesce into one sweep
       if (job.status === 'QUEUED') {
-        try {
-          const queueEngine = require('./queueEngine')
-          await queueEngine.assignIdleStaff()
-        } catch (err) {
-          console.error('[Events] assignIdleStaff failed:', err.message)
-        }
+        this.triggerSweep()
       }
     })
 
-    eventBus.on('job:assigned', async ({ job, staffId }) => {
-      await this.logEvent(job._id, 'ASSIGNED', { staffId })
+    eventBus.on('job:assigned', async ({ job, staffId, details = {} }) => {
+      const staff = await User.findById(staffId).select('name').lean()
+      await this.logEvent(job._id, 'ASSIGNED', { 
+        staffId, 
+        staffName: staff?.name || 'Unknown',
+        ...details
+      }, staffId)
       
       // Update Stats
       await statsService.move('queued', 'assigned')
@@ -63,7 +66,8 @@ class EventHandlers {
     })
 
     eventBus.on('job:completed', async ({ jobId, staffId }) => {
-      await this.logEvent(jobId, 'COMPLETED', { staffId })
+      const staff = await User.findById(staffId).select('name').lean()
+      await this.logEvent(jobId, 'COMPLETED', { staffId, staffName: staff?.name || 'Unknown' }, staffId)
       
       // Update Stats
       await statsService.decrement('assigned')
@@ -71,11 +75,39 @@ class EventHandlers {
     })
 
     eventBus.on('job:pinned', async ({ jobId, staffId }) => {
+      const job = await QueueJob.findById(jobId).lean();
       await this.logEvent(jobId, 'CREATED', { pinnedTo: staffId, action: 'PIN' })
+
+      // Real-time notification for the staff member (Continuity / Manual Pin)
+      if (this.io && staffId && job) {
+        const staffRoom = `staff:${String(staffId).toLowerCase()}`
+        this.io.to(staffRoom).emit('job:pinned', { 
+          job, 
+          message: job.continuityContext || `A new job has been pinned to your queue.`
+        })
+      }
+
+      // Use debounced sweep instead of immediate assignNextJob so the pin DB write
+      // has time to flush before the engine queries candidates. Without this delay,
+      // assignNextJob could pick a different job instead of the newly pinned one.
+      this.triggerSweep()
     })
 
-    eventBus.on('job:reassigned', async ({ jobId, fromStaffId, toStaffId, notes }) => {
-      await this.logEvent(jobId, 'REASSIGNED', { fromStaffId, toStaffId, notes })
+
+    eventBus.on('job:reassigned', async ({ jobId, fromStaffId, toStaffId, notes, options }) => {
+      const [fromStaff, toStaff] = await Promise.all([
+        fromStaffId ? User.findById(fromStaffId).select('name').lean() : null,
+        toStaffId ? User.findById(toStaffId).select('name').lean() : null
+      ])
+      await this.logEvent(jobId, 'REASSIGNED', { 
+        fromStaffId, 
+        fromStaffName: fromStaff?.name || 'Pool',
+        toStaffId, 
+        toStaffName: toStaff?.name || 'Pool',
+        notes,
+        forceMode: options?.forceMode || 'PARK', 
+        batchMode: options?.batchMode || false
+      }, toStaffId || fromStaffId)
       
       // Note: Reassigning within the pool or between users might not change overall "assigned" vs "queued" stats
       // unless it was previously assigned and now is not (return to pool)
@@ -121,6 +153,7 @@ class EventHandlers {
         if (assignedTo) this.io.to(`staff:${String(assignedTo).toLowerCase()}`).emit('job:removed', { jobId, reason: 'deleted_by_admin' })
         this.io.to('admin:queue').emit('state:sync', { type: 'job_deleted', jobId })
       }
+      // Use debounced sweep instead of direct call
       this.triggerSweep()
     })
 
@@ -152,12 +185,19 @@ class EventHandlers {
 
     // ─── Missing Listeners (Audit Fix) ───
     eventBus.on('job:resumed', async ({ job, staffId }) => {
-      await this.logEvent(job._id, 'RESUMED', { staffId })
+      const staff = await User.findById(staffId).select('name').lean()
+      await this.logEvent(job._id, 'RESUMED', { staffId, staffName: staff?.name || 'Unknown' }, staffId)
       await statsService.move('paused', 'assigned')
     })
 
-    eventBus.on('job:paused', async ({ job, staffId }) => {
-      await this.logEvent(job._id, 'PAUSED', { staffId })
+    eventBus.on('job:paused', async ({ job, staffId, details = {} }) => {
+      const staff = await User.findById(staffId).select('name').lean()
+      await this.logEvent(job._id, 'PAUSED', { 
+          staffId, 
+          staffName: staff?.name || 'Unknown',
+          reason: job.returnReason || '',
+          ...details
+      }, staffId)
       await statsService.move('assigned', 'paused')
     })
 
@@ -172,8 +212,17 @@ class EventHandlers {
       this.triggerSweep()
     })
 
+    eventBus.on('job:batch-reserved', async ({ customerEmail, staffId }) => {
+      // Find all affected jobs to log them individually or log a summary
+      // Logging individually is better for the Activity Journal
+      const jobs = await QueueJob.find({ customerEmail, pinnedToStaff: staffId, status: 'QUEUED' })
+      for (const job of jobs) {
+        await this.logEvent(job._id, 'CREATED', { action: 'BATCH_RESERVED', staffId }, staffId)
+      }
+    })
+
     eventBus.on('walkin:approved', async ({ requestId, job }) => {
-      await this.logEvent(job._id, 'ASSIGNED', { action: 'WALKIN_APPROVED', requestId })
+      await this.logEvent(job._id, 'ASSIGNED', { action: 'WALKIN_APPROVED', requestId }, job.assignedTo)
       // Walkin creation implicitly increments a job count. 
       // But walkins are created directly with status ASSIGNED or QUEUED.
       // Since job:created is NOT emitted for manual walkin creation in queueEngine.js (it should be!),
@@ -188,7 +237,7 @@ class EventHandlers {
     })
 
     eventBus.on('reassign:approved', async ({ requestId, jobId, targetStaffId }) => {
-      await this.logEvent(jobId, 'REASSIGNED', { action: 'REASSIGN_APPROVED', requestId, targetStaffId })
+      await this.logEvent(jobId, 'REASSIGNED', { action: 'REASSIGN_APPROVED', requestId, targetStaffId }, targetStaffId)
       // Reassignment status move is already handled by job:reassigned emission in reassignJob
     })
 
@@ -197,7 +246,13 @@ class EventHandlers {
         const jobId = String(request.jobId._id || request.jobId)
         console.log(`[Events] Processing reassign:requested for Job ${jobId} from Staff ${fromStaffId}`)
         
-        await this.logEvent(jobId, 'REASSIGN_REQUESTED', { requestId: request._id, reason: request.description })
+        const requester = await User.findById(fromStaffId).select('name').lean()
+        await this.logEvent(jobId, 'REASSIGN_REQUESTED', { 
+            requestId: request._id, 
+            reason: request.description,
+            requestedBy: fromStaffId,
+            requestedByName: requester?.name || 'Unknown'
+        }, fromStaffId)
         
         // Update Stats (Wrapped in try-catch so it never blocks the socket emission)
         try {
@@ -230,15 +285,20 @@ class EventHandlers {
   /**
    * Centralized Engine 'Crank':
    * Scans for all idle staff and attempts to assign available jobs.
-   * Throttled slightly to prevent DB thundering herds during concurrent events.
+   * Debounced to 150ms — multiple rapid events coalesce into a single sweep,
+   * preventing concurrent assignIdleStaff() calls that cause job over-assignment.
    */
-  async triggerSweep() {
-    try {
-      const queueEngine = require('./queueEngine')
-      await queueEngine.assignIdleStaff()
-    } catch (err) {
-      console.error('[Events] triggerSweep failed:', err.message)
-    }
+  triggerSweep() {
+    if (this.sweepTimer) clearTimeout(this.sweepTimer)
+    this.sweepTimer = setTimeout(async () => {
+      this.sweepTimer = null
+      try {
+        const queueEngine = require('./queueEngine')
+        await queueEngine.assignIdleStaff()
+      } catch (err) {
+        console.error('[Events] triggerSweep failed:', err.message)
+      }
+    }, 150)
   }
  
   async logEvent(jobId, actionType, details = {}, userId = null) {
@@ -251,6 +311,7 @@ class EventHandlers {
         $push: {
           auditLog: {
             action: actionType,
+            actor: userId, // RESTORED: Now correctly saving the person who did the action
             timestamp: new Date(),
             details
           }
@@ -278,6 +339,14 @@ class EventHandlers {
 
         const activeSessions = await QueueSession.find({ isActive: true })
           .populate('staffId', 'name role')
+          .populate({
+            path: 'currentQueueJob',
+            select: 'status customerName emailSubject relativeFolderPath'
+          })
+          .populate({
+            path: 'currentWalkinJob',
+            select: 'status customerName description relativeFolderPath'
+          })
 
         this.io.to('admin:queue').emit('state:sync', {
           jobs: activeJobs,

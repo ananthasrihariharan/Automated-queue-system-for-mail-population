@@ -21,8 +21,20 @@ export function formatSubject(raw: string): { time: string; clean: string } {
   if (!raw) return { time: '', clean: '' }
   const match = raw.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})_(.*)$/i)
   if (match) {
-    const t = match[1].replace(/-/g, ':').replace('T', ' ')
-    return { time: t, clean: match[2] }
+    const isoStr = match[1].replace(/(\d{4})-(\d{2})-(\d{2})T(\d{2})-(\d{2})-(\d{2})/, '$1-$2-$3T$4:$5:$6Z')
+    const date = new Date(isoStr)
+    
+    // Format to IST (Indian Standard Time)
+    const istTime = date.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    })
+    
+    return { time: istTime, clean: match[2] }
   }
   return { time: '', clean: raw }
 }

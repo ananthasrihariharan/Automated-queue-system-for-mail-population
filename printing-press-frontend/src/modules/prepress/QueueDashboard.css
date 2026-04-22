@@ -627,7 +627,61 @@
   transition: all 0.2s;
   position: relative;
 }
-.screenshot-item img { width: 100%; height: 100%; object-fit: cover; }
+.screenshot-item img { width: 100%; height: 100%; object-fit: cover; transition: transform 0.3s; }
+.screenshot-item:hover img { transform: scale(1.05); }
+
+.attachment-filename-label {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  background: rgba(15, 23, 42, 0.75);
+  backdrop-filter: blur(4px);
+  color: white;
+  font-size: 0.6rem;
+  font-weight: 700;
+  padding: 0.25rem 0.4rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-align: center;
+  z-index: 2;
+  transition: opacity 0.2s;
+}
+
+.screenshot-item:hover .attachment-filename-label {
+  opacity: 0;
+}
+
+.btn-download-mini {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%) scale(0.9);
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(4px);
+  color: white;
+  border: 1px solid rgba(255,255,255,0.2);
+  padding: 0.4rem 0.6rem;
+  border-radius: 0.5rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  opacity: 0;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  cursor: pointer;
+  z-index: 5;
+}
+
+.screenshot-item:hover .btn-download-mini {
+  opacity: 1;
+  transform: translate(-50%, -50%) scale(1);
+}
+
+.btn-download-mini:hover {
+  background: #000;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+}
 .btn-download-premium {
   position: absolute;
   top: 50%;

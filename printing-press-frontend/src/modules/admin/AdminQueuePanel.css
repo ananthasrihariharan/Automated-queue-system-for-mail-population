@@ -1006,26 +1006,38 @@
 }
 
 .admin-screenshots-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(60px, 1fr));
-  gap: 0.5rem;
-  margin-top: 0.4rem;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1.25rem;
+  margin-top: 0.8rem;
+}
+
+.admin-attachment-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.4rem;
+  width: 80px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  position: relative;
 }
 
 .admin-screenshot-item {
-  aspect-ratio: 1;
+  width: 60px;
+  height: 60px;
   background: #f1f5f9;
   border-radius: var(--q-radius-m);
   overflow: hidden;
   border: 1px solid var(--q-border);
-  cursor: pointer;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  box-shadow: 0 2px 4px rgba(0,0,0,0.02);
 }
 
-.admin-screenshot-item:hover {
-  transform: scale(1.15);
+.admin-attachment-wrapper:hover .admin-screenshot-item {
+  transform: scale(1.1);
   border-color: #2563eb;
-  z-index: 10;
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.15);
 }
 
 .admin-screenshot-item img {
@@ -1039,10 +1051,32 @@
   align-items: center;
   justify-content: center;
   height: 100%;
-  font-size: 0.5rem;
+  font-size: 0.8rem;
   font-weight: 800;
   color: #64748b;
+  background: #f8fafc;
 }
+
+.admin-file-label {
+  width: 100%;
+  font-size: 0.6rem;
+  font-weight: 800;
+  color: #64748b;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-family: 'Outfit', sans-serif;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.admin-attachment-wrapper:hover .admin-file-label {
+  color: #2563eb;
+  white-space: normal;
+  word-break: break-all;
+}
+
 
 /* Lightbox (Same as Staff) */
 .lightbox-modal {
@@ -1838,3 +1872,60 @@
 }
 
 
+
+/* --- Staff Session Job Info (Sidebar) --- */
+.session-job-info {
+  margin-top: 0.75rem;
+  padding: 0.65rem 0.85rem;
+  background: #f8fafc;
+  border-radius: 0.75rem;
+  border-left: 3px solid #3b82f6;
+  width: 100%;
+}
+
+.job-customer-mini {
+  font-size: 0.75rem;
+  font-weight: 800;
+  color: #1e293b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-subject-mini {
+  font-size: 0.65rem;
+  color: #64748b;
+  font-style: italic;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 0.15rem;
+}
+
+/* Complexity Badges */
+.badge-complexity {
+    font-size: 0.6rem;
+    font-weight: 950;
+    padding: 0.15rem 0.5rem;
+    border-radius: 2rem;
+    letter-spacing: 0.05em;
+    border: 1px solid transparent;
+}
+
+.badge-complexity.easy {
+    background: #f0fdf4;
+    color: #166534;
+    border-color: #dcfce7;
+}
+
+.badge-complexity.medium {
+    background: #fffbeb;
+    color: #92400e;
+    border-color: #fef3c7;
+}
+
+.badge-complexity.complex {
+    background: #fdf2f8;
+    color: #9d174d;
+    border-color: #fce7f3;
+}

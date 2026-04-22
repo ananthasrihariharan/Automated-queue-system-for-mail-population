@@ -141,26 +141,179 @@ router.get('/staff-productivity', auth, authorize('ADMIN'), async (req, res) => 
 })
 
 /**
- * GET QUEUE EVENT LOG
- * Role: ADMIN
+ * GET ACTIVITY JOURNAL
+ * Detailed job lifecycle logs for analytics.
+ */
+router.get('/activity-journal', auth, authorize('ADMIN'), async (req, res) => {
+    try {
+        const { date } = req.query;
+        const targetDate = date ? new Date(date) : new Date();
+        const start = new Date(targetDate);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(targetDate);
+        end.setHours(23, 59, 59, 999);
+
+        // Fetch jobs active on this date
+        const jobs = await QueueJob.find({
+            $or: [
+                { createdAt: { $gte: start, $lte: end } },
+                { completedAt: { $gte: start, $lte: end } },
+                { status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] } } // Include active jobs
+            ]
+        })
+        .populate('assignedTo', 'name')
+        .sort({ createdAt: -1 });
+
+        const journal = jobs.map(job => {
+            const audit = job.auditLog || [];
+            
+            // 1. Calculate Durations
+            let queueDuration = 0;
+            let holdDuration = 0;
+            let workDuration = 0;
+
+            const firstAssign = audit.find(l => l.action === 'ASSIGNED');
+            const created = new Date(job.createdAt).getTime();
+            const completed = job.completedAt ? new Date(job.completedAt).getTime() : null;
+            const now = Date.now();
+
+            // Queue Duration (Creation -> First Assignment)
+            if (firstAssign) {
+                queueDuration = new Date(firstAssign.timestamp).getTime() - created;
+            } else {
+                queueDuration = now - created; // Still waiting
+            }
+
+            // Hold Duration (Sum of Paused segments)
+            let pauseStartedAt = null;
+            audit.forEach(l => {
+                if (l.action === 'PAUSED') {
+                    pauseStartedAt = new Date(l.timestamp).getTime();
+                } else if (l.action === 'RESUMED' && pauseStartedAt) {
+                    holdDuration += (new Date(l.timestamp).getTime() - pauseStartedAt);
+                    pauseStartedAt = null;
+                }
+            });
+            if (pauseStartedAt && job.status === 'PAUSED') {
+                holdDuration += (now - pauseStartedAt);
+            }
+
+            // Work Duration (Assignment -> Completion MINUS holds)
+            if (firstAssign) {
+                const endPoint = completed || now;
+                workDuration = (endPoint - new Date(firstAssign.timestamp).getTime()) - holdDuration;
+            }
+
+            // 2. Extract Reassignment History
+            const reassignments = audit
+                .filter(l => ['REASSIGNED', 'REASSIGN_REQUESTED', 'PAUSED'].includes(l.action))
+                .map(l => {
+                    let reason = l.details.notes || l.details.reason || 'No reason provided';
+                    
+                    // Audit Polish: If it's a PUSH reassignment, label it clearly
+                    if (l.action === 'REASSIGNED' && l.details.forceMode === 'PUSH') {
+                        reason = `[FORCED PUSH] ${reason}`;
+                    }
+                    if (l.action === 'PAUSED' && l.details.isInterruption) {
+                        reason = `[INTERRUPTED] ${reason}`;
+                    }
+
+                    return {
+                        type: l.action,
+                        timestamp: l.timestamp,
+                        from: l.details.fromStaffName || l.details.requestedByName || 'System',
+                        to: l.details.toStaffName || 'Pool',
+                        reason: reason,
+                        forceMode: l.details.forceMode,
+                        batchMode: l.details.batchMode
+                    };
+                });
+
+            return {
+                _id: job._id,
+                customerEmail: job.customerEmail || 'Walk-in',
+                customerName: job.customerName,
+                subject: job.emailSubject,
+                status: job.status,
+                submittedAt: job.createdAt,
+                assignedAt: job.assignedAt,
+                completedAt: job.completedAt,
+                metrics: {
+                    queueDuration: Math.max(0, queueDuration),
+                    holdDuration: Math.max(0, holdDuration),
+                    workDuration: Math.max(0, workDuration)
+                },
+                reassignments,
+                staffName: job.assignedTo?.name || 'Unassigned'
+            };
+        });
+
+        res.json(journal);
+    } catch (err) {
+        console.error('ACTIVITY JOURNAL ERROR:', err);
+        res.status(500).json({ message: 'Server error' });
+    }
+});
+
+/**
+ * GET QUEUE EVENT LOG (System Journal)
+ * Used by the modal in the Admin Queue Control Center.
  */
 router.get('/queue-event-log', auth, authorize('ADMIN'), async (req, res) => {
     try {
-        const { limit = 50 } = req.query;
+        const limit = Number(req.query.limit) || 100;
         
-        // Fetch recent transitions: completions, assignments, pauses
-        // We'll use QueueJob directly for now, sorting by updatedAt
-        const logs = await QueueJob.find({
-            status: { $in: ['COMPLETED', 'ASSIGNED', 'PAUSED', 'IN_PROGRESS'] }
-        })
-        .sort({ updatedAt: -1 })
-        .limit(Number(limit))
-        .populate('assignedTo', 'name')
-        .select('customerName status updatedAt assignedTo returnReason priorityScore');
+        // Fetch most recent active/modified jobs to build a real-time journal
+        const jobs = await QueueJob.find({ isSuperseded: { $ne: true } })
+            .sort({ updatedAt: -1 })
+            .populate('auditLog.actor', 'name')
+            .limit(limit);
 
-        res.json(logs);
+        let eventLogs = [];
+
+        jobs.forEach(j => {
+            if (j.auditLog && j.auditLog.length > 0) {
+                j.auditLog.forEach(log => {
+                    let staffName = '—';
+                    if (log.actor && log.actor.name) {
+                        staffName = log.actor.name;
+                    } else if (log.details && log.details.staffName) {
+                        staffName = log.details.staffName;
+                    } else if (log.details && log.details.requestedByName) {
+                         staffName = log.details.requestedByName;
+                    }
+
+                    eventLogs.push({
+                        _id: j._id + '_' + new Date(log.timestamp).getTime() + '_' + Math.random().toString(36).substr(2, 5),
+                        jobId: j._id,
+                        customerName: j.customerName,
+                        status: log.action, // e.g., QUEUED, ASSIGNED, COMPLETED
+                        assignedTo: { name: staffName },
+                        updatedAt: log.timestamp,
+                        returnReason: log.details && Object.keys(log.details).length > 0 ? (log.details.notes || log.details.reason || JSON.stringify(log.details)) : ''
+                    });
+                });
+            } else {
+                // Fallback if no audit log
+                eventLogs.push({
+                    _id: j._id,
+                    jobId: j._id,
+                    customerName: j.customerName,
+                    status: j.status,
+                    assignedTo: j.assignedTo,
+                    updatedAt: j.updatedAt,
+                    returnReason: j.returnReason
+                });
+            }
+        });
+
+        // Sort globally by timestamp, newest first
+        eventLogs.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+        // Slice to limit
+        res.json(eventLogs.slice(0, limit));
     } catch (err) {
-        console.error('EVENT LOG ERROR:', err);
+        console.error('QUEUE EVENT LOG ERROR:', err);
         res.status(500).json({ message: 'Server error' });
     }
 });

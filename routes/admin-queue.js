@@ -20,11 +20,31 @@ const User = require('../models/User')
  */
 router.get('/jobs', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const { status, page = 1, limit = 20, search, assignedTo } = req.query
+    const { status, page = 1, limit = 20, search, assignedTo, date } = req.query
     const skip = (Number(page) - 1) * Number(limit)
  
-    const filter = {}
-    if (status && status !== 'undefined' && status !== 'null') filter.status = status
+    const filter = { isSuperseded: { $ne: true } }
+    if (status && status !== 'undefined' && status !== 'null') {
+      if (status === 'ASSIGNED') {
+        filter.status = { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }
+      } else {
+        filter.status = status
+      }
+    }
+
+    // Date filtering: Filter by completedAt for COMPLETED jobs, else createdAt
+    if (date && date !== 'undefined' && date !== 'null') {
+      const start = new Date(date)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(date)
+      end.setHours(23, 59, 59, 999)
+      
+      if (status === 'COMPLETED') {
+        filter.completedAt = { $gte: start, $lte: end }
+      } else {
+        filter.createdAt = { $gte: start, $lte: end }
+      }
+    }
 
     // Staff filter: jobs assigned to them OR in ADMIN_REVIEW requested by them
     let staffOr = null
@@ -61,15 +81,28 @@ router.get('/jobs', auth, authorize('ADMIN'), async (req, res) => {
       .populate('pinnedToStaff', 'name')
       .populate('reassignedFrom', 'name')
       .populate('lastPausedBy', 'name')
+      .populate('auditLog.actor', 'name')
       .skip(skip)
       .limit(Number(limit))
 
     // Queue stats
+    const statsQuery = { status: 'COMPLETED' }
+    if (date && date !== 'undefined' && date !== 'null') {
+      const start = new Date(date)
+      start.setHours(0, 0, 0, 0)
+      const end = new Date(date)
+      end.setHours(23, 59, 59, 999)
+      statsQuery.completedAt = { $gte: start, $lte: end }
+    }
+
+    // Synchronized Queue stats: Relative to current filters if applicable, otherwise global
+    // Dynamic counts for current tab if a search/designer filter is active
     const stats = {
-      queued: await QueueJob.countDocuments({ status: 'QUEUED' }),
-      assigned: await QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] } }),
-      paused: await QueueJob.countDocuments({ status: 'PAUSED' }),
-      completed: await QueueJob.countDocuments({ status: 'COMPLETED' }),
+      totalQueued: (status === 'QUEUED' || !status) ? total : await QueueJob.countDocuments({ status: 'QUEUED', isSuperseded: { $ne: true } }),
+      totalInProgress: (status === 'ASSIGNED') ? total : await QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }, isSuperseded: { $ne: true } }),
+      completed: (status === 'COMPLETED') ? total : await QueueJob.countDocuments(statsQuery),
+      adminReview: (status === 'ADMIN_REVIEW') ? total : await QueueJob.countDocuments({ status: 'ADMIN_REVIEW', isSuperseded: { $ne: true } }),
+      junk: (status === 'JUNK') ? total : await QueueJob.countDocuments({ status: 'JUNK', isSuperseded: { $ne: true } }),
       total
     }
 
@@ -89,6 +122,7 @@ router.get('/threads/:threadId', auth, async (req, res) => {
       .sort({ createdAt: 1 })
       .populate('assignedTo', 'name')
       .populate('lastPausedBy', 'name')
+      .populate('auditLog.actor', 'name')
     res.json(jobs)
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -223,8 +257,8 @@ router.patch('/jobs/:id/unpin', auth, authorize('ADMIN'), async (req, res) => {
  */
 router.patch('/jobs/:id/reassign', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const { toStaffId, notes } = req.body
-    if (!toStaffId) return res.status(400).json({ message: 'toStaffId required' })
+    const { toStaffId, notes, forceMode, batchMode } = req.body
+    if (!toStaffId && toStaffId !== null) return res.status(400).json({ message: 'toStaffId required' })
 
     const job = await QueueJob.findById(req.params.id)
     if (!job) return res.status(404).json({ message: 'Job not found' })
@@ -233,7 +267,8 @@ router.patch('/jobs/:id/reassign', auth, authorize('ADMIN'), async (req, res) =>
       req.params.id,
       job.assignedTo,
       toStaffId,
-      notes
+      notes,
+      { forceMode, batchMode }
     )
 
     res.json({ message: 'Job reassigned', job: result })
@@ -494,17 +529,30 @@ router.get('/stats', auth, authorize('ADMIN'), async (req, res) => {
       { $group: { _id: null, avg: { $avg: '$duration' } } }
     ])
 
+    const startOfDay = new Date()
+    startOfDay.setHours(0, 0, 0, 0)
+    const JobEvent = require('../models/JobEvent')
+    const realCompletedToday = await JobEvent.countDocuments({ 
+      actionType: 'COMPLETED', 
+      timestamp: { $gte: startOfDay },
+      'details.action': { $ne: 'ADMIN_DELETED' }
+    })
+
     res.json({
-      totalQueued: stats.queued,
-      totalInProgress: stats.assigned,
-      completed: stats.completedToday,
+      totalQueued: await QueueJob.countDocuments({ status: 'QUEUED', isSuperseded: { $ne: true } }),
+      totalInProgress: await QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, isSuperseded: { $ne: true } }),
+      completed: realCompletedToday,
       activeSessions: stats.activeSessions,
       avgCompletionTimeMs: avgCompletionTime[0]?.avg || 0,
-      adminReview: stats.adminReview,
+      adminReview: await QueueJob.countDocuments({ status: 'ADMIN_REVIEW', isSuperseded: { $ne: true } }),
       breachRisk15: stats.breachRisk15,
       breachRisk5: stats.breachRisk5,
-      junk: stats.junk,
-      staleJobs: stats.staleJobs
+      junk: await QueueJob.countDocuments({ status: 'JUNK', isSuperseded: { $ne: true } }),
+      staleJobs: await QueueJob.countDocuments({ 
+        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] }, 
+        isSuperseded: { $ne: true },
+        updatedAt: { $lt: new Date(Date.now() - 30 * 60 * 1000) } 
+      })
     })
   } catch (err) {
     res.status(500).json({ message: err.message })

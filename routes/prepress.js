@@ -100,6 +100,44 @@ router.get(
 )
 
 /**
+ * GET SINGLE PREPRESS JOB BY ID
+ * Role: PREPRESS
+ */
+router.get(
+  '/jobs/:jobId',
+  auth,
+  authorize('PREPRESS'),
+  async (req, res) => {
+    try {
+      const job = await Job.findOne({
+        jobId: req.params.jobId,
+        createdBy: req.user._id
+      }, {
+        _id: 0,
+        jobId: 1,
+        customerName: 1,
+        customerPhone: 1,
+        totalItems: 1,
+        itemScreenshots: 1,
+        packingPreference: 1,
+        paymentStatus: 1,
+        createdAt: 1,
+        defaultDeliveryType: 1,
+        contactMe: 1
+      })
+
+      if (!job) {
+        return res.status(404).json({ message: 'Job not found' })
+      }
+
+      res.json(job)
+    } catch (err) {
+      res.status(500).json({ message: 'Server error' })
+    }
+  }
+)
+
+/**
  * GET CUSTOMER BY PHONE
  * Role: PREPRESS
  */
@@ -109,7 +147,12 @@ router.get(
   authorize('PREPRESS'),
   async (req, res) => {
     try {
-      const customer = await Customer.findOne({ phone: req.params.phone })
+      const customer = await Customer.findOne({ 
+        $or: [
+          { phone: req.params.phone },
+          { alternatePhones: req.params.phone }
+        ]
+      })
       res.json(customer || null)
     } catch (err) {
       res.status(500).json({ message: 'Server error' })
@@ -134,7 +177,11 @@ router.get(
       const escapedName = name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
 
       const customers = await Customer.find({
-        name: { $regex: escapedName, $options: 'i' }
+        $or: [
+          { name: { $regex: escapedName, $options: 'i' } },
+          { phone: { $regex: escapedName, $options: 'i' } },
+          { alternatePhones: { $regex: escapedName, $options: 'i' } }
+        ]
       }).limit(5)
 
       res.json(customers)

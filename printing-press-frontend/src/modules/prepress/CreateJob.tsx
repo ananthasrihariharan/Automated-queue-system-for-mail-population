@@ -40,8 +40,8 @@ export default function CreateJob() {
         if (isEdit) {
             const fetchJob = async () => {
                 try {
-                    const res = await api.get('/api/prepress/jobs')
-                    const job = res.data.find((j: any) => j.jobId === id)
+                    const res = await api.get(`/api/prepress/jobs/${id}`)
+                    const job = res.data
                     if (job) {
                         setFormData({
                             jobId: job.jobId,

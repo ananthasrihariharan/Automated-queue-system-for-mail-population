@@ -14,6 +14,10 @@ const CustomerSchema = new mongoose.Schema(
             required: true,
             unique: true
         },
+        alternatePhones: [{
+            type: String,
+            trim: true
+        }],
         password: {
             type: String,
             required: true,

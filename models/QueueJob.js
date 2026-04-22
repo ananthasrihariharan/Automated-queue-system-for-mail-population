@@ -12,6 +12,7 @@ const QueueJobSchema = new mongoose.Schema(
     folderPath: { type: String, required: true },           // absolute path to the n8n subfolder
     relativeFolderPath: { type: String, default: '' },      // relative path for frontend URLs
     attachments: [String],                                   // filenames inside the folder
+    attachmentMeta: { type: Map, of: String, default: {} },   // Metadata for attachments (e.g. original filenames)
     externalLinks: [{
         title: { type: String },
         url: { type: String }
@@ -65,12 +66,14 @@ const QueueJobSchema = new mongoose.Schema(
     // ── Job type ────────────────────────────────────────
     type: {
       type: String,
-      enum: ['EMAIL', 'WALKIN'],
+      enum: ['EMAIL', 'WALKIN', 'WHATSAPP'],
       default: 'EMAIL'
     },
 
     // ── Reassignment tracking ───────────────────────────
-    handoffNotes: { type: String, default: '' },
+    handoffNotes: { type: String, default: '' }, // Combined legacy field
+    staffHandoffReason: { type: String, default: '' },
+    adminHandoffNotes: { type: String, default: '' },
     reassignedFrom: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'User',

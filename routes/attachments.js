@@ -75,12 +75,6 @@ router.get('/:id/download-all', auth, async (req, res) => {
     // List files in the job folder
     const files = fs.readdirSync(folderPath).filter(f => fs.lstatSync(path.join(folderPath, f)).isFile());
     
-    if (files.length === 1) {
-      // Single file: download directly
-      const filePath = path.join(folderPath, files[0])
-      return res.download(filePath)
-    }
-
     if (files.length === 0) {
       return res.status(404).json({ message: 'No files to download' })
     }
@@ -88,7 +82,11 @@ router.get('/:id/download-all', auth, async (req, res) => {
     const archive = archiver('zip', { zlib: { level: 9 } })
 
     // Set headers
-    const zipName = `${customerPrefix}_${job.jobId || job._id}.zip`
+    // Sanitize subject for filename
+    const subject = job.emailSubject || job.walkinDescription || 'job'
+    const cleanSubject = subject.replace(/[/\\?%*:|"<>]/g, '-').replace(/\s+/g, '_').substring(0, 120)
+    const zipName = `${cleanSubject}.zip`
+
     console.log(`[Archiver] Starting ZIP process for ${zipName} (Folder: ${folderPath})`)
     res.attachment(zipName)
 
@@ -98,8 +96,24 @@ router.get('/:id/download-all', auth, async (req, res) => {
     })
     archive.pipe(res)
 
-    // Add everything in the folder
-    archive.directory(folderPath, false)
+    // Add only visible attachments to the ZIP (skipping metadata/body files)
+    const attachmentField = job.attachments || job.itemScreenshots || []
+    
+    // Fallback to reading the folder if the database field is empty for some reason
+    if (attachmentField.length === 0) {
+      archive.directory(folderPath, false)
+    } else {
+      // Add each file listed in the database
+      attachmentField.forEach(fileName => {
+        // Handle prepress attachment paths which might be relative to uploads or full paths
+        const filePath = fileName.includes(path.sep) ? fileName : path.join(folderPath, fileName)
+        if (fs.existsSync(filePath) && fs.lstatSync(filePath).isFile()) {
+          // Use only the basename inside the ZIP for a flat structure
+          const baseName = path.basename(fileName)
+          archive.file(filePath, { name: baseName })
+        }
+      })
+    }
 
     await archive.finalize()
     console.log(`[Archiver] ${zipName} finalized and sent.`)

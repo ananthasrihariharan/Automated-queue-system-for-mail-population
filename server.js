@@ -161,11 +161,11 @@ app.use("/api/dispatch", require("./routes/dispatch"));
 app.use("/api/profile", require("./routes/profile"));
 app.use("/api/job-cards", require("./routes/jobCards"));
 
-// ── Queue System Routes ──────────────────────────────
 app.use("/api/queue", require("./routes/queue"));
 app.use("/api/admin/queue", require("./routes/admin-queue"));
 app.use("/api/messages", require("./routes/messages"));
 app.use("/api/attachments", require("./routes/attachments"));
+app.use("/api/whatsapp", require("./routes/whatsapp"));
 app.use("/job-files", require("./routes/fileProxy"));
 
 /* =======================
@@ -208,8 +208,9 @@ connectDB().then(() => {
     console.log('[Server] All subsystems started.');
 });
 
-const PORT = process.env.PORT;
-app.listen(PORT, "0.0.0.0", () => {
+// Use `server` (not `app`) so that socket.io and Express share the same port
+const PORT = process.env.PORT || 3001;
+server.listen(PORT, "0.0.0.0", () => {
     const os = require("os");
     const networkInterfaces = os.networkInterfaces();
     let localIp = "localhost";

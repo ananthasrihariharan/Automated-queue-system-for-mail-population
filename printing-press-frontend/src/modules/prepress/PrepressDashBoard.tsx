@@ -171,16 +171,20 @@ export default function PrepressDashboard() {
               </h3>
               {previewJob.itemScreenshots.length > 0 ? (
                 <div className="screenshots-grid">
-                  {previewJob.itemScreenshots.map((path, idx) => (
-                    <div key={idx} className="screenshot-item">
-                      <img
-                        src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
-                        alt={`Item ${idx + 1}`}
-                        onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
-                        style={{ cursor: 'pointer' }}
-                      />
-                    </div>
-                  ))}
+                  {previewJob.itemScreenshots.map((path, idx) => {
+                    const filename = path.split(/[\\/]/).pop() || `Item ${idx+1}`;
+                    return (
+                      <div key={idx} className="screenshot-item">
+                        <img
+                          src={`${BACKEND_URL}/${path.replace(/\\/g, '/')}`}
+                          alt={filename}
+                          onClick={() => setViewImage(`${BACKEND_URL}/${path.replace(/\\/g, '/')}`)}
+                          style={{ cursor: 'pointer' }}
+                        />
+                        <div className="attachment-filename-label">{filename}</div>
+                      </div>
+                    );
+                  })}
                 </div>
               ) : (
                 <p style={{ color: '#6b7280', fontStyle: 'italic' }}>No screenshots uploaded.</p>
@@ -237,16 +241,16 @@ export default function PrepressDashboard() {
                     >
                       Edit
                     </button>
-                    {job.itemScreenshots && job.itemScreenshots.length > 1 && (
+                    {job.itemScreenshots && job.itemScreenshots.length >= 1 && (
                       <button
                         className="btn-download-premium btn-sm"
                         onClick={(e) => {
                           e.stopPropagation();
                           const url = `${BACKEND_URL}/api/attachments/${job.jobId}/download-all`;
-                          handleDownload(url, `${job.jobId}_all.zip`);
+                          handleDownload(url, `${job.jobId}_attachments.zip`);
                         }}
                       >
-                        Download All
+                        Download All (ZIP)
                       </button>
                     )}
                   </div>

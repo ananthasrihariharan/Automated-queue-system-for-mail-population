@@ -130,6 +130,7 @@ export default function QueueDashboard() {
   const [showCelebration, setShowCelebration] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
+  const [showHandledDetailsJob, setShowHandledDetailsJob] = useState<any>(null)
 
   // 1. Profile
   useEffect(() => {
@@ -198,18 +199,26 @@ export default function QueueDashboard() {
     const onChatReceived = (msg: any) => {
       if (String(msg.sender).trim() !== String(profile?._id || profile?.id).trim()) setHasUnread(true)
     }
+    const onJobPinned = (data: any) => {
+      setToast(data.message || 'A new job was pinned to your queue.');
+      queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
+    }
     socket.on('job:assigned',   onJobAssigned)
     socket.on('job:paused',     onJobPaused)
     socket.on('job:resumed',    onJobResumed)
     socket.on('job:removed',    onJobRemoved)
+    socket.on('job:pinned',     onJobPinned)
     socket.on('chat:received',  onChatReceived)
+
     return () => {
       socket.off('job:assigned',   onJobAssigned)
       socket.off('job:paused',     onJobPaused)
       socket.off('job:resumed',    onJobResumed)
       socket.off('job:removed',    onJobRemoved)
+      socket.off('job:pinned',     onJobPinned)
       socket.off('chat:received',  onChatReceived)
     }
+
   }, [socket, queryClient, profile?._id, profile?.id])
 
   // 4. Mutations
@@ -337,9 +346,38 @@ export default function QueueDashboard() {
             <div className="job-hash-gray">#{job._id.substring(job._id.length - 6).toUpperCase()}</div>
             {priorityInfo.label && (
               <div 
-                style={{ background: priorityInfo.color, color: 'white', fontWeight: 900, fontSize: '0.65rem', padding: '0.2rem 0.6rem', borderRadius: '2rem', letterSpacing: '0.05em', animation: 'pulse-revision 2s infinite' }}
+                style={{ background: priorityInfo.color, color: 'white', fontWeight: 800, fontSize: '0.65rem', padding: '0.2rem 0.6rem', borderRadius: '2rem', letterSpacing: '0.05em', animation: 'pulse-revision 2s infinite' }}
               >
                 {priorityInfo.label}
+              </div>
+            )}
+            {job.reassignedFrom && (
+              <div 
+                className="handoff-alert-bubble"
+                style={{ 
+                  display: 'flex', flexDirection: 'column', gap: '0.2rem', 
+                  background: '#fff7ed', border: '1px solid #ffedd5', color: '#9a3412',
+                  padding: '0.4rem 1rem', borderRadius: '1rem', fontSize: '0.75rem', fontWeight: 700,
+                  maxWidth: '400px'
+                }}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                  <span style={{ fontSize: '0.9rem' }}>⤨</span>
+                  <span style={{ fontWeight: 800 }}>FROM {job.reassignedFrom.name?.toUpperCase() || 'PREVIOUS'}</span>
+                </div>
+                {job.staffHandoffReason && (
+                    <div style={{ opacity: 0.8, fontSize: '0.65rem', borderLeft: '2px solid #fdba74', paddingLeft: '0.5rem', marginTop: '0.2rem' }}>
+                        Requested: "{job.staffHandoffReason}"
+                    </div>
+                )}
+                {job.adminHandoffNotes && (
+                    <div style={{ fontWeight: 800, color: '#c2410c' }}>
+                        Admin: "{job.adminHandoffNotes}"
+                    </div>
+                )}
+                {!job.staffHandoffReason && !job.adminHandoffNotes && job.handoffNotes && (
+                    <div style={{ fontStyle: 'italic' }}>{job.handoffNotes}</div>
+                )}
               </div>
             )}
           </div>
@@ -357,14 +395,36 @@ export default function QueueDashboard() {
 
         {/* Customer & Subject */}
         <div className="job-card-title-group">
-          <h1 className="job-customer-massive">{job.customerName || 'Walk-in Customer'}</h1>
+          {job.type === 'WHATSAPP' && job.customerEmail ? (
+             <h1 className="job-customer-massive" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                {job.customerName || 'Walk-in Customer'}
+                <span style={{ fontSize: '0.85rem', fontWeight: 800, color: '#10b981', background: '#ecfdf5', padding: '0.2rem 0.6rem', borderRadius: '2rem', border: '1px solid #d1fae5' }}>
+                   📱 {job.customerEmail.split('@')[0]}
+                </span>
+             </h1>
+          ) : (
+             <h1 className="job-customer-massive">{job.customerName || 'Walk-in Customer'}</h1>
+          )}
           <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', flexWrap:'wrap' }}>
             {(() => {
               const { time, clean } = formatSubject(job.emailSubject || '')
               return (
                 <>
                   {time && (
-                    <span style={{ fontSize:'0.75rem', fontWeight:800, color:'#64748b', background:'#f1f5f9', padding:'0.2rem 0.6rem', borderRadius:'0.4rem', border:'1px solid #e2e8f0' }}>
+                    <span style={{ 
+                      fontSize: '0.95rem', 
+                      fontWeight: 800, 
+                      color: '#4338ca', 
+                      background: '#eef2ff', 
+                      padding: '0.4rem 0.8rem', 
+                      borderRadius: '0.75rem', 
+                      border: '1px solid #c7d2fe',
+                      boxShadow: '0 4px 6px -1px rgba(67, 56, 202, 0.1), 0 2px 4px -1px rgba(67, 56, 202, 0.06)',
+                      letterSpacing: '-0.01em',
+                      display: 'inline-block',
+                      marginBottom: '0.5rem',
+                      fontFamily: 'Inter, system-ui, sans-serif'
+                    }}>
                       {time}
                     </span>
                   )}
@@ -425,18 +485,22 @@ export default function QueueDashboard() {
               <p style={{ margin:0, fontWeight:700, fontSize:'0.8125rem', color:'#475569' }}>
                 Attachments ({visibleAtts(job.attachments).length})
               </p>
-              {visibleAtts(job.attachments).length > 1 && (
+              {visibleAtts(job.attachments).length >= 1 && (
                 <button
                   className="btn-history-pill"
                   disabled={downloadingId === `all-${job._id}`}
-                  onClick={() => downloadWithAuth(
-                    `${BACKEND_URL}/api/attachments/${job._id}/download-all`,
-                    `${job.customerName || job._id}_files.zip`,
-                    () => setDownloadingId(`all-${job._id}`),
-                    () => setDownloadingId(null)
-                  )}
+                  onClick={() => {
+                    const { clean } = formatSubject(job.emailSubject || '');
+                    const zipName = `${clean || job.customerName || job._id}_attachments.zip`;
+                    downloadWithAuth(
+                      `${BACKEND_URL}/api/attachments/${job._id}/download-all`,
+                      zipName,
+                      () => setDownloadingId(`all-${job._id}`),
+                      () => setDownloadingId(null)
+                    )
+                  }}
                 >
-                  {downloadingId === `all-${job._id}` ? 'ZIPPING…' : 'DOWNLOAD ALL'}
+                  {downloadingId === `all-${job._id}` ? 'ZIPPING…' : 'DOWNLOAD ALL (ZIP)'}
                 </button>
               )}
             </div>
@@ -453,6 +517,7 @@ export default function QueueDashboard() {
                       ? <img src={fileUrl} alt={file} onClick={() => setViewImage(fileUrl)} />
                       : <div className="file-attachment-badge" onClick={() => window.open(fileUrl)}>{file.split('.').pop()?.toUpperCase()}</div>
                     }
+                    <div className="attachment-filename-label">{file}</div>
                     <button
                       className="btn-download-mini"
                       disabled={downloadingId === dlId}
@@ -475,11 +540,11 @@ export default function QueueDashboard() {
         {slot === 'queue' && (
           <div style={{ marginTop:'1rem', padding:'0.5rem 1rem', background:'linear-gradient(135deg,#f8faff,#f1f5f9)', border:'1px solid #e2e8f0', borderRadius:'0.875rem', display:'flex', alignItems:'center', justifyContent:'space-between', gap:'0.75rem' }}>
             <div style={{ display:'flex', alignItems:'center', gap:'0.75rem', minWidth:0, flex:1 }}>
-              <div style={{ width:26, height:26, borderRadius:'50%', background:'#0f172a', color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight:900, fontSize:'0.7rem', flexShrink:0 }}>
+              <div style={{ width:26, height:26, borderRadius:'50%', background:'#0f172a', color:'white', display:'flex', alignItems:'center', justifyContent:'center', fontWeight: 800, fontSize:'0.7rem', flexShrink:0 }}>
                 {(profile?.name || 'U').charAt(0).toUpperCase()}
               </div>
               <div style={{ display:'flex', alignItems:'center', gap:'0.5rem', minWidth:0, flexWrap:'wrap' }}>
-                <span style={{ fontSize:'0.75rem', color:'#1e293b', fontWeight:900 }}>HANDLED BY {profile?.name || 'YOU'}</span>
+                <span style={{ fontSize:'0.75rem', color:'#1e293b', fontWeight: 800 }}>HANDLED BY {profile?.name || 'YOU'}</span>
                 
                 {job.returnReason && (
                    <span style={{ display:'flex', alignItems:'center', gap:'0.25rem', fontSize:'0.65rem', fontWeight:850, color:'#991b1b', background:'#fef2f2', border:'1px solid #fee2e2', padding:'0.15rem 0.5rem', borderRadius:'2rem' }}>
@@ -493,7 +558,7 @@ export default function QueueDashboard() {
               </div>
             </div>
             {job.version && job.version > 1 && (
-              <div style={{ background:'#0f172a', color:'white', fontWeight:900, fontSize:'0.6rem', padding:'0.15rem 0.6rem', borderRadius:'2rem' }}>v{job.version}</div>
+              <div style={{ background:'#0f172a', color:'white', fontWeight: 800, fontSize:'0.6rem', padding:'0.15rem 0.6rem', borderRadius:'2rem' }}>v{job.version}</div>
             )}
           </div>
         )}
@@ -624,7 +689,7 @@ export default function QueueDashboard() {
                   {/* Paused jobs */}
                   {pausedJobs.length > 0 && (
                     <div style={{ marginTop:'1rem' }}>
-                      <div style={{ fontSize:'0.65rem', fontWeight:900, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
+                      <div style={{ fontSize:'0.65rem', fontWeight: 800, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
                         <span style={{ background:'#fef3c7', padding:'0.2rem 0.6rem', borderRadius:'0.4rem' }}>⏸ Parked Jobs ({pausedJobs.length})</span>
                       </div>
                       {pausedJobs.map((pJob: any) => (
@@ -650,7 +715,7 @@ export default function QueueDashboard() {
                   {/* Pending pinned tray */}
                   {pendingTray.length > 0 && (
                     <div style={{ marginTop:'1rem', padding:'1rem 1.25rem', background:'#f8f9ff', border:'1px solid #c7d2fe', borderRadius:'1rem' }}>
-                      <div style={{ fontSize:'0.65rem', fontWeight:900, color:'#4f46e5', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
+                      <div style={{ fontSize:'0.65rem', fontWeight: 800, color:'#4f46e5', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
                         📋 Coming Up — Pinned to You ({pendingTray.length})
                       </div>
                       {pendingTray.map((pJob: any) => (
@@ -659,7 +724,7 @@ export default function QueueDashboard() {
                             <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{pJob.customerName}</div>
                             <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{pJob.emailSubject}</div>
                           </div>
-                          <span style={{ background:'#e0e7ff', color:'#4338ca', fontSize:'0.65rem', fontWeight:900, padding:'0.25rem 0.5rem', borderRadius:'2rem', alignSelf:'center' }}>PINNED</span>
+                          <span style={{ background:'#e0e7ff', color:'#4338ca', fontSize:'0.65rem', fontWeight: 800, padding:'0.25rem 0.5rem', borderRadius:'2rem', alignSelf:'center' }}>PINNED</span>
                         </div>
                       ))}
                     </div>
@@ -692,10 +757,19 @@ export default function QueueDashboard() {
                   </tr>
                 ) : (
                   completedMyJobs.map((job:any) => (
-                    <tr key={job._id}>
+                    <tr 
+                      key={job._id} 
+                      onClick={() => setShowHandledDetailsJob(job)}
+                      style={{ cursor: 'pointer', transition: 'background 0.2s' }}
+                      className="handled-row-hover"
+                    >
                       <td className="handled-customer">{job.customerName || job.emailSubject?.substring(0,18)}</td>
                       <td style={{ textAlign:'right' }}>
-                        <span className="handled-type-badge">{job.type}</span>
+                        {job.type === 'WHATSAPP' ? (
+                          <span className="handled-type-badge wa-badge-premium" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#d1fae5' }}>WHATSAPP</span>
+                        ) : (
+                          <span className="handled-type-badge">{job.type}</span>
+                        )}
                       </td>
                     </tr>
                   ))
@@ -744,6 +818,7 @@ export default function QueueDashboard() {
                <option value="Customer not responding ">Customer not responding </option>
                 <option value="Designer sent mail">Designer sent mail</option>
                  <option value="Customer contact NA">Customer contact NA</option>
+                 <option value="Customer Walk-in">Customer Walk-in</option>
             </select>
             <div className="modal-actions">
               <button
@@ -756,6 +831,63 @@ export default function QueueDashboard() {
                 {reassignMutation.isPending ? 'SENDING…' : 'SEND REQUEST'}
               </button>
               <button className="btn-walkin-request" onClick={() => { setShowReassignModal(null); setReassignReason(''); }}>CANCEL</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Handled Job Details Modal */}
+      {showHandledDetailsJob && (
+        <div className="modal-overlay" onClick={() => setShowHandledDetailsJob(null)}>
+          <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:'700px', width:'90%' }}>
+            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
+              <h3 className="modal-title" style={{ margin:0 }}>Job Details History</h3>
+              <button className="btn-close-lightbox" onClick={() => setShowHandledDetailsJob(null)} style={{ padding:'0.25rem 0.5rem' }}>×</button>
+            </div>
+
+            <div className="job-card-details-p" style={{ maxHeight:'60vh', overflowY:'auto', paddingRight:'10px' }}>
+               <div style={{ marginBottom:'1.5rem' }}>
+                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Customer</label>
+                  <div style={{ fontSize: '0.95rem', fontWeight:800, color:'#0f172a' }}>{showHandledDetailsJob.customerName || 'N/A'}</div>
+               </div>
+
+               <div style={{ marginBottom:'1.5rem' }}>
+                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Subject Line</label>
+                  <div style={{ fontSize:'1rem', fontWeight:700, color:'#1e293b', background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem', border:'1px solid #e2e8f0' }}>
+                    {showHandledDetailsJob.emailSubject || 'No Subject'}
+                  </div>
+               </div>
+
+               <div style={{ marginBottom:'1.5rem' }}>
+                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Internal Content / Instructions</label>
+                  <div style={{ 
+                    fontSize:'0.875rem', 
+                    color:'#475569', 
+                    whiteSpace:'pre-wrap', 
+                    background:'#f1f5f9', 
+                    padding:'1rem', 
+                    borderRadius:'0.75rem', 
+                    lineHeight:1.6,
+                    border:'1px solid #e2e8f0'
+                  }}>
+                    {showHandledDetailsJob.mailBody || 'No description provided.'}
+                  </div>
+               </div>
+
+               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
+                  <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
+                     <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>Type</label>
+                     <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{showHandledDetailsJob.type}</div>
+                  </div>
+                  <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
+                     <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>Completed</label>
+                     <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{new Date(showHandledDetailsJob.completedAt).toLocaleString()}</div>
+                  </div>
+               </div>
+            </div>
+
+            <div className="modal-actions" style={{ marginTop:'2rem' }}>
+              <button className="btn-complete" style={{ width:'100%' }} onClick={() => setShowHandledDetailsJob(null)}>CLOSE VIEW</button>
             </div>
           </div>
         </div>

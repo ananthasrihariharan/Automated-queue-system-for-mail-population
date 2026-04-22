@@ -83,12 +83,13 @@ export const queueApi = {
   },
 
   // ── Admin Endpoints ────────────────────────────────
-  getAdminJobs: async (params: { status?: string, page?: number, search?: string, assignedTo?: string } = {}) => {
+  getAdminJobs: async (params: { status?: string, page?: number, search?: string, assignedTo?: string, date?: string } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.append('status', params.status)
     if (params.page) query.append('page', String(params.page))
     if (params.search) query.append('search', params.search)
     if (params.assignedTo) query.append('assignedTo', params.assignedTo)
+    if (params.date) query.append('date', params.date)
     
     const res = await api.get(`/api/admin/queue/jobs?${query.toString()}`)
     return res.data
@@ -134,7 +135,7 @@ export const queueApi = {
     return res.data
   },
 
-  reassignJob: async (jobId: string, data: { toStaffId: string, notes: string }) => {
+  reassignJob: async (jobId: string, data: { toStaffId: string | null, notes: string, forceMode?: 'PUSH' | 'PARK', batchMode?: boolean }) => {
     const res = await api.patch(`/api/admin/queue/jobs/${jobId}/reassign`, data)
     return res.data
   },
