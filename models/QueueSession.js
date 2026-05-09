@@ -19,15 +19,17 @@ const QueueSessionSchema = new mongoose.Schema(
     currentQueueJob: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'QueueJob',
-      default: null
+      default: null,
+      index: true
     },
     currentWalkinJob: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'QueueJob',
-      default: null
+      default: null,
+      index: true
     },
     
-    lastSeenAt: { type: Date, default: Date.now }
+    lastSeenAt: { type: Date, default: Date.now, index: true }
   },
   { timestamps: true }
 )

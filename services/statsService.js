@@ -77,11 +77,10 @@ class StatsService {
       const startOfDay = new Date(now)
       startOfDay.setHours(0, 0, 0, 0)
       
-      const JobEvent = require('../models/JobEvent')
-      const count = await JobEvent.countDocuments({ 
-        actionType: 'COMPLETED', 
-        timestamp: { $gte: startOfDay },
-        'details.action': { $ne: 'ADMIN_DELETED' }
+      // State-based counting for today's completions
+      const count = await QueueJob.countDocuments({ 
+        status: 'COMPLETED',
+        completedAt: { $gte: startOfDay }
       })
 
       await QueueStats.findOneAndUpdate(
@@ -114,12 +113,12 @@ class StatsService {
         junk,
         activeSessions
       ] = await Promise.all([
-        QueueJob.countDocuments({ status: 'QUEUED' }),
-        QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] } }),
-        QueueJob.countDocuments({ status: 'PAUSED' }),
-        require('../models/JobEvent').countDocuments({ actionType: 'COMPLETED', timestamp: { $gte: startOfDay }, 'details.action': { $ne: 'ADMIN_DELETED' } }),
-        QueueJob.countDocuments({ status: 'ADMIN_REVIEW' }),
-        QueueJob.countDocuments({ status: 'JUNK' }),
+        QueueJob.countDocuments({ status: 'QUEUED', isSuperseded: { $ne: true } }),
+        QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, isSuperseded: { $ne: true } }),
+        QueueJob.countDocuments({ status: 'PAUSED', isSuperseded: { $ne: true } }),
+        QueueJob.countDocuments({ status: 'COMPLETED', completedAt: { $gte: startOfDay } }),
+        QueueJob.countDocuments({ status: 'ADMIN_REVIEW', isSuperseded: { $ne: true } }),
+        QueueJob.countDocuments({ status: 'JUNK', isSuperseded: { $ne: true } }),
         QueueSession.countDocuments({ isActive: true })
       ])
 
@@ -132,7 +131,7 @@ class StatsService {
           completedToday,
           adminReview,
           junk,
-          totalInProgress: assigned,
+          totalInProgress: assigned + paused,
           activeSessions,
           lastUpdated: now
         },

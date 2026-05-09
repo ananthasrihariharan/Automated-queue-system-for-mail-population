@@ -120,6 +120,23 @@ app.use(cors({
 }));
 
 app.use(express.json());
+app.get('/health', (req, res) => res.json({ status: 'Main System is UP' }));
+
+const axios = require('axios');
+async function checkWalkinService() {
+    try {
+        const url = `${process.env.WALKIN_SERVICE_URL}/health`;
+        await axios.get(url, { timeout: 3000 });
+        console.log(`[Heartbeat] Walk-in Microservice is ONLINE ✅`);
+    } catch (err) {
+        console.error(`[Heartbeat] Walk-in Microservice is OFFLINE ❌ (Cannot reach ${process.env.WALKIN_SERVICE_URL})`);
+    }
+}
+// Start heartbeat
+setTimeout(() => {
+    checkWalkinService();
+    setInterval(checkWalkinService, 15000); // Check every 15 seconds
+}, 5000);
 
 /* =======================
    DEBUG LOGGING
@@ -138,6 +155,7 @@ app.use((req, res, next) => {
 
 // uploads (images)
 app.use("/uploads", express.static(process.env.UPLOAD_PATH || path.join(__dirname, "uploads")));
+app.use("/walkin-files", express.static(process.env.WALKIN_UPLOAD_PATH || path.join(__dirname, "walkins")));
 
 // ✅ SERVE REACT BUILD (THIS IS THE KEY)
 app.use(
@@ -166,6 +184,8 @@ app.use("/api/admin/queue", require("./routes/admin-queue"));
 app.use("/api/messages", require("./routes/messages"));
 app.use("/api/attachments", require("./routes/attachments"));
 app.use("/api/whatsapp", require("./routes/whatsapp"));
+app.use("/api/customer-walkin", require("./routes/customer-walkin"));
+app.use("/api/internal", require("./routes/internal"));
 app.use("/job-files", require("./routes/fileProxy"));
 
 /* =======================

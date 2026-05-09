@@ -364,8 +364,13 @@ class ProcessingWorker {
         priorityScore = 0;
       }
       
+      // 6. Assignment Logic
+      // If manually pinned by admin in metadata, we respect it regardless of online status
+      const isManualPin = !!metadata?.preferredStaffId;
+      
       const shouldAssignImmediately = !!(isWhatsApp && preferredStaff && staffIsOnline && staffIsFree);
-      const shouldPin = !!(preferredStaff && isRelativelyOnline && !shouldAssignImmediately);
+      // Pinned if: Manual admin choice OR (Automatic choice AND staff is relatively online)
+      const shouldPin = !!(preferredStaff && (isManualPin || isRelativelyOnline) && !shouldAssignImmediately);
 
       if (shouldAssignImmediately) {
         jobStatus = 'ASSIGNED';
@@ -437,6 +442,10 @@ class ProcessingWorker {
       task.status = 'COMPLETED'
       task.completedAt = new Date()
       await task.save()
+
+      // Trigger Batch Affinity Check: If this customer is already being handled, auto-link it
+      const queueEngine = require('./queueEngine')
+      await queueEngine.handleNewJobArrival(job._id).catch(err => console.error('[Worker] Batch Affinity error:', err.message))
 
       // SUPERSEDE FIRST: Mark older queued jobs for this thread as JUNK *before* emitting
       // job:created, so the admin dashboard never briefly shows two live jobs for the same thread.

@@ -62,6 +62,7 @@ router.get('/', unifiedAuth, async (req, res) => {
         }
 
         res.json({
+            _id: user._id,
             name: user.name,
             phone: user.phone,
             roles: roles,

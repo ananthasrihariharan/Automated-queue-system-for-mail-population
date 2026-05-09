@@ -80,6 +80,7 @@ router.get('/my-jobs-today', auth, authorize('PREPRESS'), async (req, res) => {
   }
 })
 
+
 /**
  * GET /pool-size — How many jobs are waiting in the pool (PREPRESS-accessible)
  */
@@ -122,11 +123,25 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
       _id: { $ne: session.currentQueueJob?._id || session.currentQueueJob } 
     }).sort({ priorityScore: -1, createdAt: 1 })
 
+    // 1.5 BATCH STREAM: Find all other jobs for this customer that are pinned/assigned to me
+    let activeBatch = []
+    if (session.currentQueueJob && session.currentQueueJob.customerEmail) {
+      activeBatch = await QueueJob.find({
+        customerEmail: session.currentQueueJob.customerEmail,
+        status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'QUEUED'] },
+        $or: [
+          { assignedTo: req.user._id },
+          { pinnedToStaff: req.user._id }
+        ]
+      }).sort({ createdAt: 1 })
+    }
+
     res.json({
       active: true,
       sessionId: session._id,
       queueJob: session.currentQueueJob || null,
       walkinJob: session.currentWalkinJob || null,
+      activeBatch: activeBatch,
       pausedJobs: pausedJobs || [],
       pendingPinnedJobs: pendingPinnedJobs || [],
       pendingTray: pendingTray || []
@@ -136,6 +151,25 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
     res.status(500).json({ message: err.message })
   }
 })
+
+/**
+ * POST /take-job — Staff manually picks a job from the pool or their queue
+ */
+router.post('/take-job', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const { jobId } = req.body;
+    if (!jobId) return res.status(400).json({ message: 'Job ID required' });
+
+    const job = await queueEngine.takeJob(req.user._id, jobId);
+    res.json({
+      message: 'Job successfully taken',
+      job
+    });
+  } catch (err) {
+    console.error('TAKE JOB ERROR:', err);
+    res.status(500).json({ message: err.message });
+  }
+});
 
 /**
  * POST /complete-job/:id — Mark queue job done, triggers next assignment
@@ -150,6 +184,36 @@ router.post('/complete-job/:id', auth, authorize('PREPRESS'), async (req, res) =
     })
   } catch (err) {
     console.error('COMPLETE JOB ERROR:', err)
+    res.status(500).json({ message: err.message })
+  }
+})
+
+/**
+ * POST /bulk-complete — Mark multiple jobs as done
+ */
+router.post('/bulk-complete', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const { jobIds } = req.body
+    if (!jobIds || !Array.isArray(jobIds)) {
+      return res.status(400).json({ message: 'jobIds array is required' })
+    }
+
+    const results = []
+    for (const id of jobIds) {
+      try {
+        await queueEngine.onJobComplete(req.user._id, id)
+        results.push({ id, status: 'success' })
+      } catch (e) {
+        results.push({ id, status: 'error', message: e.message })
+      }
+    }
+
+    res.json({
+      message: `Processed ${jobIds.length} completions`,
+      results
+    })
+  } catch (err) {
+    console.error('BULK COMPLETE ERROR:', err)
     res.status(500).json({ message: err.message })
   }
 })
@@ -276,10 +340,15 @@ router.post('/reassign-request', auth, authorize('PREPRESS'), async (req, res) =
  */
 router.post('/jobs/:id/pause', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const job = await queueEngine.pauseJob(req.user._id, req.params.id)
+    const { fetchNext = true } = req.body;
+    // If fetchNext is false, it means they clicked "Pause for Walk-in". 
+    // We pass true to pauseQueue to block auto-assignment and stay idle.
+    const job = await queueEngine.pauseJob(req.user._id, req.params.id, !fetchNext)
     
-    // Engine already emits job:paused, we just handle the next assignment here
-    await queueEngine.assignNextJob(req.user._id)
+    // Engine already emits job:paused, we just handle the next assignment here if requested
+    if (fetchNext) {
+      await queueEngine.assignNextJob(req.user._id)
+    }
     
     res.json({ message: 'Job paused successfully', job })
   } catch (err) {
@@ -297,6 +366,29 @@ router.post('/jobs/:id/resume', auth, authorize('PREPRESS'), async (req, res) =>
     res.json({ message: 'Job resumed successfully', job })
   } catch (err) {
     console.error('RESUME ERROR:', err)
+    res.status(500).json({ message: err.message })
+  }
+})
+
+/**
+ * POST /jobs/:id/take — Explicitly start/take any job (pinned or walkin)
+ */
+router.post('/jobs/:id/take', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const job = await queueEngine.takeJob(req.user._id, req.params.id)
+    res.json({ message: 'Job taken successfully', job })
+  } catch (err) {
+    console.error('TAKE JOB ERROR:', err)
+    res.status(500).json({ message: err.message })
+  }
+})
+
+// Keep old route for backward compatibility if needed, pointing to same logic
+router.post('/walkin/:id/start', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const job = await queueEngine.takeJob(req.user._id, req.params.id)
+    res.json({ message: 'Job started successfully', job })
+  } catch (err) {
     res.status(500).json({ message: err.message })
   }
 })
@@ -419,6 +511,7 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
     res.status(500).json({ message: 'Server error serving file' })
   }
 })
+
 
 module.exports = router
 

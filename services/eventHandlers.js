@@ -94,6 +94,17 @@ class EventHandlers {
     })
 
 
+    eventBus.on('batch:new-job', async ({ staffId, job, customerName }) => {
+      if (this.io && staffId) {
+        const staffRoom = `staff:${String(staffId).toLowerCase()}`
+        this.io.to(staffRoom).emit('batch:new-job', { 
+          job, 
+          customerName,
+          message: `New job received for ${customerName}! Added to your current batch.`
+        })
+      }
+    })
+
     eventBus.on('job:reassigned', async ({ jobId, fromStaffId, toStaffId, notes, options }) => {
       const [fromStaff, toStaff] = await Promise.all([
         fromStaffId ? User.findById(fromStaffId).select('name').lean() : null,
@@ -335,22 +346,38 @@ class EventHandlers {
         // Fix #14: Limit active jobs to prevent unbounded payload in sync
         const activeJobs = await QueueJob.find({ 
           status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'ADMIN_REVIEW'] } 
-        }).sort({ queuePosition: 1 }).limit(150)
+        }).select('customerName emailSubject status priorityScore queuePosition assignedTo pinnedToStaff type createdAt')
+          .sort({ queuePosition: 1 }).limit(150)
 
-        const activeSessions = await QueueSession.find({ isActive: true })
+        const sessions = await QueueSession.find({ isActive: true })
           .populate('staffId', 'name role')
           .populate({
             path: 'currentQueueJob',
-            select: 'status customerName emailSubject relativeFolderPath'
+            select: 'status customerName emailSubject assignedAt'
           })
           .populate({
             path: 'currentWalkinJob',
-            select: 'status customerName description relativeFolderPath'
+            select: 'status customerName description assignedAt'
           })
+
+        // Enrich for frontend compatibility
+        const enrichedSessions = sessions.map(s => {
+          const sess = s.toObject()
+          sess.staffName = s.staffId?.name || 'Unknown Staff'
+          
+          const activeJob = s.currentQueueJob || s.currentWalkinJob
+          if (activeJob && activeJob.assignedAt) {
+            sess.startTime = activeJob.assignedAt
+            const diff = Date.now() - new Date(activeJob.assignedAt).getTime()
+            const mins = Math.floor(diff / 60000)
+            sess.elapsedTime = `${mins}m`
+          }
+          return sess
+        })
 
         this.io.to('admin:queue').emit('state:sync', {
           jobs: activeJobs,
-          sessions: activeSessions,
+          sessions: enrichedSessions,
           timestamp: new Date()
         })
       } catch (err) {

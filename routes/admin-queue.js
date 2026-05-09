@@ -143,14 +143,30 @@ router.get('/sessions', auth, authorize('ADMIN'), async (req, res) => {
       .populate('staffId', 'name phone')
       .populate({
         path: 'currentQueueJob',
-        select: 'status customerName emailSubject relativeFolderPath'
+        select: 'status customerName emailSubject relativeFolderPath assignedAt'
       })
       .populate({
         path: 'currentWalkinJob',
-        select: 'status customerName description relativeFolderPath'
+        select: 'status customerName description relativeFolderPath assignedAt'
       })
 
-    res.json(sessions)
+    // Transform to include compatibility fields for Admin Panel
+    const processedSessions = sessions.map(s => {
+      const sess = s.toObject()
+      sess.staffName = s.staffId?.name || 'Unknown Staff'
+      
+      const activeJob = s.currentQueueJob || s.currentWalkinJob
+      if (activeJob && activeJob.assignedAt) {
+        sess.startTime = activeJob.assignedAt
+        const diff = Date.now() - new Date(activeJob.assignedAt).getTime()
+        const mins = Math.floor(diff / 60000)
+        sess.elapsedTime = `${mins}m`
+      }
+      
+      return sess
+    })
+
+    res.json(processedSessions)
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -272,6 +288,19 @@ router.patch('/jobs/:id/reassign', auth, authorize('ADMIN'), async (req, res) =>
     )
 
     res.json({ message: 'Job reassigned', job: result })
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+/**
+ * PATCH /jobs/:id/retrieve — Un-complete a job and return to queue (optional pin)
+ */
+router.patch('/jobs/:id/retrieve', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const { toStaffId } = req.body
+    const job = await queueEngine.retrieveJob(req.params.id, toStaffId)
+    res.json({ message: 'Job retrieved to queue', job })
   } catch (err) {
     res.status(500).json({ message: err.message })
   }
@@ -470,8 +499,6 @@ router.post('/jobs/bulk-status', auth, authorize('ADMIN'), async (req, res) => {
            await session.save();
            await queueEngine.assignNextJob(job.assignedTo).catch(e => console.error(e));
          }
-         job.assignedTo = null;
-         job.assignedAt = null;
        }
 
        job.status = status;
@@ -531,16 +558,18 @@ router.get('/stats', auth, authorize('ADMIN'), async (req, res) => {
 
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
-    const JobEvent = require('../models/JobEvent')
-    const realCompletedToday = await JobEvent.countDocuments({ 
-      actionType: 'COMPLETED', 
-      timestamp: { $gte: startOfDay },
-      'details.action': { $ne: 'ADMIN_DELETED' }
+    const endOfDay = new Date()
+    endOfDay.setHours(23, 59, 59, 999)
+
+    // Accurate count based on actual job state today
+    const realCompletedToday = await QueueJob.countDocuments({ 
+      status: 'COMPLETED',
+      completedAt: { $gte: startOfDay, $lte: endOfDay }
     })
 
     res.json({
       totalQueued: await QueueJob.countDocuments({ status: 'QUEUED', isSuperseded: { $ne: true } }),
-      totalInProgress: await QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, isSuperseded: { $ne: true } }),
+      totalInProgress: await QueueJob.countDocuments({ status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }, isSuperseded: { $ne: true } }),
       completed: realCompletedToday,
       activeSessions: stats.activeSessions,
       avgCompletionTimeMs: avgCompletionTime[0]?.avg || 0,
@@ -549,7 +578,7 @@ router.get('/stats', auth, authorize('ADMIN'), async (req, res) => {
       breachRisk5: stats.breachRisk5,
       junk: await QueueJob.countDocuments({ status: 'JUNK', isSuperseded: { $ne: true } }),
       staleJobs: await QueueJob.countDocuments({ 
-        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS'] }, 
+        status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED'] }, 
         isSuperseded: { $ne: true },
         updatedAt: { $lt: new Date(Date.now() - 30 * 60 * 1000) } 
       })
@@ -681,5 +710,107 @@ router.get('/stats/staff-leaderboard', auth, authorize('ADMIN'), async (req, res
     res.status(500).json({ message: err.message })
   }
 })
+
+/**
+ * GET /config — Get system-wide configurations
+ * Open to STAFF for read-only access to rules, restricted to ADMIN for updates.
+ */
+router.get('/config', auth, async (req, res) => {
+  try {
+    const SystemConfig = require('../models/SystemConfig')
+    let configs = await SystemConfig.find()
+    
+    // Auto-init reassignment reasons if missing or empty
+    let reasonConfig = configs.find(c => c.key === 'reassignment_reasons')
+    if (!reasonConfig || !Array.isArray(reasonConfig.value) || reasonConfig.value.length === 0) {
+        const defaultReasons = [
+            { id: 'client_waiting', label: 'Waiting for Client', requireReview: false, allowHold: true },
+            { id: 'file_error', label: 'File Error', requireReview: false, allowHold: true },
+            { id: 'wrong_assignment', label: 'Wrong Assignment', requireReview: true, allowHold: false }
+        ]
+        
+        if (!reasonConfig) {
+            await SystemConfig.create({
+                key: 'reassignment_reasons',
+                value: defaultReasons,
+                description: 'Rules for job reassignments and holds'
+            })
+        } else {
+            await SystemConfig.updateOne({ _id: reasonConfig._id }, { $set: { value: defaultReasons } })
+        }
+        configs = await SystemConfig.find()
+    }
+    
+    res.json(configs)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+/**
+ * PATCH /config/:key — Update a system-wide configuration
+ */
+router.patch('/config/:key', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const SystemConfig = require('../models/SystemConfig')
+    const { value } = req.body
+    const config = await SystemConfig.findOneAndUpdate(
+      { key: req.params.key },
+      { value, updatedAt: new Date() },
+      { upsert: true, new: true }
+    )
+    res.json(config)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
+/**
+ * GET /staff/:id/workspace — Detailed staff workspace insight (Active, Held, Reserved)
+ */
+router.get('/staff/:id/workspace', auth, authorize('ADMIN'), async (req, res) => {
+  try {
+    const staffId = req.params.id;
+    
+    // 1. Get the active session to identify "Active Slot" jobs
+    const session = await QueueSession.findOne({ staffId, isActive: true });
+    
+    // 2. Fetch all jobs assigned or pinned to this staff
+    const allJobs = await QueueJob.find({
+      status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'QUEUED'] },
+      $or: [
+        { assignedTo: staffId },
+        { pinnedToStaff: staffId }
+      ]
+    }).sort({ priorityScore: -1, createdAt: 1 });
+
+    const workspace = {
+      active: [],
+      held: [],
+      reserved: []
+    };
+
+    allJobs.forEach(job => {
+      // Check if it's in the primary session slots (Active)
+      const isActiveSlot = session && (
+        String(session.currentQueueJob?._id || session.currentQueueJob) === String(job._id) || 
+        String(session.currentWalkinJob?._id || session.currentWalkinJob) === String(job._id)
+      );
+
+      if (isActiveSlot || job.status === 'IN_PROGRESS') {
+        workspace.active.push(job);
+      } else if (job.status === 'PAUSED') {
+        workspace.held.push(job);
+      } else {
+        workspace.reserved.push(job);
+      }
+    });
+
+    res.json(workspace);
+  } catch (err) {
+    console.error('STAFF WORKSPACE ERROR:', err);
+    res.status(500).json({ message: 'Error fetching staff workspace' });
+  }
+});
 
 module.exports = router

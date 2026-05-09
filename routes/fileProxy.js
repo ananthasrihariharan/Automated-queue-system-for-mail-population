@@ -16,16 +16,24 @@ router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req,
     const watchRoot = process.env.N8N_WATCH_PATH || ''
     const archiveRoot = process.env.COMPLETED_JOBS_PATH || ''
     const whatsappRoot = process.env.WHATSAPP_WATCH_PATH || ''
+    const walkinRoot = process.env.WALKIN_UPLOAD_PATH || ''
 
     if (!watchRoot || !archiveRoot) {
       return res.status(500).json({ message: 'Storage paths not configured' })
     }
 
-    // Attempt to resolve against Watch Path first, then Whatsapp Path, then Archive Path
+    // Attempt to resolve against Watch Path first, then Whatsapp Path, then Walkin Path, then Archive Path
     let absolutePath = path.join(watchRoot, requestedPath)
     
     if (!fs.existsSync(absolutePath) && whatsappRoot) {
       absolutePath = path.join(whatsappRoot, requestedPath)
+    }
+
+    if (!fs.existsSync(absolutePath) && walkinRoot) {
+      absolutePath = path.join(walkinRoot, requestedPath)
+      if (!fs.existsSync(absolutePath)) {
+        absolutePath = path.join(walkinRoot, 'Walkins', requestedPath)
+      }
     }
 
     // If not found in either active root, try archive root
@@ -38,12 +46,14 @@ router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req,
     const nRoot = watchRoot ? path.resolve(watchRoot) : null;
     const aRoot = archiveRoot ? path.resolve(archiveRoot) : null;
     const wRoot = whatsappRoot ? path.resolve(whatsappRoot) : null;
+    const walkRoot = walkinRoot ? path.resolve(walkinRoot) : null;
 
     const isUnderWatch = nRoot ? normalizedPath.toLowerCase().startsWith(nRoot.toLowerCase()) : false;
     const isUnderArchive = aRoot ? normalizedPath.toLowerCase().startsWith(aRoot.toLowerCase()) : false;
     const isUnderWhatsapp = wRoot ? normalizedPath.toLowerCase().startsWith(wRoot.toLowerCase()) : false;
+    const isUnderWalkin = walkRoot ? normalizedPath.toLowerCase().startsWith(walkRoot.toLowerCase()) : false;
 
-    if (!isUnderWatch && !isUnderArchive && !isUnderWhatsapp) {
+    if (!isUnderWatch && !isUnderArchive && !isUnderWhatsapp && !isUnderWalkin) {
       console.warn(`[Security] Blocked traversal attempt: ${requestedPath} (Resolved: ${normalizedPath})`);
       return res.status(400).json({ message: 'Invalid path' });
     }

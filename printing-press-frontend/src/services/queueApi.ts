@@ -27,6 +27,11 @@ export const queueApi = {
     return res.data
   },
 
+  bulkCompleteJobs: async (jobIds: string[]) => {
+    const res = await api.post('/api/queue/bulk-complete', { jobIds })
+    return res.data
+  },
+
   requestWalkin: async (description: string) => {
     const res = await api.post('/api/queue/walkin-request', { description })
     return res.data
@@ -52,8 +57,8 @@ export const queueApi = {
     return res.data
   },
 
-  pauseJob: async (jobId: string) => {
-    const res = await api.post(`/api/queue/jobs/${jobId}/pause`)
+  pauseJob: async (jobId: string, fetchNext: boolean = true) => {
+    const res = await api.post(`/api/queue/jobs/${jobId}/pause`, { fetchNext })
     return res.data
   },
 
@@ -62,8 +67,23 @@ export const queueApi = {
     return res.data
   },
 
+  startWalkinJob: async (jobId: string) => {
+    const res = await api.post(`/api/queue/walkin/${jobId}/start`)
+    return res.data
+  },
+
   tagJobComplexity: async (jobId: string, complexityTag: string) => {
     const res = await api.patch(`/api/queue/jobs/${jobId}/complexity`, { complexityTag })
+    return res.data
+  },
+
+  getGeneralPool: async () => {
+    const res = await api.get('/api/queue/general-pool')
+    return res.data
+  },
+
+  takeJob: async (jobId: string) => {
+    const res = await api.post('/api/queue/take-job', { jobId })
     return res.data
   },
 
@@ -83,10 +103,11 @@ export const queueApi = {
   },
 
   // ── Admin Endpoints ────────────────────────────────
-  getAdminJobs: async (params: { status?: string, page?: number, search?: string, assignedTo?: string, date?: string } = {}) => {
+  getAdminJobs: async (params: { status?: string, page?: number, limit?: number, search?: string, assignedTo?: string, date?: string } = {}) => {
     const query = new URLSearchParams()
     if (params.status) query.append('status', params.status)
     if (params.page) query.append('page', String(params.page))
+    if (params.limit) query.append('limit', String(params.limit))
     if (params.search) query.append('search', params.search)
     if (params.assignedTo) query.append('assignedTo', params.assignedTo)
     if (params.date) query.append('date', params.date)
@@ -137,6 +158,11 @@ export const queueApi = {
 
   reassignJob: async (jobId: string, data: { toStaffId: string | null, notes: string, forceMode?: 'PUSH' | 'PARK', batchMode?: boolean }) => {
     const res = await api.patch(`/api/admin/queue/jobs/${jobId}/reassign`, data)
+    return res.data
+  },
+
+  retrieveJob: async (jobId: string, toStaffId: string | null = null) => {
+    const res = await api.patch(`/api/admin/queue/jobs/${jobId}/retrieve`, { toStaffId })
     return res.data
   },
 
@@ -202,6 +228,21 @@ export const queueApi = {
 
   getStaffLeaderboard: async () => {
     const res = await api.get('/api/admin/queue/stats/staff-leaderboard')
+    return res.data
+  },
+
+  getSystemConfig: async () => {
+    const res = await api.get('/api/admin/queue/config')
+    return res.data
+  },
+
+  updateSystemConfig: async (key: string, value: any) => {
+    const res = await api.patch(`/api/admin/queue/config/${key}`, { value })
+    return res.data
+  },
+  
+  getStaffWorkspace: async (staffId: string) => {
+    const res = await api.get(`/api/admin/queue/staff/${staffId}/workspace`)
     return res.data
   }
 }

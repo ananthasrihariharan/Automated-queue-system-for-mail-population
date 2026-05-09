@@ -27,7 +27,9 @@
   top: 1.5rem;
   z-index: 100;
   font-family: 'Outfit', sans-serif;
-  margin: 1.5rem;
+  margin: 1.5rem 2rem;
+  padding: 0.5rem 1.5rem;
+  border: 1px solid rgba(0, 0, 0, 0.05);
 }
 
 .queue-nav-left {
@@ -76,19 +78,29 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  background: white;
+  background: #f8fafc;
   border: 1px solid #e2e8f0;
-  padding: 0.5rem 1rem;
-  height: 38px;  /* Force normalization */
-  border-radius: 0.75rem;
+  padding: 0 1.25rem;
+  height: 42px;  /* Match common premium height */
+  border-radius: 0.875rem;
   color: #475569;
-  font-weight: 800;
-  font-size: 0.8125rem;
+  font-weight: 850;
+  font-size: 0.75rem;
   cursor: pointer;
-  transition: all 0.2s;
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
   position: relative;
   font-family: 'Outfit', sans-serif;
   box-sizing: border-box;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+.btn-queue-nav-action svg {
+  opacity: 0.7;
+  transition: transform 0.2s;
+}
+.btn-queue-nav-action:hover svg {
+  transform: scale(1.1);
+  opacity: 1;
 }
 .btn-queue-nav-action:hover {
   background: #f8fafc;
@@ -101,8 +113,35 @@
   color: #ef4444;
 }
 .btn-queue-nav-action.danger:hover {
-  background: #fee2e2;
+  background: #fef2f2;
   border-color: #ef4444;
+  color: #b91c1c;
+}
+.nav-segmented-pill {
+  background: rgba(15, 23, 42, 0.05) !important;
+  border: 1px solid rgba(15, 23, 42, 0.05);
+}
+.nav-item-luxury {
+  height: 36px; /* Slightly shorter than the main actions for nested look */
+  display: flex;
+  align-items: center;
+}
+.btn-queue-nav-action.is-paused {
+  background: #fff7ed;
+  border-color: #fbd38d;
+  color: #c05621;
+}
+.btn-queue-nav-action.is-paused:hover {
+  background: #ffedd5;
+  border-color: #f6ad55;
+}
+.btn-queue-nav-action.outline {
+  background: transparent;
+  border: 1.5px solid #e2e8f0;
+}
+.btn-queue-nav-action.outline:hover {
+  border-color: #cbd5e1;
+  background: #f1f5f9;
 }
 .btn-queue-nav-action.comms-unread {
   border-color: #ef4444;
@@ -285,9 +324,10 @@
 .job-type-walkin { border-top: 8px solid #f59e0b; background: #fffcf0; }
 
 .job-card.paused {
-  opacity: 0.6;
-  filter: grayscale(0.5);
-  transform: scale(0.98);
+  opacity: 0.85;
+  filter: none;
+  transform: scale(0.99);
+  background: #f8fafc;
 }
 
 .paused-overlay {
@@ -1492,12 +1532,13 @@
 
 .active-job-card-supreme {
   background: white;
-  border-radius: 1.5rem;
-  padding: 1.75rem;
+  border-radius: 1.25rem;
+  padding: 1.25rem;
   box-shadow: 0 10px 40px -10px rgba(0,0,0,0.1);
   border: 1px solid #f1f5f9;
-  border-left: 10px solid #f1f5f9; /* Initial thickness for priority sync */
+  border-left: 8px solid #f1f5f9; /* Initial thickness for priority sync */
   transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
 }
 
 /* Priority Visual Overrides for Supreme Cards */
@@ -1516,7 +1557,7 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.75rem;
 }
 
 .job-badge-black {
@@ -1537,29 +1578,29 @@
 }
 
 .job-customer-massive {
-  font-size: 1.875rem;
+  font-size: 1.5rem;
   font-weight: 950;
   color: #0f172a;
-  margin: 0 0 0.25rem 0;
+  margin: 0 0 0.15rem 0;
   line-height: 1.1;
   font-family: 'Outfit', sans-serif;
   letter-spacing: -0.02em;
 }
 
 .job-subject-sub {
-  font-size: 1rem;
+  font-size: 0.95rem;
   font-weight: 600;
   color: #64748b;
-  margin: 0 0 1.25rem 0;
+  margin: 0 0 1rem 0;
   font-style: italic;
 }
 
 .job-mail-box-gray {
   background: #f8fafc;
   border: 1px solid #f1f5f9;
-  border-radius: 1rem;
-  padding: 1rem 1.25rem;
-  margin-bottom: 1.5rem;
+  border-radius: 0.75rem;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
 }
 
 .mail-pre-text {
@@ -1661,52 +1702,90 @@
   margin: 0;
 }
 
-.handled-header .handled-count {
-  font-size: 0.875rem;
-  font-weight: 950;
-  color: white;
-  background: #0f172a;
-  padding: 0.25rem 0.8rem;
-  border-radius: 2rem;
-  min-width: 28px;
-  text-align: center;
-}
-
-.handled-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.handled-table th {
-  text-align: left;
-  font-size: 0.65rem;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding-bottom: 1rem;
-  border-bottom: 1px solid #f1f5f9;
-}
-
-.handled-table td {
-  padding: 1rem 0;
-  border-bottom: 1px solid #f8fafc;
-}
-
-.handled-customer {
-  font-weight: 700;
-  color: #334155;
-  font-size: 0.875rem;
-}
-
-.handled-type-badge {
-  font-size: 0.65rem;
-  font-weight: 800;
+/* ── Tabbed Task Sidebar ── */
+.sidebar-tab-nav {
+  display: flex;
   background: #f1f5f9;
-  color: #64748b;
-  padding: 0.25rem 0.5rem;
-  border-radius: 0.3rem;
+  padding: 0.35rem;
+  border-radius: 0.75rem;
+  margin: 1rem;
+  gap: 0.25rem;
 }
+
+.sidebar-tab-btn {
+  flex: 1;
+  border: none;
+  background: transparent;
+  padding: 0.5rem 0.25rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  color: #64748b;
+  border-radius: 0.5rem;
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  white-space: nowrap;
+}
+
+.sidebar-tab-btn.active {
+  background: white;
+  color: #0f172a;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.06);
+}
+
+.tab-badge-dot {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 6px;
+  height: 6px;
+  background: #10b981;
+  border-radius: 50%;
+  border: 1px solid white;
+}
+.tab-badge-dot.blue { background: #4f46e5; }
+
+.sidebar-empty-state {
+  padding: 3rem 1.5rem;
+  text-align: center;
+  color: #94a3b8;
+  font-size: 0.75rem;
+  font-weight: 500;
+}
+
+.sidebar-job-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.875rem 1rem;
+  border-bottom: 1px solid #f1f5f9;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.sidebar-job-row:hover { background: #f8fafc; }
+
+.sj-main { min-width: 0; flex: 1; margin-right: 0.75rem; }
+.sj-name { font-size: 0.8125rem; font-weight: 800; color: #1e293b; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-bottom: 0.1rem; }
+.sj-meta { font-size: 0.65rem; color: #94a3b8; font-weight: 500; }
+
+.sj-action-btn {
+  padding: 0.35rem 0.75rem;
+  font-size: 0.65rem;
+  font-weight: 950;
+  border-radius: 0.4rem;
+  border: 1px solid #10b981;
+  background: white;
+  color: #10b981;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.sj-action-btn:hover { background: #10b981; color: white; }
+.sj-action-btn.blue { border-color: #4f46e5; color: #4f46e5; }
+.sj-action-btn.blue:hover { background: #4f46e5; color: white; }
+
+.sj-badge { font-size: 0.6rem; font-weight: 900; background: #f1f5f9; color: #64748b; padding: 0.2rem 0.4rem; border-radius: 0.25rem; text-transform: uppercase; }
+.sj-badge.wa { background: #ecfdf5; color: #059669; }
 
 .parked-jobs-card {
   background: #fffbeb;
@@ -1792,4 +1871,276 @@
 
 .btn-back-luxury:active {
   transform: translateX(-1px);
+}
+
+/* --- Batch Mode Styles --- */
+.is-selected-batch {
+  border-color: #2563eb !important;
+  box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1), 0 10px 30px -5px rgba(0,0,0,0.1) !important;
+  background: linear-gradient(to bottom right, #ffffff, #f0f9ff) !important;
+}
+
+.job-selection-wrapper {
+  position: absolute;
+  top: 1.25rem;
+  right: 1.25rem;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.job-checkbox {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: white;
+  color: white;
+  font-weight: 900;
+  font-size: 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.job-checkbox.checked {
+  background: #2563eb;
+  border-color: #2563eb;
+  transform: scale(1.1);
+  box-shadow: 0 4px 12px rgba(37, 99, 235, 0.3);
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+}
+
+.job-selection-wrapper {
+  position: absolute;
+  top: 1.5rem;
+  left: 0.75rem;
+  z-index: 20;
+  cursor: pointer;
+  padding: 0.5rem;
+}
+
+.job-checkbox {
+  width: 22px;
+  height: 22px;
+  border: 2px solid #e2e8f0;
+  border-radius: 0.5rem;
+  background: white;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.job-selection-wrapper:hover .job-checkbox {
+  border-color: #3b82f6;
+  transform: scale(1.05);
+}
+
+.batch-header-strip {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background: white;
+  padding: 1rem 1.5rem;
+  border-radius: 1rem;
+  margin-bottom: 1.5rem;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 4px 15px rgba(0,0,0,0.03);
+}
+
+.bh-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bh-badge {
+  background: #0f172a;
+  color: white;
+  font-size: 0.65rem;
+  font-weight: 900;
+  padding: 0.2rem 0.6rem;
+  border-radius: 2rem;
+  letter-spacing: 0.05em;
+}
+
+.bh-customer {
+  font-size: 1.1rem;
+  font-weight: 850;
+  color: #1e293b;
+  font-family: 'Outfit', sans-serif;
+}
+
+.bh-count {
+  font-size: 0.85rem;
+  color: #64748b;
+  font-weight: 600;
+}
+
+.bh-select-all {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  padding: 0.4rem 1rem;
+  border-radius: 0.75rem;
+  font-size: 0.7rem;
+  font-weight: 800;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.bh-select-all:hover {
+  background: #e2e8f0;
+  color: #0f172a;
+}
+
+.jobs-grid-stream {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.bulk-action-bar-supreme {
+  position: fixed;
+  bottom: 2rem;
+  left: 50%;
+  transform: translateX(-50%);
+  width: auto;
+  min-width: 400px;
+  z-index: 1000;
+  animation: slide-up-bulk 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+@keyframes slide-up-bulk {
+  from { transform: translate(-50%, 100%); opacity: 0; }
+  to { transform: translate(-50%, 0); opacity: 1; }
+}
+
+.bab-content {
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 1.5rem;
+  padding: 0.75rem 1rem 0.75rem 1.5rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+  gap: 2rem;
+}
+
+.bab-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.bab-count {
+  background: #3b82f6;
+  color: white;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 900;
+  font-size: 0.85rem;
+}
+
+.bab-text {
+  color: white;
+  font-weight: 700;
+  font-size: 0.9rem;
+  letter-spacing: 0.02em;
+}
+
+.bab-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.btn-bulk-cancel {
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #94a3b8;
+  padding: 0.6rem 1.25rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 800;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-bulk-cancel:hover {
+  background: rgba(255, 255, 255, 0.2);
+  color: white;
+}
+
+.btn-bulk-complete {
+  background: #10b981;
+  color: white;
+  border: none;
+  padding: 0.6rem 1.5rem;
+  border-radius: 1rem;
+  font-size: 0.75rem;
+  font-weight: 900;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 4px 15px rgba(16, 185, 129, 0.3);
+}
+
+.btn-bulk-complete:hover {
+  background: #059669;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+}
+
+.btn-bulk-complete:active {
+  transform: translateY(0);
+}
+
+/* ── Selection Checkboxes ── */
+.job-selection-wrapper {
+  position: absolute;
+  top: 1rem;
+  left: 1rem;
+  z-index: 10;
+  cursor: pointer;
+}
+
+.job-checkbox {
+  width: 24px;
+  height: 24px;
+  border: 2px solid #cbd5e1;
+  border-radius: 6px;
+  background: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-weight: 900;
+  font-size: 14px;
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.job-checkbox.checked {
+  background: #3b82f6;
+  border-color: #3b82f6;
+  box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+  transform: scale(1.1);
+}
+
+.job-checkbox:hover {
+  border-color: #3b82f6;
+  transform: scale(1.05);
+}
+
+.is-selected-batch {
+  border-color: #3b82f6 !important;
+  background: #f8faff !important;
+  box-shadow: 0 10px 30px rgba(59, 130, 246, 0.1) !important;
 }

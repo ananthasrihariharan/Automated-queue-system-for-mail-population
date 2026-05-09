@@ -10,15 +10,7 @@ import LinkifiedText from '../../shared/components/LinkifiedText'
 import { elapsed, formatSubject } from '../../shared/utils/queueHelpers'
 import './QueueDashboard.css'
 
-// ─── Helpers (elapsed + formatSubject imported from shared/utils/queueHelpers) ─────
-
-function linkAge(stored: string | Date): string {
-  const days = Math.floor((Date.now() - new Date(stored).getTime()) / 86_400_000)
-  if (days === 0) return 'received today'
-  if (days === 1) return '1 day old'
-  if (days >= 7)  return `⚠ ${days} days old — may be expired`
-  return `${days} days old`
-}
+// ─── Helpers (formatSubject imported from shared/utils/queueHelpers) ─────
 
 
 // FIX-L1 / FIX-L2: Clipboard works on LAN HTTP without HTTPS
@@ -89,7 +81,7 @@ function Toast({ message, onDone }: { message: string; onDone: () => void }) {
 // Celebration component for job completion
 function CelebrationOverlay() {
   return (
-    <div className="celebration-overlay">
+    <div className="celebration-overlay" style={{ pointerEvents: 'none' }}>
       {[...Array(50)].map((_, i) => (
         <div 
           key={i} 
@@ -110,11 +102,13 @@ function CelebrationOverlay() {
 }
 
 
+
 // ─── Main Component ───────────────────────────────────────────────────────────
 export default function QueueDashboard() {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const [profile, setProfile] = useState<any>(null)
+  const [isSocketConnected, setIsSocketConnected] = useState(true)
 
   // Messaging
   const [showMessages, setShowMessages] = useState(false)
@@ -124,19 +118,26 @@ export default function QueueDashboard() {
   // UI
   const [viewImage, setViewImage] = useState<string | null>(null)
   const [showWalkinModal, setShowWalkinModal] = useState(false)
+  const [selectedBatchJobs, setSelectedBatchJobs] = useState<Set<string>>(new Set())
   const [walkinDescription, setWalkinDescription] = useState('')
   const [showReassignModal, setShowReassignModal] = useState<string | null>(null)
   const [reassignReason, setReassignReason] = useState('')
   const [showCelebration, setShowCelebration] = useState(false)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
   const [toast, setToast] = useState<string | null>(null)
-  const [showHandledDetailsJob, setShowHandledDetailsJob] = useState<any>(null)
+  const [showQRModal, setShowQRModal] = useState(false)
+  const [historySearch, setHistorySearch] = useState('')
+  const [sidebarTab, setSidebarTab] = useState<'WALKIN' | 'QUEUE' | 'HISTORY'>('WALKIN')
+  const [previewJob, setPreviewJob] = useState<any>(null)
 
   // 1. Profile
   useEffect(() => {
     const s = localStorage.getItem('user')
     if (s) setProfile(JSON.parse(s))
   }, [])
+
+  // Explicitly fallback for ID types
+  const myStaffId = profile?._id || profile?.id || profile?.userId;
 
   // 2. Data
   const { data: sessionStatus, isLoading: statusLoading } = useQuery({
@@ -159,6 +160,7 @@ export default function QueueDashboard() {
   })
 
   const { data: staffList } = useQuery({ queryKey: ['staff-list'], queryFn: queueApi.getStaffList })
+  const { data: configs } = useQuery({ queryKey: ['system-config'], queryFn: queueApi.getSystemConfig })
 
   // BUG-01: Heartbeat every 90s
   const heartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -178,10 +180,24 @@ export default function QueueDashboard() {
   useEffect(() => {
     if (!socket) return
     const onJobAssigned = (data: any) => {
-      queryClient.setQueryData(['current-queue-job'], (prev: any) => ({
-        ...prev, active: true,
-        [data.slot === 'walkin' ? 'walkinJob' : 'queueJob']: data.job
-      }))
+      // 1. Update the primary slots
+      queryClient.setQueryData(['current-queue-job'], (prev: any) => {
+        if (!prev) return prev;
+        const next = {
+          ...prev, active: true,
+          [data.slot === 'walkin' ? 'walkinJob' : 'queueJob']: data.job
+        };
+        
+        // 2. Also ensure it's added to the activeBatch if it belongs there
+        if (next.queueJob?.customerEmail && data.job?.customerEmail === next.queueJob.customerEmail) {
+          const batch = [...(next.activeBatch || [])];
+          if (!batch.find(j => j._id === data.job._id)) {
+            batch.push(data.job);
+          }
+          next.activeBatch = batch;
+        }
+        return next;
+      });
       queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
     }
     const onJobPaused  = () => { queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }); queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] }) }
@@ -203,20 +219,51 @@ export default function QueueDashboard() {
       setToast(data.message || 'A new job was pinned to your queue.');
       queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
     }
+    const refreshReview = () => {
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] });
+    }
+
+    const onBatchNewJob = (data: any) => {
+      setToast(data.message || 'New job added to your current batch!');
+      // Update local query data instantly to show the new card
+      queryClient.setQueryData(['current-queue-job'], (prev: any) => {
+        if (!prev) return prev;
+        const batch = [...(prev.activeBatch || [])];
+        // Only add if not already there
+        if (!batch.find(j => j._id === data.job._id)) {
+           batch.push(data.job);
+        }
+        return { ...prev, activeBatch: batch };
+      });
+    }
+
+    const onConnect = () => setIsSocketConnected(true)
+    const onDisconnect = () => setIsSocketConnected(false)
+
+    socket.on('connect',        onConnect)
+    socket.on('disconnect',     onDisconnect)
     socket.on('job:assigned',   onJobAssigned)
     socket.on('job:paused',     onJobPaused)
     socket.on('job:resumed',    onJobResumed)
     socket.on('job:removed',    onJobRemoved)
     socket.on('job:pinned',     onJobPinned)
+    socket.on('batch:new-job',  onBatchNewJob)
     socket.on('chat:received',  onChatReceived)
+    socket.on('walkin:requested', refreshReview)
+    socket.on('reassign:requested', refreshReview)
 
     return () => {
+      socket.off('connect',        onConnect)
+      socket.off('disconnect',     onDisconnect)
       socket.off('job:assigned',   onJobAssigned)
       socket.off('job:paused',     onJobPaused)
       socket.off('job:resumed',    onJobResumed)
       socket.off('job:removed',    onJobRemoved)
       socket.off('job:pinned',     onJobPinned)
+      socket.off('batch:new-job',  onBatchNewJob)
       socket.off('chat:received',  onChatReceived)
+      socket.off('walkin:requested', refreshReview)
+      socket.off('reassign:requested', refreshReview)
     }
 
   }, [socket, queryClient, profile?._id, profile?.id])
@@ -246,15 +293,25 @@ export default function QueueDashboard() {
       if (data.nextJob) {
         queryClient.setQueryData(['current-queue-job'], (prev: any) => ({ ...prev, queueJob: data.nextJob }))
       }
-    }
+    },
+    onError: (err: any) => setToast(`Completion Failed: ${err.message || 'System Error'}`)
   })
   const pauseJobMutation = useMutation({
-    mutationFn: (jobId: string) => queueApi.pauseJob(jobId),
-    onSuccess: () => { setToast('Job parked — next job incoming'); queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }); queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] }) }
+    mutationFn: ({ jobId, fetchNext }: { jobId: string; fetchNext: boolean }) => queueApi.pauseJob(jobId, fetchNext),
+    onSuccess: (_, variables) => { 
+      setToast(variables.fetchNext ? 'Job parked — next job incoming' : 'Job parked — waiting for walk-in'); 
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }); 
+      queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] }) 
+    },
+    onError: (err: any) => setToast(`Hold Failed: ${err.message || 'Busy'}`)
   })
-  const resumeJobMutation = useMutation({
-    mutationFn: (jobId: string) => queueApi.resumeJob(jobId),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }) }
+  const startWalkinJobMutation = useMutation({
+    mutationFn: (jobId: string) => queueApi.startWalkinJob(jobId),
+    onSuccess: () => { 
+      setToast('Switching job...');
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] }) 
+    },
+    onError: (err: any) => setToast(`Failed to take job: ${err.message || 'Busy or Locked'}`)
   })
   const reassignMutation = useMutation({
     mutationFn: ({ jobId, reason }: { jobId: string; reason: string }) => queueApi.requestReassignment({ jobId, reason }),
@@ -302,6 +359,33 @@ export default function QueueDashboard() {
 
   const BACKEND_URL = import.meta.env.PROD ? '' : (import.meta.env.VITE_BACKEND_URL || '')
 
+  const toggleJobSelection = (id: string) => {
+    setSelectedBatchJobs(prev => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
+    })
+  }
+
+  const selectAllInBatch = () => {
+    if (selectedBatchJobs.size === activeBatch.length) {
+      setSelectedBatchJobs(new Set())
+    } else {
+      setSelectedBatchJobs(new Set(activeBatch.map((j: any) => j._id)))
+    }
+  }
+
+  const bulkCompleteMutation = useMutation({
+    mutationFn: (jobIds: string[]) => queueApi.bulkCompleteJobs(jobIds),
+    onSuccess: () => {
+      setToast(`Completed ${selectedBatchJobs.size} jobs!`)
+      setSelectedBatchJobs(new Set())
+      queryClient.invalidateQueries({ queryKey: ['current-queue-job'] })
+      queryClient.invalidateQueries({ queryKey: ['my-jobs-today'] })
+    }
+  })
+
   if (statusLoading) return (
     <div className="queue-dashboard" style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: '#64748b' }}>
       Loading…
@@ -310,12 +394,42 @@ export default function QueueDashboard() {
 
   const activeJob = currentJobData?.queueJob
   const walkinJob = currentJobData?.walkinJob
+  const activeBatch = currentJobData?.activeBatch || []
   const pausedJobs:   any[] = currentJobData?.pausedJobs   || []
-  const pendingTray:  any[] = currentJobData?.pendingTray  || []
+
+  const pendingWalkins = (currentJobData?.pendingPinnedJobs || [])
+    .concat(currentJobData?.pendingTray || [])
+    .filter((j: any) => j.type === 'WALKIN')
+
+  // Extract IDs of jobs that are already being shown in the active batch
+  const activeBatchIds = new Set(activeBatch.map((j: any) => j._id))
+
+  const pendingQueue = (currentJobData?.pendingPinnedJobs || [])
+    .concat(currentJobData?.pendingTray || [])
+    .concat(currentJobData?.pausedJobs || [])
+    .filter((j: any) => j.type !== 'WALKIN')
+    .filter((j: any) => !activeBatchIds.has(j._id)) // Remove jobs already shown in the batch stream
+    .sort((a: any, b: any) => {
+      // PAUSED jobs come first for high visibility
+      if (a.status === 'PAUSED' && b.status !== 'PAUSED') return -1;
+      if (a.status !== 'PAUSED' && b.status === 'PAUSED') return 1;
+      return 0;
+    })
+
+  const filteredHistory = (myJobs || [])
+    .filter((j: any) => j.status === 'COMPLETED')
+    .filter((j: any) => {
+      if (!historySearch.trim()) return true
+      const s = historySearch.toLowerCase()
+      return (
+        j.customerName?.toLowerCase().includes(s) ||
+        j.emailSubject?.toLowerCase().includes(s) ||
+        j._id?.toLowerCase().includes(s)
+      )
+    })
 
   const isImage = (f: string) => ['jpg','jpeg','png','gif','webp'].includes(f.split('.').pop()?.toLowerCase() || '')
   const visibleAtts = (atts: string[]) => atts.filter(f => !/\.(txt|html|htm)$/i.test(f))
-  const completedMyJobs = (myJobs || []).filter((j:any) => j.status === 'COMPLETED')
 
   // Cloud link icon helper
   const cloudIcon = (url: string) => {
@@ -338,10 +452,16 @@ export default function QueueDashboard() {
     })()
 
     return (
-      <div className={`active-job-card-supreme ${priorityInfo.class}`}>
+      <div className={`active-job-card-supreme ${priorityInfo.class} ${selectedBatchJobs.has(job._id) ? 'is-selected-batch' : ''}`}>
         {/* Top Header Row */}
         <div className="job-card-top-row" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {/* Selection Checkbox */}
+            <div className="job-selection-wrapper" onClick={(e) => { e.stopPropagation(); toggleJobSelection(job._id); }} style={{ position: 'relative', top: 'auto', left: 'auto', marginRight: '0.25rem' }}>
+               <div className={`job-checkbox ${selectedBatchJobs.has(job._id) ? 'checked' : ''}`}>
+                 {selectedBatchJobs.has(job._id) && '✓'}
+               </div>
+            </div>
             <div className="job-badge-black">JOB</div>
             <div className="job-hash-gray">#{job._id.substring(job._id.length - 6).toUpperCase()}</div>
             {priorityInfo.label && (
@@ -452,7 +572,7 @@ export default function QueueDashboard() {
             <div className="section-divider-text"><span>☁ Cloud Files</span></div>
             <div style={{ display:'flex', flexDirection:'column', gap:'0.75rem', marginBottom:'1.5rem' }}>
               {job.externalLinks.map((link: any, idx: number) => {
-                const age = job.createdAt ? linkAge(job.createdAt) : ''
+                const age = job.createdAt ? elapsed(job.createdAt) : ''
                 const isOld = age.includes('⚠')
                 return (
                   <div key={idx} className="cloud-link-card" style={{ borderColor: isOld ? '#fca5a5' : undefined }}>
@@ -563,11 +683,19 @@ export default function QueueDashboard() {
           </div>
         )}
 
-        {/* Footer exactly matching screenshot without Reassign */}
-        <div className="job-footer-supreme">
+        {/* Footer with refined, smaller buttons */}
+        <div className="job-footer-supreme" style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', flexWrap: 'wrap' }}>
           {job.status !== 'PAUSED' && (
             <button
               className="btn-supreme-black"
+              style={{
+                padding: '0.6rem 1.25rem',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                borderRadius: '0.75rem',
+                flex: 1,
+                minWidth: '140px'
+              }}
               onClick={() => completeJobMutation.mutate(job._id)}
               disabled={completeJobMutation.isPending || (slot === 'queue' && !!walkinJob)}
             >
@@ -576,18 +704,70 @@ export default function QueueDashboard() {
           )}
 
           {slot === 'queue' && job.status !== 'PAUSED' && !walkinJob && (
-            <button
-              className="btn-supreme-outline-orange"
-              onClick={() => pauseJobMutation.mutate(job._id)}
+              <button
+                className="btn-supreme-outline-orange"
+                style={{
+                  padding: '0.6rem 1.25rem',
+                  fontSize: '0.85rem',
+                  fontWeight: 800,
+                  borderRadius: '0.75rem',
+                  border: '2px solid #f59e0b',
+                  color: '#b45309',
+                  background: 'white',
+                  flex: 1,
+                  minWidth: '120px'
+                }}
+                onClick={() => pauseJobMutation.mutate({ jobId: job._id, fetchNext: true })}
+                disabled={pauseJobMutation.isPending}
+                title="Hold this job and get the next one in queue"
+              >
+                HOLD & NEXT
+              </button>
+          )}
+
+
+
+          {/* Simple HOLD Button (New) */}
+          {job.status !== 'PAUSED' && slot === 'queue' && (
+            <button 
+              className="btn-supreme-outline-orange" 
+              style={{
+                padding: '0.6rem 1.25rem',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                borderRadius: '0.75rem',
+                border: '2px solid #f97316',
+                color: '#ea580c',
+                background: 'white',
+                flex: 1,
+                minWidth: '120px'
+              }}
+              onClick={() => pauseJobMutation.mutate({ jobId: job._id, fetchNext: false })}
               disabled={pauseJobMutation.isPending}
             >
-              PAUSE (HOLD)
+              HOLD
             </button>
           )}
 
-          {!walkinJob && slot === 'queue' && (
-            <button className="btn-supreme-outline-gray" onClick={() => setShowWalkinModal(true)}>
-              WALK-IN
+          {/* RESUME Button */}
+          {job.status === 'PAUSED' && slot === 'queue' && (
+            <button 
+              className="btn-supreme-outline-blue" 
+              style={{
+                padding: '0.6rem 1.25rem',
+                fontSize: '0.85rem',
+                fontWeight: 800,
+                borderRadius: '0.75rem',
+                border: '2px solid #3b82f6',
+                color: '#2563eb',
+                background: 'white',
+                flex: 1,
+                minWidth: '120px'
+              }}
+              onClick={() => startWalkinJobMutation.mutate(job._id)}
+              disabled={startWalkinJobMutation.isPending}
+            >
+              {startWalkinJobMutation.isPending ? 'RESUMING...' : 'RESUME'}
             </button>
           )}
         </div>
@@ -597,6 +777,14 @@ export default function QueueDashboard() {
 
   return (
     <div className="queue-dashboard">
+      {/* Connection Status Indicator */}
+      {!isSocketConnected && (
+        <div className="connection-warning-supreme">
+          <span className="warning-dot"></span>
+          REAL-TIME DISCONNECTED - RECONNECTING...
+        </div>
+      )}
+
       {/* Toast */}
       {toast && <Toast message={toast} onDone={() => setToast(null)} />}
 
@@ -623,35 +811,46 @@ export default function QueueDashboard() {
 
           <div className="queue-vertical-divider" />
 
-          {sessionStatus?.active && (
-            <>
-              <button 
-                className={`btn-queue-nav-action ${isQueuePaused ? 'is-paused' : ''}`}
-                onClick={() => toggleQueuePauseMutation.mutate(!isQueuePaused)}
-                title={isQueuePaused ? "Resume Auto-Assignment" : "Pause Auto-Assignment to focus on Walk-in tasks"}
-              >
-                {isQueuePaused ? <span>▶ RESUME AUTO-ASSIGN</span> : <span>⏸ PAUSE AUTO-ASSIGN</span>}
-              </button>
-              <button 
-                className="btn-queue-nav-action outline" 
-                onClick={() => { if(confirm('End session? Uncompleted queue jobs return to pool.')) endSessionMutation.mutate() }}
-                title="Log out from queue desk"
-              >
-                <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                <span>END SESSION</span>
-              </button>
-            </>
-          )}
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+            {sessionStatus?.active && (
+              <>
+                <button 
+                  className={`btn-queue-nav-action ${isQueuePaused ? 'is-paused' : ''}`}
+                  onClick={() => toggleQueuePauseMutation.mutate(!isQueuePaused)}
+                  title={isQueuePaused ? "Resume Auto-Assignment" : "Pause Auto-Assignment to focus on Walk-in tasks"}
+                >
+                  {isQueuePaused ? <span>▶ RESUME QUEUE</span> : <span>⏸ PAUSE QUEUE</span>}
+                </button>
+                <button 
+                  className="btn-queue-nav-action danger" 
+                  onClick={() => { if(confirm('End session? Uncompleted queue jobs return to pool.')) endSessionMutation.mutate() }}
+                  title="Log out from queue desk"
+                >
+                  <svg width="16" height="16" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+                  <span>LOGOUT</span>
+                </button>
+              </>
+            )}
 
-          <button 
-            className={`btn-queue-nav-action ${hasUnread ? 'comms-unread' : ''}`} 
-            onClick={() => setShowMessages(true)}
-            title="Open Communication Center"
-          >
-             <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
-             <span>COMMS</span>
-             {hasUnread && <span className="unread-dot"></span>}
-          </button>
+            <button 
+              className={`btn-queue-nav-action ${hasUnread ? 'comms-unread' : ''}`} 
+              onClick={() => setShowMessages(true)}
+              title="Open Communication Center"
+            >
+               <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z" /></svg>
+               <span>COMMS</span>
+               {hasUnread && <span className="unread-dot"></span>}
+            </button>
+
+            <button 
+              className="btn-queue-nav-action outline" 
+              onClick={() => setShowQRModal(true)}
+              title="Show QR Code for Walk-in Customers"
+            >
+               <svg width="18" height="18" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+               <span>DESK QR</span>
+            </button>
+          </div>
 
           <div className="queue-vertical-divider" />
 
@@ -682,100 +881,162 @@ export default function QueueDashboard() {
                 </div>
               ) : (
                 <div className="jobs-view">
-                  <div className="jobs-grid">
-                  {walkinJob && renderJobCard(walkinJob, 'walkin')}
-                  {activeJob  && renderJobCard(activeJob,  'queue')}
-
-                  {/* Paused jobs */}
-                  {pausedJobs.length > 0 && (
-                    <div style={{ marginTop:'1rem' }}>
-                      <div style={{ fontSize:'0.65rem', fontWeight: 800, color:'#b45309', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
-                        <span style={{ background:'#fef3c7', padding:'0.2rem 0.6rem', borderRadius:'0.4rem' }}>⏸ Parked Jobs ({pausedJobs.length})</span>
-                      </div>
-                      {pausedJobs.map((pJob: any) => (
-                        <div key={pJob._id} style={{ background:'white', border:'1px solid #e2e8f0', borderLeft:'6px solid #f59e0b', borderRadius:'1rem', padding:'1rem 1.25rem', display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'0.75rem', boxShadow:'0 2px 8px rgba(0,0,0,0.04)' }}>
-                          <div>
-                            <div style={{ fontWeight:800, color:'#0f172a' }}>{pJob.customerName}</div>
-                            <div style={{ fontSize:'0.8125rem', color:'#64748b', fontStyle:'italic' }}>{pJob.emailSubject}</div>
-                            {pJob.assignedAt && <div style={{ fontSize:'0.7rem', color:'#94a3b8', marginTop:'0.25rem' }}>Parked {elapsed(pJob.updatedAt || pJob.assignedAt)} ago</div>}
-                          </div>
-                          <button
-                            className="btn-complete"
-                            style={{ background:'#f59e0b', minWidth:'100px' }}
-                            onClick={() => resumeJobMutation.mutate(pJob._id)}
-                            disabled={resumeJobMutation.isPending}
-                          >
-                            ▶ RESUME
-                          </button>
+                   {activeBatch.length > 1 && (
+                     <div className="batch-header-strip">
+                        <div className="bh-info">
+                          <span className="bh-badge">BATCH</span>
+                          <span className="bh-customer">{activeBatch[0]?.customerName}</span>
+                          <span className="bh-count">({activeBatch.length} Jobs Total)</span>
                         </div>
-                      ))}
+                        <button className="bh-select-all" onClick={selectAllInBatch}>
+                          {selectedBatchJobs.size === activeBatch.length ? 'DESELECT ALL' : 'SELECT ALL'}
+                        </button>
+                     </div>
+                   )}
+
+                  <div className="jobs-grid-stream">
+                    {walkinJob && renderJobCard(walkinJob, 'walkin')}
+                    
+                    {/* Continuous Batch Stream: Renders all cards for the customer vertically */}
+                    {activeBatch.length > 0 ? (
+                      activeBatch.map((j: any) => (
+                        <div key={j._id} style={{ marginBottom: '1rem' }}>
+                           {renderJobCard(j, 'queue')}
+                        </div>
+                      ))
+                    ) : (
+                      activeJob && renderJobCard(activeJob, 'queue')
+                    )}
+                  </div>
+
+                  {/* Floating Bulk Action Bar */}
+                  {selectedBatchJobs.size > 0 && (
+                    <div className="bulk-action-bar-supreme">
+                       <div className="bab-content">
+                          <div className="bab-info">
+                             <span className="bab-count">{selectedBatchJobs.size}</span>
+                             <span className="bab-text">Jobs Selected</span>
+                          </div>
+                          <div className="bab-actions">
+                             <button className="btn-bulk-cancel" onClick={() => setSelectedBatchJobs(new Set())}>CANCEL</button>
+                             <button 
+                               className="btn-bulk-complete" 
+                               onClick={() => bulkCompleteMutation.mutate(Array.from(selectedBatchJobs))}
+                               disabled={bulkCompleteMutation.isPending}
+                             >
+                               {bulkCompleteMutation.isPending ? 'PROCESSING…' : 'MARK COMPLETED'}
+                             </button>
+                          </div>
+                       </div>
                     </div>
                   )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
 
-                  {/* Pending pinned tray */}
-                  {pendingTray.length > 0 && (
-                    <div style={{ marginTop:'1rem', padding:'1rem 1.25rem', background:'#f8f9ff', border:'1px solid #c7d2fe', borderRadius:'1rem' }}>
-                      <div style={{ fontSize:'0.65rem', fontWeight: 800, color:'#4f46e5', textTransform:'uppercase', letterSpacing:'0.1em', marginBottom:'0.75rem' }}>
-                        📋 Coming Up — Pinned to You ({pendingTray.length})
+        {/* ⬛ RIGHT - Task Sidebar ⬛ */}
+        <div className="sidebar-supreme">
+          <div className="sidebar-tab-nav">
+            <button className={`sidebar-tab-btn ${sidebarTab === 'WALKIN' ? 'active' : ''}`} onClick={() => setSidebarTab('WALKIN')}>
+              WALK-INS
+              {pendingWalkins.length > 0 && <span className="tab-badge-dot" />}
+            </button>
+            <button className={`sidebar-tab-btn ${sidebarTab === 'QUEUE' ? 'active' : ''}`} onClick={() => setSidebarTab('QUEUE')}>
+              MY QUEUE
+              {pendingQueue.length > 0 && <span className="tab-badge-dot blue" />}
+            </button>
+            <button className={`sidebar-tab-btn ${sidebarTab === 'HISTORY' ? 'active' : ''}`} onClick={() => setSidebarTab('HISTORY')}>
+              HISTORY
+            </button>
+          </div>
+
+          <div className="sidebar-tab-content">
+            {sidebarTab === 'WALKIN' && (
+              <div className="sidebar-list-view">
+                {pendingWalkins.length === 0 ? (
+                  <div className="sidebar-empty-state">No walk-ins via your QR code.</div>
+                ) : (
+                  pendingWalkins.map((job: any) => (
+                    <div key={job._id} className="sidebar-job-row" onClick={() => setPreviewJob(job)}>
+                      <div className="sj-main">
+                        <div className="sj-name">{job.customerName}</div>
+                        <div className="sj-meta">{elapsed(job.createdAt)} ago</div>
                       </div>
-                      {pendingTray.map((pJob: any) => (
-                        <div key={pJob._id} style={{ display:'flex', justifyContent:'space-between', padding:'0.75rem', background:'white', borderRadius:'0.75rem', marginBottom:'0.5rem', border:'1px solid #e2e8f0' }}>
-                          <div>
-                            <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{pJob.customerName}</div>
-                            <div style={{ fontSize:'0.75rem', color:'#64748b' }}>{pJob.emailSubject}</div>
-                          </div>
-                          <span style={{ background:'#e0e7ff', color:'#4338ca', fontSize:'0.65rem', fontWeight: 800, padding:'0.25rem 0.5rem', borderRadius:'2rem', alignSelf:'center' }}>PINNED</span>
-                        </div>
-                      ))}
+                      <button className="sj-action-btn" onClick={(e) => { e.stopPropagation(); startWalkinJobMutation.mutate(job._id); }}>
+                        {startWalkinJobMutation.isPending ? '...' : 'TAKE'}
+                      </button>
                     </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {sidebarTab === 'QUEUE' && (
+              <div className="sidebar-list-view">
+                {pendingQueue.length === 0 ? (
+                  <div className="sidebar-empty-state">No jobs pinned to you.</div>
+                ) : (
+                  pendingQueue.map((job: any) => (
+                    <div key={job._id} className={`sidebar-job-row ${job.status === 'PAUSED' ? 'is-on-hold' : ''}`} onClick={() => setPreviewJob(job)}>
+                      <div className="sj-main">
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                          <div className="sj-name">{job.customerName}</div>
+                          {job.status === 'PAUSED' && (
+                            <span style={{ fontSize: '0.65rem', background: '#fef2f2', color: '#dc2626', padding: '0.1rem 0.4rem', borderRadius: '0.3rem', fontWeight: 900, border: '1px solid #fee2e2' }}>HOLD</span>
+                          )}
+                        </div>
+                        <div className="sj-meta">
+                          {job.status === 'PAUSED' ? `Reason: ${job.pauseReason || 'General Hold'}` : `${job.emailSubject?.substring(0, 20)}...`}
+                        </div>
+                      </div>
+                      <button 
+                        className={`sj-action-btn ${job.status === 'PAUSED' ? 'orange' : 'blue'}`} 
+                        onClick={(e) => { 
+                          e.stopPropagation(); 
+                          // Use the universal mutation for both start and resume
+                          startWalkinJobMutation.mutate(job._id);
+                        }}
+                      >
+                        {startWalkinJobMutation.isPending ? '...' : (job.status === 'PAUSED' ? 'RESUME' : 'TAKE')}
+                      </button>
+                    </div>
+                  ))
+                )}
+              </div>
+            )}
+
+            {sidebarTab === 'HISTORY' && (
+              <div className="sidebar-list-view">
+                <div className="history-search-wrapper" style={{ padding: '0.5rem 0.75rem' }}>
+                  <input 
+                    type="text" 
+                    placeholder="Search history..." 
+                    value={historySearch}
+                    onChange={e => setHistorySearch(e.target.value)}
+                    className="history-search-input"
+                  />
+                </div>
+                <div className="sidebar-scroll-mini" style={{ padding: '0 0.5rem' }}>
+                  {filteredHistory.length === 0 ? (
+                    <div className="sidebar-empty-state">No matching history.</div>
+                  ) : (
+                    filteredHistory.map((job: any) => (
+                      <div key={job._id} className="sidebar-job-row" onClick={() => setPreviewJob(job)}>
+                        <div className="sj-main">
+                          <div className="sj-name">{job.customerName}</div>
+                          <div className="sj-meta">{new Date(job.completedAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                        </div>
+                        <span className={`sj-badge ${job.type === 'WHATSAPP' ? 'wa' : ''}`}>
+                          {job.type === 'WHATSAPP' ? 'WA' : job.type}
+                        </span>
+                      </div>
+                    ))
                   )}
                 </div>
               </div>
             )}
-          </>)}
-        </div>
-
-        {/* ⬛ RIGHT - Handled Today (Sidebar) ⬛ */}
-        <div className="sidebar-supreme">
-          <div className="handled-today-card">
-            <div className="handled-header">
-              <h2>HANDLED TODAY</h2>
-              <span className="handled-count">{completedMyJobs.length}</span>
-            </div>
-            
-            <table className="handled-table">
-              <thead>
-                <tr>
-                  <th>CUSTOMER</th>
-                  <th style={{ textAlign:'right' }}>TYPE</th>
-                </tr>
-              </thead>
-              <tbody>
-                {completedMyJobs.length === 0 ? (
-                  <tr>
-                    <td colSpan={2} style={{ textAlign: 'center', padding: '3rem 1rem', color: '#94a3b8' }}>No jobs yet.</td>
-                  </tr>
-                ) : (
-                  completedMyJobs.map((job:any) => (
-                    <tr 
-                      key={job._id} 
-                      onClick={() => setShowHandledDetailsJob(job)}
-                      style={{ cursor: 'pointer', transition: 'background 0.2s' }}
-                      className="handled-row-hover"
-                    >
-                      <td className="handled-customer">{job.customerName || job.emailSubject?.substring(0,18)}</td>
-                      <td style={{ textAlign:'right' }}>
-                        {job.type === 'WHATSAPP' ? (
-                          <span className="handled-type-badge wa-badge-premium" style={{ background: '#ecfdf5', color: '#059669', borderColor: '#d1fae5' }}>WHATSAPP</span>
-                        ) : (
-                          <span className="handled-type-badge">{job.type}</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
           </div>
         </div>
       </div>
@@ -810,15 +1071,9 @@ export default function QueueDashboard() {
               style={{ minHeight: 'auto', padding: '0.75rem', marginBottom: '1.5rem', cursor: 'pointer' }}
             >
               <option value="" disabled>Select Reason...</option>
-              <option value="Missing Software / Incorrect File Format">Missing Software / File Format</option>
-              <option value="Missing Fonts or Asset Links">Missing Fonts or Asset Links</option>
-              <option value="Requires Specialist Designer">Requires Specialist Designer</option>
-              <option value="Too complex for current workload">Too complex for workload</option>
-              <option value="Customer requested stop / pause">Customer requested stop / pause</option>
-               <option value="Customer not responding ">Customer not responding </option>
-                <option value="Designer sent mail">Designer sent mail</option>
-                 <option value="Customer contact NA">Customer contact NA</option>
-                 <option value="Customer Walk-in">Customer Walk-in</option>
+              {configs?.find((c: any) => c.key === 'reassignment_reasons')?.value?.map((r: any) => (
+                <option key={r.id} value={r.label}>{r.label}</option>
+              ))}
             </select>
             <div className="modal-actions">
               <button
@@ -836,59 +1091,81 @@ export default function QueueDashboard() {
         </div>
       )}
 
-      {/* Handled Job Details Modal */}
-      {showHandledDetailsJob && (
-        <div className="modal-overlay" onClick={() => setShowHandledDetailsJob(null)}>
+      {/* Universal Preview Modal */}
+      {previewJob && (
+        <div className="modal-overlay" onClick={() => { setPreviewJob(null); }}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth:'700px', width:'90%' }}>
-            <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
-              <h3 className="modal-title" style={{ margin:0 }}>Job Details History</h3>
-              <button className="btn-close-lightbox" onClick={() => setShowHandledDetailsJob(null)} style={{ padding:'0.25rem 0.5rem' }}>×</button>
-            </div>
-
-            <div className="job-card-details-p" style={{ maxHeight:'60vh', overflowY:'auto', paddingRight:'10px' }}>
-               <div style={{ marginBottom:'1.5rem' }}>
-                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Customer</label>
-                  <div style={{ fontSize: '0.95rem', fontWeight:800, color:'#0f172a' }}>{showHandledDetailsJob.customerName || 'N/A'}</div>
-               </div>
-
-               <div style={{ marginBottom:'1.5rem' }}>
-                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Subject Line</label>
-                  <div style={{ fontSize:'1rem', fontWeight:700, color:'#1e293b', background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem', border:'1px solid #e2e8f0' }}>
-                    {showHandledDetailsJob.emailSubject || 'No Subject'}
+            {(() => {
+              const job = previewJob;
+              const isHistory = job.status === 'COMPLETED';
+              const isPending = job.status === 'QUEUED';
+              
+              return (
+                <>
+                  <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:'1.5rem' }}>
+                    <div style={{ display:'flex', alignItems:'center', gap:'0.75rem' }}>
+                      <span style={{ 
+                        background: isHistory ? '#f1f5f9' : (isPending ? '#eef2ff' : '#ecfdf5'),
+                        color: isHistory ? '#64748b' : (isPending ? '#4f46e5' : '#10b981'),
+                        fontSize:'0.65rem', fontWeight:950, padding:'0.2rem 0.6rem', borderRadius:'2rem', textTransform:'uppercase'
+                      }}>
+                        {isHistory ? 'Archived' : (isPending ? 'Pending' : 'Active')}
+                      </span>
+                      <h3 className="modal-title" style={{ margin:0 }}>Job Details</h3>
+                    </div>
+                    <button className="btn-close-lightbox" onClick={() => { setPreviewJob(null); }} style={{ padding:'0.25rem 0.5rem' }}>×</button>
                   </div>
-               </div>
 
-               <div style={{ marginBottom:'1.5rem' }}>
-                  <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Internal Content / Instructions</label>
-                  <div style={{ 
-                    fontSize:'0.875rem', 
-                    color:'#475569', 
-                    whiteSpace:'pre-wrap', 
-                    background:'#f1f5f9', 
-                    padding:'1rem', 
-                    borderRadius:'0.75rem', 
-                    lineHeight:1.6,
-                    border:'1px solid #e2e8f0'
-                  }}>
-                    {showHandledDetailsJob.mailBody || 'No description provided.'}
-                  </div>
-               </div>
+                  <div className="job-card-details-p" style={{ maxHeight:'60vh', overflowY:'auto', paddingRight:'10px' }}>
+                    <div style={{ marginBottom:'1.5rem' }}>
+                        <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Customer</label>
+                        <div style={{ fontSize: '0.95rem', fontWeight:800, color:'#0f172a' }}>{job.customerName || 'N/A'}</div>
+                    </div>
 
-               <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
-                  <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
-                     <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>Type</label>
-                     <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{showHandledDetailsJob.type}</div>
-                  </div>
-                  <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
-                     <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>Completed</label>
-                     <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{new Date(showHandledDetailsJob.completedAt).toLocaleString()}</div>
-                  </div>
-               </div>
-            </div>
+                    <div style={{ marginBottom:'1.5rem' }}>
+                        <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Subject Line</label>
+                        <div style={{ fontSize:'1rem', fontWeight:700, color:'#1e293b', background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem', border:'1px solid #e2e8f0' }}>
+                          {job.emailSubject || 'No Subject'}
+                        </div>
+                    </div>
 
-            <div className="modal-actions" style={{ marginTop:'2rem' }}>
-              <button className="btn-complete" style={{ width:'100%' }} onClick={() => setShowHandledDetailsJob(null)}>CLOSE VIEW</button>
-            </div>
+                    <div style={{ marginBottom:'1.5rem' }}>
+                        <label style={{ fontSize:'0.7rem', fontWeight: 800, color:'#64748b', textTransform:'uppercase', letterSpacing:'0.05em' }}>Instructions / Body</label>
+                        <div style={{ 
+                          fontSize:'0.875rem', color:'#475569', whiteSpace:'pre-wrap', background:'#f1f5f9', padding:'1rem', borderRadius:'0.75rem', lineHeight:1.6, border:'1px solid #e2e8f0'
+                        }}>
+                          <LinkifiedText text={job.mailBody || job.walkinDescription || 'No description provided.'} />
+                        </div>
+                    </div>
+
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:'1rem' }}>
+                        <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
+                           <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>Type</label>
+                           <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{job.type}</div>
+                        </div>
+                        <div style={{ background:'#f8fafc', padding:'0.75rem', borderRadius:'0.5rem' }}>
+                           <label style={{ fontSize:'0.6rem', fontWeight: 800, color:'#94a3b8', textTransform:'uppercase' }}>{isHistory ? 'Completed' : 'Received'}</label>
+                           <div style={{ fontWeight:700, fontSize:'0.875rem' }}>{new Date(isHistory ? job.completedAt : job.createdAt).toLocaleString()}</div>
+                        </div>
+                    </div>
+                  </div>
+
+                  <div className="modal-actions" style={{ marginTop:'2rem' }}>
+                    {isPending ? (
+                      <button 
+                        className="btn-complete" 
+                        style={{ width:'100%', background: job.type === 'WALKIN' ? '#10b981' : '#4f46e5' }} 
+                        onClick={() => { startWalkinJobMutation.mutate(job._id); setPreviewJob(null); }}
+                      >
+                        {job.type === 'WALKIN' ? 'TAKE WALKIN JOB' : 'START QUEUE JOB'}
+                      </button>
+                    ) : (
+                      <button className="btn-complete" style={{ width:'100%' }} onClick={() => { setPreviewJob(null); }}>CLOSE PREVIEW</button>
+                    )}
+                  </div>
+                </>
+              )
+            })()}
           </div>
         </div>
       )}
@@ -897,11 +1174,11 @@ export default function QueueDashboard() {
       {viewImage && (
         <div className="lightbox-modal">
           <div className="lightbox-content" onClick={e => e.stopPropagation()}>
-            <img src={viewImage} className="lightbox-img" alt="Enlarged" />
+            <img src={viewImage || ''} className="lightbox-img" alt="Enlarged" />
             <div className="lightbox-actions">
               <button className="btn-download-lightbox" onClick={() => {
                 // Strip token query param from URL — downloadWithAuth sends auth via header
-                const cleanViewUrl = viewImage.split('?')[0]
+                const cleanViewUrl = (viewImage || '').split('?')[0]
                 const dlFilename = cleanViewUrl.split('/').pop() || 'download'
                 downloadWithAuth(cleanViewUrl, dlFilename)
               }}>DOWNLOAD</button>
@@ -923,6 +1200,28 @@ export default function QueueDashboard() {
         initialJobId={chatSettings.jobId}
         prefilledMessage={chatSettings.prefill}
       />
+      {/* QR Code Modal for Walk-ins */}
+      {showQRModal && (
+        <div className="modal-overlay">
+          <div className="modal" style={{ maxWidth: '400px', textAlign: 'center' }}>
+            <h2 style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0f172a', marginBottom: '0.5rem' }}>DESK QR CODE</h2>
+            <p style={{ fontSize: '0.875rem', color: '#64748b', marginBottom: '1.5rem' }}>Ask the customer to scan this code to upload files directly to your queue.</p>
+            
+            <div style={{ background: '#f8faff', padding: '1.5rem', borderRadius: '1.5rem', display: 'inline-block', marginBottom: '1.5rem', border: '2px solid #e2e8f0' }}>
+              <img 
+                src={`https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=${encodeURIComponent(`${import.meta.env.VITE_WALKIN_PORTAL_URL || 'http://localhost:5001'}/${myStaffId}`)}`} 
+                alt="Walk-in QR Code"
+                style={{ width: '250px', height: '250px', display: 'block' }}
+              />
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+              <button className="btn-supreme-black" onClick={() => window.print()}>PRINT STICKER</button>
+              <button className="btn-secondary" onClick={() => setShowQRModal(false)}>CLOSE</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

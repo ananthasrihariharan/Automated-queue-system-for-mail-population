@@ -80,8 +80,9 @@ const QueueJobSchema = new mongoose.Schema(
       default: null
     },
 
-    // ── Return reason ───────────────────────────────────
+    // ── Return/Pause reason ─────────────────────────────
     returnReason: { type: String, default: '' },
+    pauseReason: { type: String, default: '' },
 
     // ── Master Architecture Fields ──────────────────────
     fingerprint: { type: String, index: true },             // For deduplication (hash of content/msgId)

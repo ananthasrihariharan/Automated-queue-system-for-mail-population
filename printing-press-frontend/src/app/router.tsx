@@ -14,6 +14,7 @@ import Unauthorized from '../pages/unauthorized'
 import CustomerPacking from '../modules/customer/CustomerPacking'
 import ProfilePage from '../pages/Profile'
 import GlobalErrorPage from '../shared/components/GlobalErrorPage'
+import CustomerUploadPage from '../pages/CustomerUploadPage'
 
 export const router = createBrowserRouter([
     {
@@ -115,6 +116,10 @@ export const router = createBrowserRouter([
             {
                 path: 'customer/dashboard',
                 element: <CustomerDashboard />
+            },
+            {
+                path: 'upload/:staffId',
+                element: <CustomerUploadPage />
             }
         ]
     }
