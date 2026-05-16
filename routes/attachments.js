@@ -21,13 +21,15 @@ router.get('/:id/download-all', auth, async (req, res) => {
     let folderPath
     let customerPrefix
 
+    const pathService = require('../services/pathService')
+
     if (mongoose.Types.ObjectId.isValid(id)) {
       job = await QueueJob.findById(id)
     }
 
     if (job) {
-      folderPath = job.folderPath
       customerPrefix = (job.customerEmail || 'unknown').split('@')[0]
+      folderPath = pathService.resolveJobFolder(job)
     } else {
       // Try finding by _id in Job model (Prepress Jobs)
       if (mongoose.Types.ObjectId.isValid(id)) {
@@ -40,15 +42,7 @@ router.get('/:id/download-all', auth, async (req, res) => {
       }
 
       if (job) {
-        // Calculate folderPath for Prepress Job
-        const uploadBase = process.env.UPLOAD_PATH || path.join(__dirname, '..', 'uploads')
-        const date = new Date(job.createdAt)
-        const dateString = `${String(date.getDate()).padStart(2, '0')}-${String(date.getMonth() + 1).padStart(2, '0')}-${date.getFullYear()}`
-        
-        const newStyleDir = path.join(uploadBase, 'jobs', dateString, job.jobId)
-        const legacyDir = path.join(uploadBase, 'jobs', job.jobId)
-
-        folderPath = fs.existsSync(newStyleDir) ? newStyleDir : legacyDir
+        folderPath = pathService.resolveJobFolder(job)
         customerPrefix = (job.customerName || 'customer').replace(/\s+/g, '_')
       }
     }
@@ -59,17 +53,17 @@ router.get('/:id/download-all', auth, async (req, res) => {
 
     // --- Resource Level Authorization ---
     const user = req.user
-    const isAdmin = user.roles?.includes('ADMIN') || user.role?.toUpperCase() === 'ADMIN'
+    const roles = user.roles || []
+    const isAdmin = roles.includes('ADMIN') || user.role === 'ADMIN'
+    const isStaff = roles.some(r => ['PREPRESS', 'DISPATCH'].includes(r)) || ['PREPRESS', 'DISPATCH'].includes(user.role)
     
-    // If not admin, check if assigned to this job or if job is in QUEUED state (general pool)
-    if (!isAdmin) {
-      const isAssignedToMe = job.assignedTo?.toString() === user._id.toString()
-      const isQueued = job.status === 'QUEUED'
-      
-      if (!isAssignedToMe && !isQueued) {
-        console.warn(`[Security] Unauthorized download attempt by ${user.email} for job ${id}`)
-        return res.status(403).json({ message: 'Access Denied: You are not assigned to this job' })
-      }
+    const isAssigned = String(job.assignedTo) === String(user._id)
+    const isPinned = String(job.pinnedToStaff) === String(user._id)
+    
+    // 🛡️ SECURITY CHECK: Broad access for staff/admins; restricted for others
+    if (!isAdmin && !isStaff && !isAssigned && !isPinned) {
+       console.warn(`[Security] Unauthorized ZIP download attempt by ${user.email} for job ${id}`)
+       return res.status(403).json({ message: 'Access Denied: You are not authorized for this job' })
     }
 
     // List files in the job folder

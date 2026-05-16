@@ -95,6 +95,57 @@ router.get('/pool-size', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
+ * GET /general-pool — Search the waiting pool for specific jobs
+ */
+router.get('/general-pool', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const { search = '' } = req.query;
+    
+    const filter = { 
+      status: { $in: ['QUEUED', 'PAUSED', 'ASSIGNED', 'IN_PROGRESS'] },
+      isSuperseded: { $ne: true },
+      type: { $ne: 'WALKIN' }
+    };
+
+    if (search) {
+      const regex = { $regex: search.trim(), $options: 'i' };
+      filter.$or = [
+        { customerName: regex },
+        { customerEmail: regex },
+        { emailSubject: regex }
+      ];
+    }
+
+    const jobs = await QueueJob.find(filter)
+      .sort({ priorityScore: -1, createdAt: 1 })
+      .limit(50) 
+      .populate('pinnedToStaff', 'name')
+      .populate('assignedTo', 'name');
+
+    // Add batch counts to each result for UI visibility
+    const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
+      const batchFilter = { 
+        status: 'QUEUED', 
+        isSuperseded: { $ne: true }
+      };
+      
+      if (job.customerEmail) batchFilter.customerEmail = job.customerEmail;
+      else if (job.customerPhone) batchFilter.customerPhone = job.customerPhone;
+      else {
+        return { ...job.toObject(), batchCount: 1 };
+      }
+
+      const count = await QueueJob.countDocuments(batchFilter);
+      return { ...job.toObject(), batchCount: count };
+    }));
+
+    res.json(jobsWithCounts);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+})
+
+/**
  * GET /current-job — Get currently assigned job (fallback if WebSocket missed)
  */
 router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
@@ -157,10 +208,10 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
  */
 router.post('/take-job', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const { jobId } = req.body;
+    const { jobId, takeAll = false } = req.body;
     if (!jobId) return res.status(400).json({ message: 'Job ID required' });
 
-    const job = await queueEngine.takeJob(req.user._id, jobId);
+    const job = await queueEngine.takeJob(req.user._id, jobId, takeAll);
     res.json({
       message: 'Job successfully taken',
       job
@@ -375,7 +426,8 @@ router.post('/jobs/:id/resume', auth, authorize('PREPRESS'), async (req, res) =>
  */
 router.post('/jobs/:id/take', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const job = await queueEngine.takeJob(req.user._id, req.params.id)
+    const { takeAll = false } = req.body;
+    const job = await queueEngine.takeJob(req.user._id, req.params.id, takeAll)
     res.json({ message: 'Job taken successfully', job })
   } catch (err) {
     console.error('TAKE JOB ERROR:', err)
@@ -426,75 +478,42 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
     const filePath = req.params[0] // Captured by '*'
     
     // 1. Verify Authentication & Role
-    const userRole = req.user.role || (req.user.roles && req.user.roles[0])
-    const isAdmin = userRole === 'ADMIN'
+    const roles = req.user.roles || []
+    const isAdmin = roles.includes('ADMIN') || req.user.role === 'ADMIN'
+    const isStaff = roles.some(r => ['PREPRESS', 'DISPATCH'].includes(r)) || ['PREPRESS', 'DISPATCH'].includes(req.user.role)
 
     // 2. Lookup Job to check assignment
     const job = await QueueJob.findById(jobId)
     if (!job) return res.status(404).json({ message: 'Job record not found' })
 
     const isAssigned = String(job.assignedTo) === String(req.user._id)
+    const isPinned = String(job.pinnedToStaff) === String(req.user._id)
+    const isQueued = job.status === 'QUEUED'
 
-    // 🛡️ SECURITY CHECK: Only Admin OR Assigned Staff can access files
-    if (!isAdmin && !isAssigned) {
+    // 🛡️ SECURITY CHECK: Broad access for staff/admins; restricted for others
+    if (!isAdmin && !isStaff && !isAssigned && !isPinned) {
       console.warn(`[Security] Unauthorized file access attempt on Job ${jobId} by User ${req.user._id}`)
-      return res.status(403).json({ message: 'Access denied. You are not assigned to this job.' })
+      return res.status(403).json({ message: 'Access denied. You are not authorized to view these files.' })
     }
 
-    // 3. Resolve Real Path (ROBUST Multi-Root)
-    const watchRoot = process.env.N8N_WATCH_PATH || ''
-    const whatsappRoot = process.env.WHATSAPP_WATCH_PATH || ''
-    const archiveRoot = process.env.COMPLETED_JOBS_PATH || ''
 
-    if (!watchRoot && !whatsappRoot) {
-      return res.status(500).json({ message: 'Storage paths not configured' })
+    // 3. Resolve Real Path (Unified PathService)
+    const pathService = require('../services/pathService');
+    const absolutePath = pathService.resolveFilePath(job, filePath);
+
+    if (!absolutePath || !fs.existsSync(absolutePath)) {
+      return res.status(404).json({ message: 'File not found on storage server' });
     }
 
-    // Sanitize sub-path to prevent Windows drive-root resets (strips leading slashes)
-    const cleanSubPath = filePath.replace(/^[\\/]+/, ''); 
-    
-    // Attempt to resolve against Watch Path first, then Whatsapp Path, then Archive Path
-    let absolutePath = path.join(watchRoot, job.relativeFolderPath, cleanSubPath)
-    
-    if (!fs.existsSync(absolutePath) && whatsappRoot) {
-      absolutePath = path.join(whatsappRoot, job.relativeFolderPath, cleanSubPath)
-    }
-
-    if (!fs.existsSync(absolutePath) && archiveRoot) {
-      absolutePath = path.join(archiveRoot, job.relativeFolderPath, cleanSubPath)
-    }
-
-    // 🧹 Prevention of path traversal (Case-insensitive for Windows)
-    const normalizedPath = path.resolve(absolutePath);
-    const nRoot = watchRoot ? path.resolve(watchRoot) : null;
-    const aRoot = archiveRoot ? path.resolve(archiveRoot) : null;
-    const wRoot = whatsappRoot ? path.resolve(whatsappRoot) : null;
-
-    const isUnderWatch = nRoot ? normalizedPath.toLowerCase().startsWith(nRoot.toLowerCase()) : false;
-    const isUnderArchive = aRoot ? normalizedPath.toLowerCase().startsWith(aRoot.toLowerCase()) : false;
-    const isUnderWhatsapp = wRoot ? normalizedPath.toLowerCase().startsWith(wRoot.toLowerCase()) : false;
-
-    if (!isUnderWatch && !isUnderArchive && !isUnderWhatsapp) {
-      console.warn(`[Security] Blocked traversal attempt in Prepress: ${filePath}`);
-      return res.status(400).json({ message: 'Invalid path' });
-    }
-
-    if (!fs.existsSync(normalizedPath)) {
-      return res.status(404).json({ message: 'File not found on disk' })
-    }
-
-    const stats = fs.statSync(normalizedPath)
+    const stats = fs.statSync(absolutePath)
 
     // FRIENDLY FILENAME PRESERVATION
-    // Use the on-disk filename (now preserved as original) for the user's download
-    const filename = path.basename(normalizedPath)
+    const filename = path.basename(absolutePath)
     const safeName = filename.replace(/[/\\?%*:|"<>]/g, '-')
-    // Use 'inline' so images still preview, but 'Save As' uses the friendly name
     res.setHeader('Content-Disposition', `inline; filename="${safeName}"`)
 
     if (stats.isDirectory()) {
-      // Return a simple HTML file list if it's a directory
-      const files = fs.readdirSync(normalizedPath)
+      const files = fs.readdirSync(absolutePath)
       let html = `<html><head><title>Assets: ${job.customerName}</title><style>body{font-family:sans-serif;padding:2rem;background:#f8fafc} a{display:block;padding:0.5rem;color:#2563eb;text-decoration:none;border-bottom:1px solid #e2e8f0} a:hover{background:#eff6ff}</style></head><body>`
       html += `<h2>Files for ${job.customerName} - ${job.emailSubject}</h2>`
       html += `<a href="../">.. (Up)</a>`
@@ -505,7 +524,7 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
       return res.send(html)
     }
 
-    res.sendFile(normalizedPath)
+    res.sendFile(absolutePath)
   } catch (err) {
     console.error('SECURE FILE ERROR:', err)
     res.status(500).json({ message: 'Server error serving file' })

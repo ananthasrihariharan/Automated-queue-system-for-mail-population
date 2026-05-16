@@ -89,8 +89,9 @@ class ProcessingWorker {
     if (this.isProcessing) return
     this.isProcessing = true
 
+    let task = null;
     try {
-      const task = await IngestionTask.findOneAndUpdate(
+      task = await IngestionTask.findOneAndUpdate(
         { 
           status: { $in: ['PENDING', 'FAILED'] },
           attempts: { $lt: 3 }
@@ -98,11 +99,8 @@ class ProcessingWorker {
         { status: 'PROCESSING', startedAt: new Date(), $inc: { attempts: 1 } },
         { sort: { createdAt: 1 }, new: true }
       )
-
-      if (!task) {
-        this.isProcessing = false
-        return
-      }
+      
+      if (!task) return; 
 
       console.log(`[Worker] Processing folder: ${task.folderPath}`)
       await this.handleTask(task)
@@ -129,7 +127,12 @@ class ProcessingWorker {
       // 2. Parse Metadata
       const parentFolder = path.basename(path.dirname(task.folderPath))
       const subfolderName = path.basename(task.folderPath)
-      const customerEmail = parentFolder.replace(/\s*\(\d+\)$/, '').trim()
+      let customerEmail = parentFolder.replace(/\s*\(\d+\)$/, '').trim()
+      
+      // PHONE NORMALIZATION: Strip 91 prefix for consistent matching
+      if (/^\d{10,15}$/.test(customerEmail) && customerEmail.startsWith('91')) {
+        customerEmail = customerEmail.substring(2);
+      }
       
       let isTrueDuplicate = false;
       const spamType = this.getSpamCategory(customerEmail, subfolderName)
@@ -345,10 +348,13 @@ class ProcessingWorker {
       const isFollowUp = !!activeJobForCustomer;
       
       const isWhatsApp = customerEmail.endsWith('@whatsapp.local');
-      const jobType = isWhatsApp ? 'WHATSAPP' : 'EMAIL';
+      const walkinRoot = process.env.WALKIN_UPLOAD_PATH ? path.resolve(process.env.WALKIN_UPLOAD_PATH).toLowerCase() : null;
+      const isWalkin = walkinRoot && path.resolve(task.folderPath).toLowerCase().startsWith(walkinRoot);
+      
+      const jobType = isWhatsApp ? 'WHATSAPP' : (isWalkin ? 'WALKIN' : 'EMAIL');
 
-      // WHATSAPP OVERRIDE: No spam review, direct to queue or assignment
-      if (isWhatsApp) {
+      // WHATSAPP/WALKIN OVERRIDE: No spam review, direct to queue or assignment
+      if (isWhatsApp || isWalkin) {
         jobStatus = 'QUEUED';
       }
 
@@ -379,6 +385,7 @@ class ProcessingWorker {
       // ROBUST PATH HANDLING: Normalize roots for Windows (ensures case-insensitive start detection)
       const n8nRoot = process.env.N8N_WATCH_PATH ? path.resolve(process.env.N8N_WATCH_PATH) : null;
       const waRoot = process.env.WHATSAPP_WATCH_PATH ? path.resolve(process.env.WHATSAPP_WATCH_PATH) : null;
+      // walkinRoot is already declared above at line 353
       const absoluteFolder = path.resolve(task.folderPath);
       
       let finalBase = path.dirname(absoluteFolder);
@@ -386,6 +393,8 @@ class ProcessingWorker {
         finalBase = n8nRoot;
       } else if (waRoot && absoluteFolder.toLowerCase().startsWith(waRoot.toLowerCase())) {
         finalBase = waRoot;
+      } else if (walkinRoot && absoluteFolder.toLowerCase().startsWith(walkinRoot.toLowerCase())) {
+        finalBase = walkinRoot;
       }
 
       const jobData = {
@@ -438,7 +447,59 @@ class ProcessingWorker {
         return null;
       }
 
-      const job = await QueueJob.create(jobData)
+      let job;
+      // WALKIN MERGE LOGIC:
+      // Link physical files to a virtual placeholder if the staff member is already "assigned" to this walk-in.
+      if (jobType === 'WALKIN') {
+        const mergeQuery = {
+          type: 'WALKIN',
+          folderPath: { $in: ['', null] },
+          status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'QUEUED'] }
+        };
+
+        if (preferredStaff) {
+          mergeQuery.$or = [
+            { pinnedToStaff: preferredStaff },
+            { assignedTo: preferredStaff }
+          ];
+        }
+
+        // We only attempt merging if we have a specific staff match OR if there's only one placeholder globally
+        // (to avoid mis-linking when multiple designers have active walk-ins).
+        const placeholders = await QueueJob.find(mergeQuery).limit(2);
+        
+        if (placeholders.length === 1) {
+          job = await QueueJob.findOneAndUpdate(
+            { _id: placeholders[0]._id },
+            {
+              $set: {
+                ...jobData,
+                // Preserve the existing assignment if it was already ASSIGNED
+                status: placeholders[0].status === 'QUEUED' ? jobData.status : placeholders[0].status,
+                assignedTo: placeholders[0].assignedTo || jobData.assignedTo,
+                pinnedToStaff: placeholders[0].pinnedToStaff || jobData.pinnedToStaff
+              },
+              $push: {
+                auditLog: {
+                  action: 'JOB_INGESTED',
+                  timestamp: new Date(),
+                  details: { 
+                    note: 'Physical folder linked to existing walk-in placeholder.',
+                    folderName: subfolderName
+                  }
+                }
+              }
+            },
+            { new: true }
+          );
+          if (job) console.log(`[Worker] Merged folder ${subfolderName} into existing placeholder ${job._id}`);
+        }
+      }
+
+      if (!job) {
+        job = await QueueJob.create(jobData);
+      }
+      
       task.status = 'COMPLETED'
       task.completedAt = new Date()
       await task.save()
@@ -506,10 +567,16 @@ class ProcessingWorker {
       eventBus.emit('job:created', { job, isDuplicate: isTrueDuplicate, isSpam, spamType })
 
     } catch (err) {
-      console.error(`[Worker] Failed task ${task._id}:`, err.message)
-      task.status = 'FAILED'
-      task.error = err.message
-      await task.save()
+      console.error(`[Worker] Worker error:`, err.message)
+      if (task) {
+        task.status = 'FAILED'
+        task.error = err.message
+        await task.save().catch(() => {})
+      }
+    } finally {
+      this.isProcessing = false
+      // If we finished a task, check for the next one immediately
+      setImmediate(() => this.processNextTask())
     }
   }
 

@@ -4,6 +4,7 @@ const User = require('../models/User');
 const QueueJob = require('../models/QueueJob');
 const eventBus = require('../services/eventBus');
 const path = require('path');
+const fileWatcher = require('../services/fileWatcher');
 
 // Middleware to check API key
 const checkInternalAuth = (req, res, next) => {
@@ -31,22 +32,53 @@ router.get('/verify-staff/:staffId', checkInternalAuth, async (req, res) => {
 // 2. Sync Job from Microservice
 router.post('/sync-walkin-job', checkInternalAuth, async (req, res) => {
     try {
-        const { staffId, customerName, customerPhone, description, folderPath, attachments, attachmentMeta } = req.body;
+        const { staffId, customerName, description, folderPath, attachments, attachmentMeta } = req.body;
+        // Accept both field names from microservice
+        let customerPhone = req.body.customerPhone || req.body.phone;
+        
         console.log(`[Internal API] Syncing Walk-in Job for ${customerName}. Folder: ${folderPath}`);
         
         const walkinBase = process.env.WALKIN_UPLOAD_PATH || path.join(__dirname, '..', 'walkins');
 
-        // Robust path handling: We need the subfolder name, including "Walkins/" if present
+        // Extract phone from folderPath if missing from body
+        if (!customerPhone && folderPath) {
+            const parts = folderPath.split(/[\\/]/).filter(Boolean);
+            // Expected: .../[Root]/[Phone]/[JobFolder]
+            // If the last part is JobFolder, the one before it is likely Phone
+            if (parts.length >= 2) {
+                const possiblePhone = parts[parts.length - 2];
+                if (/^\d+$/.test(possiblePhone)) {
+                    customerPhone = possiblePhone;
+                }
+            }
+        }
+
+        // Robust path handling: Calculate path relative to the walk-in root
         let relativePath = '';
         try {
-            const normalizedFolder = folderPath.replace(/\\/g, '/');
-            if (normalizedFolder.includes('/Walkins/')) {
-                relativePath = 'Walkins/' + path.basename(folderPath);
+            const absoluteFolder = path.resolve(folderPath);
+            const walkinRoot = path.resolve(walkinBase);
+            
+            // If the folder is inside the root (standard check)
+            if (absoluteFolder.toLowerCase().startsWith(walkinRoot.toLowerCase())) {
+                relativePath = path.relative(walkinRoot, absoluteFolder).replace(/\\/g, '/');
             } else {
-                relativePath = path.basename(folderPath);
+                // FALLBACK: If roots differ in prefix (UNC vs Mapped), use the last two components (Identity/Job)
+                const parts = absoluteFolder.split(/[\\/]/).filter(Boolean);
+                if (parts.length >= 2) {
+                    relativePath = `${parts[parts.length - 2]}/${parts[parts.length - 1]}`;
+                } else {
+                    relativePath = path.basename(folderPath);
+                }
             }
         } catch (e) {
+            console.error('[Internal API] Path resolution error:', e.message);
             relativePath = path.basename(folderPath);
+        }
+
+        // ANTI-DUPLICATION: Tell the file watcher to skip this folder immediately
+        if (fileWatcher.processedFolders) {
+            fileWatcher.processedFolders.add(path.normalize(folderPath));
         }
 
         // Sanitize attachmentMeta keys (Mongoose Maps don't allow dots in keys)

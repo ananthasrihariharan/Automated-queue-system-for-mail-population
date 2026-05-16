@@ -29,8 +29,15 @@ export const fetchDispatchJobs = async (status: string = 'active', page: number 
   return res.data
 }
 
-export const fetchCashierJobs = async (page: number = 1, limit: number = 50) => {
-  const res = await api.get(`/api/cashier/jobs?page=${page}&limit=${limit}`)
+export const fetchCashierJobs = async (
+  page: number = 1, 
+  limit: number = 50,
+  search: string = '',
+  paymentStatus: string = 'ALL',
+  hideDispatched: boolean = true,
+  date: string = ''
+) => {
+  const res = await api.get(`/api/cashier/jobs?page=${page}&limit=${limit}&search=${search}&paymentStatus=${paymentStatus}&hideDispatched=${hideDispatched}&date=${date}`)
   return res.data
 }
 

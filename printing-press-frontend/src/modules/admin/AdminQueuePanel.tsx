@@ -15,6 +15,8 @@ import { MessagingTray } from "../../shared/components/MessagingTray";
 import LinkifiedText from "../../shared/components/LinkifiedText";
 import { formatSubject } from "../../shared/utils/queueHelpers";
 import "./AdminQueuePanel.css";
+import "./AdminQueuePanelMobile.css";
+import DesignerCCTV from "./DesignerCCTV";
 
 interface AdminJobsResponse {
   jobs: any[];
@@ -108,7 +110,7 @@ export default function AdminQueuePanel() {
   const navigate = useNavigate();
   const isFetching = useIsFetching();
   const [activeTab, setActiveTab] = useState<
-    "QUEUED" | "ASSIGNED" | "COMPLETED" | "ADMIN_REVIEW" | "JUNK"
+    "QUEUED" | "ASSIGNED" | "COMPLETED" | "ADMIN_REVIEW" | "JUNK" | "LOAD"
   >("QUEUED");
   const [page, setPage] = useState(1);
 
@@ -146,7 +148,7 @@ export default function AdminQueuePanel() {
 
   // Telemetry Detail Modals
   const [showLiveLoadDetail, setShowLiveLoadDetail] = useState(false);
-  const [showDesignersDetail, setShowDesignersDetail] = useState(false);
+  const [showStatsModal, setShowStatsModal] = useState(false);
 
   // Row table settings
   const [showViewModal, setShowViewModal] = useState<any>(null);
@@ -197,12 +199,27 @@ export default function AdminQueuePanel() {
       },
       placeholderData: keepPreviousData,
       refetchInterval: 10000,
+      enabled: activeTab !== "LOAD"
     });
 
   const { data: sessions, isLoading: sessionsLoading } = useQuery({
     queryKey: ["admin-queue-sessions"],
-    queryFn: queueApi.getAdminSessions,
-    refetchInterval: 10000,
+    queryFn: async () => {
+      const data = await queueApi.getAdminSessions();
+      // GHOST FILTER: Only ignore if the fields are MISSING entirely (Zombie behavior)
+      // If the fields are present but empty ([]), it's a valid IDLE state.
+      if (Array.isArray(data) && data.length > 0) {
+        const isZombieResponse = !data.some(s => Object.prototype.hasOwnProperty.call(s, 'pinnedJobs'));
+        if (isZombieResponse) {
+          console.warn("[CCTV] Ignoring zombie response (fields missing)");
+          throw new Error("Stale session data detected");
+        }
+      }
+      return data;
+    },
+    refetchInterval: 5000,
+    placeholderData: (previousData) => previousData,
+    retry: 1,
   });
 
   const { data: staffList } = useQuery({
@@ -641,59 +658,29 @@ export default function AdminQueuePanel() {
                 )}
               </button>
               <button
+                onClick={() => setActiveTab("JUNK")}
                 className={`tab-btn-luxury ${activeTab === "JUNK" ? "active" : ""}`}
-                onClick={() => {
-                  setActiveTab("JUNK");
-                  setPage(1);
-                  setSelectedJobs(new Set());
-                }}
               >
-                Junk / Spam
-                {(stats?.junk ?? 0) > 0 && (
-                  <span className="tab-badge-luxury bg-red">{stats.junk}</span>
-                )}
+                Junk
+                <span className="tab-badge-luxury">{stats?.junk || 0}</span>
+              </button>
+              <button
+                onClick={() => setActiveTab("LOAD")}
+                className={`tab-btn-luxury ${activeTab === "LOAD" ? "active" : ""}`}
+              >
+                Staff Load
+                <span className="tab-badge-luxury">{stats?.activeSessions || 0}</span>
               </button>
             </div>
 
             <div className="filters-group-hub">
-              <div className="search-input-wrapper">
-                <svg
-                  className="search-icon"
-                  width="18"
-                  height="18"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
-                  />
-                </svg>
-                <input
-                  type="text"
-                  placeholder="Search tasks..."
-                  value={searchTerm}
-                  onChange={(e) => {
-                    setSearchTerm(e.target.value);
-                    setPage(1);
-                  }}
-                />
-              </div>
-              <button
-                className={`btn-selection-toggle ${isSelectionMode ? "active" : ""}`}
-                onClick={() => {
-                  setIsSelectionMode(!isSelectionMode);
-                  setSelectedJobs(new Set());
-                }}
-              >
-                {isSelectionMode ? (
-                  <>
+              {activeTab !== "LOAD" && (
+                <>
+                  <div className="search-input-wrapper">
                     <svg
-                      width="16"
-                      height="16"
+                      className="search-icon"
+                      width="18"
+                      height="18"
                       fill="none"
                       stroke="currentColor"
                       viewBox="0 0 24 24"
@@ -702,537 +689,569 @@ export default function AdminQueuePanel() {
                         strokeLinecap="round"
                         strokeLinejoin="round"
                         strokeWidth="2"
-                        d="M6 18L18 6M6 6l12 12"
+                        d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"
                       />
                     </svg>
-                    <span>CANCEL</span>
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      width="16"
-                      height="16"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth="2"
-                        d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
-                      />
-                    </svg>
-                    <span>SELECT</span>
-                  </>
-                )}
-              </button>
-              {isSelectionMode && selectedJobs.size > 0 && (
-                <div className="aqt-selection-hub slide-in-top">
-                  <div className="aqt-selection-count">
-                    <strong>{selectedJobs.size}</strong>
-                  </div>
-                  <div className="aqt-selection-divider" />
-                  <div className="aqt-selection-buttons">
-                    {activeTab !== "JUNK" ? (
-                      <button
-                        className="aqt-sel-btn-premium junk"
-                        onClick={() =>
-                          bulkStatusMutation.mutate({
-                            jobIds: Array.from(selectedJobs),
-                            status: "JUNK",
-                          })
-                        }
-                      >
-                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                        JUNK
-                      </button>
-                    ) : (
-                      <button
-                        className="aqt-sel-btn-premium restore"
-                        onClick={handleBulkRestore}
-                      >
-                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                        </svg>
-                        RESTORE
-                      </button>
-                    )}
-                    
-                    {activeTab !== "ADMIN_REVIEW" && (
-                      <button
-                        className="aqt-sel-btn-premium review"
-                        onClick={() =>
-                          bulkStatusMutation.mutate({
-                            jobIds: Array.from(selectedJobs),
-                            status: "ADMIN_REVIEW",
-                          })
-                        }
-                      >
-                        <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
-                        </svg>
-                        REVIEW
-                      </button>
-                    )}
-                    
-                    <button
-                      className="aqt-sel-btn-premium delete"
-                      onClick={handleBulkDelete}
-                    >
-                      <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                      DELETE
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {!isSelectionMode && (
-                <div className="aqt-filters-static-row">
-                  {activeTab === "COMPLETED" && (
-                    <div className="filter-date-hub">
-                      <input
-                        type="date"
-                        className="date-input-elite"
-                        value={dateFilter}
-                        onChange={(e) => {
-                          setDateFilter(e.target.value);
-                          setPage(1);
-                        }}
-                      />
-                    </div>
-                  )}
-                  <div className="filter-select-hub">
-                    <select
-                      className="select-elite"
-                      value={assignedToFilter}
+                    <input
+                      type="text"
+                      placeholder="Search tasks..."
+                      value={searchTerm}
                       onChange={(e) => {
-                        setAssignedToFilter(e.target.value);
+                        setSearchTerm(e.target.value);
                         setPage(1);
                       }}
-                    >
-                      <option value="">All Designers</option>
-                      {staffList?.map((s: any) => (
-                        <option key={s._id} value={s._id}>
-                          {s.name}
-                        </option>
-                      ))}
-                    </select>
+                    />
                   </div>
-                </div>
+                  <button
+                    className={`btn-selection-toggle ${isSelectionMode ? "active" : ""}`}
+                    onClick={() => {
+                      setIsSelectionMode(!isSelectionMode);
+                      setSelectedJobs(new Set());
+                    }}
+                  >
+                    {isSelectionMode ? (
+                      <>
+                        <svg
+                          width="16"
+                          height="16"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M6 18L18 6M6 6l12 12"
+                          />
+                        </svg>
+                        <span>CANCEL</span>
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          width="16"
+                          height="16"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth="2"
+                            d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"
+                          />
+                        </svg>
+                        <span>SELECT</span>
+                      </>
+                    )}
+                  </button>
+                  {isSelectionMode && selectedJobs.size > 0 && (
+                    <div className="aqt-selection-hub slide-in-top">
+                      <div className="aqt-selection-count">
+                        <strong>{selectedJobs.size}</strong>
+                      </div>
+                      <div className="aqt-selection-divider" />
+                      <div className="aqt-selection-buttons">
+                        {activeTab !== "JUNK" ? (
+                          <button
+                            className="aqt-sel-btn-premium junk"
+                            onClick={() =>
+                              bulkStatusMutation.mutate({
+                                jobIds: Array.from(selectedJobs),
+                                status: "JUNK",
+                              })
+                            }
+                          >
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                            JUNK
+                          </button>
+                        ) : (
+                          <button
+                            className="aqt-sel-btn-premium restore"
+                            onClick={handleBulkRestore}
+                          >
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                            </svg>
+                            RESTORE
+                          </button>
+                        )}
+                        
+                        {activeTab !== "ADMIN_REVIEW" && (
+                          <button
+                            className="aqt-sel-btn-premium review"
+                            onClick={() =>
+                              bulkStatusMutation.mutate({
+                                jobIds: Array.from(selectedJobs),
+                                status: "ADMIN_REVIEW",
+                              })
+                            }
+                          >
+                            <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+                            </svg>
+                            REVIEW
+                          </button>
+                        )}
+                        
+                        <button
+                          className="aqt-sel-btn-premium delete"
+                          onClick={handleBulkDelete}
+                        >
+                          <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                          DELETE
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {!isSelectionMode && (
+                    <div className="aqt-filters-static-row">
+                      {activeTab === "COMPLETED" && (
+                        <div className="filter-date-hub">
+                          <input
+                            type="date"
+                            className="date-input-elite"
+                            value={dateFilter}
+                            onChange={(e) => {
+                              setDateFilter(e.target.value);
+                              setPage(1);
+                            }}
+                          />
+                        </div>
+                      )}
+                      <div className="filter-select-hub">
+                        <select
+                          className="select-elite"
+                          value={assignedToFilter}
+                          onChange={(e) => {
+                            setAssignedToFilter(e.target.value);
+                            setPage(1);
+                          }}
+                        >
+                          <option value="">All Designers</option>
+                          {staffList?.map((s: any) => (
+                            <option key={s._id} value={s._id}>
+                              {s.name}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           </div>
 
-          <div className="aqt-table-wrapper">
-            <table className={`aqt-table aqt-table-${activeTab.toLowerCase()}`}>
-              <thead className="aqt-head">
-                <tr className="aqt-head-row">
-                  <th className="aqt-th th-num">
-                    <input
-                      type="checkbox"
-                      checked={
-                        selectedJobs.size > 0 &&
-                        (queueData?.jobs?.length ?? 0) > 0 &&
-                        queueData?.jobs?.every((j: any) => selectedJobs.has(j._id))
-                      }
-                      onChange={() => {
-                        if (queueData?.jobs?.every((j: any) => selectedJobs.has(j._id))) {
-                          const next = new Set(selectedJobs);
-                          queueData?.jobs?.forEach((j: any) => next.delete(j._id));
-                          setSelectedJobs(next);
-                          if (next.size === 0) setIsSelectionMode(false);
-                        } else {
-                          const next = new Set(selectedJobs);
-                          queueData?.jobs?.forEach((j: any) => next.add(j._id));
-                          setSelectedJobs(next);
-                          setIsSelectionMode(true);
+          {activeTab === "LOAD" ? (
+            <div className="aqt-table-wrapper" style={{ border: "none", boxShadow: "none", background: "transparent" }}>
+              <DesignerCCTV sessions={sessions || []} />
+            </div>
+          ) : (
+            <div className="aqt-table-wrapper">
+              <table className={`aqt-table aqt-table-${activeTab.toLowerCase()}`}>
+                <thead className="aqt-head">
+                  <tr className="aqt-head-row">
+                    <th className="aqt-th th-num">
+                      <input
+                        type="checkbox"
+                        checked={
+                          selectedJobs.size > 0 &&
+                          (queueData?.jobs?.length ?? 0) > 0 &&
+                          queueData?.jobs?.every((j: any) => selectedJobs.has(j._id))
                         }
-                      }}
-                      style={{ width: "1.25rem", height: "1.25rem", cursor: "pointer" }}
-                    />
-                  </th>
-                  <th className="aqt-th th-customer">CUSTOMER & FLAGS</th>
-                  <th className="aqt-th th-time">TIMING</th>
-                  <th className="aqt-th th-assign">ASSIGNMENT</th>
-                  <th className="aqt-th th-priority">PRIORITY</th>
-                  <th className="aqt-th th-order">PROGRESS</th>
-                  <th className="aqt-th th-actions">ACTIONS</th>
-                </tr>
-              </thead>
-              <tbody className="aqt-body">
-                {queueData?.jobs?.map((job: any, index: number) => {
-                  const { clean: subjectClean } = formatSubject(
-                    job.emailSubject || "",
-                  );
-                  const priorityClass =
-                    job.priorityScore >= 20
-                      ? "priority-immediate"
-                      : job.priorityScore >= 10
-                        ? "priority-high"
-                        : job.priorityScore >= 5
-                          ? "priority-medium"
-                          : "priority-low";
-                  return (
-                    <tr
-                      key={job._id}
-                      className={`aqt-row ${lineSpacing} ${priorityClass} ${selectedJobs.has(job._id) ? "aqt-row-selected" : ""}`}
-                      onClick={() => {
-                        if (isSelectionMode) toggleSelection(job._id);
-                        else setShowViewModal(job);
-                      }}
-                    >
-                      <td
-                        className="aqt-cell tc-num"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={selectedJobs.has(job._id)}
-                          onChange={() => {
+                        onChange={() => {
+                          if (queueData?.jobs?.every((j: any) => selectedJobs.has(j._id))) {
                             const next = new Set(selectedJobs);
-                            if (next.has(job._id)) {
-                              next.delete(job._id);
-                              if (next.size === 0) setIsSelectionMode(false);
-                            } else {
-                              next.add(job._id);
-                              setIsSelectionMode(true);
-                            }
+                            queueData?.jobs?.forEach((j: any) => next.delete(j._id));
                             setSelectedJobs(next);
-                          }}
-                          style={{
-                            width: "1.25rem",
-                            height: "1.25rem",
-                            cursor: "pointer",
-                            accentColor: "var(--q-primary)",
-                          }}
-                        />
-                      </td>
-
-                      <td className="aqt-cell tc-customer">
-                        <div className="aqt-customer-row-top">
-                          <span className="aqt-customer-name" title={job.customerName}>
-                            {job.customerName}
-                          </span>
-                          {job.type === "WHATSAPP" && (
-                            <span className="aqt-source-badge wa">
-                              📱 WA
-                            </span>
-                          )}
-                          {(job.type === "WALKIN" || job.emailSubject?.includes("Walk-in")) && (
-                            <span className="aqt-source-badge walkin">
-                              🚶 WALK-IN
-                            </span>
-                          )}
-                          <div className="aqt-flags-inline">
-                            {job.threadId && (
-                              <span
-                                className="aqt-flag-badge revision clickable"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  setShowThreadHistoryModal(job.threadId);
-                                }}
-                                title="Click to view revision history"
-                              >
-                                ↺ REV
-                              </span>
-                            )}
-                            {job.lastPausedBy && job.status === "QUEUED" && (
-                              <span
-                                className="aqt-flag-badge prior"
-                                title={`Prior work: ${job.lastPausedBy.name}`}
-                              >
-                                PRIOR
-                              </span>
-                            )}
-                            {job.status === "PAUSED" && (
-                              <span
-                                className="aqt-flag-badge paused"
-                                title={`Paused by ${job.lastPausedBy?.name || 'unknown'}`}
-                              >
-                                ⏸ HOLD
-                              </span>
-                            )}
-                            {job.status === "IN_PROGRESS" && (
-                              <span className="aqt-flag-badge active">
-                                ▶ ACTIVE
-                              </span>
-                            )}
-                            {job.pinnedToStaff && job.status === "QUEUED" && (
-                              <span
-                                className="aqt-flag-badge pinned"
-                                title={`Pinned to ${job.pinnedToStaff.name}`}
-                              >
-                                📌 {job.pinnedToStaff.name.split(" ")[0]}
-                              </span>
-                            )}
-                            {job.reassignedFrom &&
-                              job.status === "ADMIN_REVIEW" && (
-                                <span
-                                  className="aqt-flag-badge reassign-req"
-                                  title={`Requested by ${job.reassignedFrom.name}`}
-                                >
-                                  ⤨ REASSIGN
-                                </span>
-                              )}
-                          </div>
-                        </div>
-                        {(subjectClean || job.emailSubject) && (
-                          <div className="aqt-subject-line">
-                            {subjectClean || job.emailSubject}
-                          </div>
-                        )}
-
-                        {job.status === "COMPLETED" && job.complexityTag && (
-                          <div className="aqt-complexity-row">
-                            <span className={`badge-complexity ${job.complexityTag.toLowerCase()}`}>
-                              {job.complexityTag}
-                            </span>
-                          </div>
-                        )}
-                        {job.reassignedFrom &&
-                          job.status === "ADMIN_REVIEW" &&
-                          job.reassignedFrom.name && (
-                            <div className="aqt-reassign-container">
-                              <div className="aqt-designer-chip reassign">
-                                <span className="aqt-chip-av orange">
-                                  {job.reassignedFrom.name.charAt(0)}
-                                </span>
-                                <span>From {job.reassignedFrom.name}</span>
-                              </div>
-                              {job.reassignReason && (
-                                <div className="aqt-reassign-reason-bright">
-                                  <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                  </svg>
-                                  <span>Reason: {job.reassignReason}</span>
-                                </div>
-                              )}
-                              {job.adminNotes && (
-                                <div className="aqt-admin-notes-mini">
-                                  <strong>Admin Note:</strong> {job.adminNotes}
-                                </div>
-                              )}
-                            </div>
-                          )}
-                      </td>
-
-                      <td className="aqt-cell tc-time">
-                        <div className="aqt-time-pill">
-                          <span className={`time-badge ${activeTab === "COMPLETED" ? "done" : "recv"}`}>
-                            {activeTab === "COMPLETED" ? "DONE" : "RECV"}
-                          </span>
-                          <div className="time-stack">
-                            <div className="aqt-subject-time">
-                              {new Date(activeTab === "COMPLETED" ? (job.completedAt || job.updatedAt) : job.createdAt).toLocaleDateString([], {
-                                month: "short",
-                                day: "numeric",
-                              })}
-                            </div>
-                            <div className="aqt-time-sub">
-                              {new Date(activeTab === "COMPLETED" ? (job.completedAt || job.updatedAt) : job.createdAt).toLocaleTimeString([], {
-                                hour: "2-digit",
-                                minute: "2-digit",
-                              })}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td
-                        className="aqt-cell tc-assign"
-                        onClick={(e) => e.stopPropagation()}
+                            if (next.size === 0) setIsSelectionMode(false);
+                          } else {
+                            const next = new Set(selectedJobs);
+                            queueData?.jobs?.forEach((j: any) => next.add(j._id));
+                            setSelectedJobs(next);
+                            setIsSelectionMode(true);
+                          }
+                        }}
+                        style={{ width: "1.25rem", height: "1.25rem", cursor: "pointer" }}
+                      />
+                    </th>
+                    <th className="aqt-th th-customer">CUSTOMER & FLAGS</th>
+                    <th className="aqt-th th-time">TIMING</th>
+                    <th className="aqt-th th-assign">ASSIGNMENT</th>
+                    <th className="aqt-th th-priority">PRIORITY</th>
+                    <th className="aqt-th th-order">PROGRESS</th>
+                    <th className="aqt-th th-actions">ACTIONS</th>
+                  </tr>
+                </thead>
+                <tbody className="aqt-body">
+                  {queueData?.jobs?.map((job: any, index: number) => {
+                    const { clean: subjectClean } = formatSubject(
+                      job.emailSubject || "",
+                    );
+                    const priorityClass =
+                      job.priorityScore >= 20
+                        ? "priority-immediate"
+                        : job.priorityScore >= 10
+                          ? "priority-high"
+                          : job.priorityScore >= 5
+                            ? "priority-medium"
+                            : "priority-low";
+                    return (
+                      <tr
+                        key={job._id}
+                        className={`aqt-row ${lineSpacing} ${priorityClass} ${selectedJobs.has(job._id) ? "aqt-row-selected" : ""}`}
+                        onClick={() => {
+                          if (isSelectionMode) toggleSelection(job._id);
+                          else setShowViewModal(job);
+                        }}
                       >
-                        {activeTab === "QUEUED" ||
-                        activeTab === "ADMIN_REVIEW" ? (
-                          <select
-                            className="aqt-inline-select"
-                            value={
-                              job.pinnedToStaff?._id ||
-                              (activeTab === "ADMIN_REVIEW" ? "review" : "none")
-                            }
-                            onChange={(e) => {
-                              const staffId = e.target.value;
-                              if (
-                                activeTab === "ADMIN_REVIEW" &&
-                                (staffId === "pool" || staffId === "none")
-                              ) {
-                                restoreJobMutation.mutate(job._id);
-                              } else if (staffId === "none") {
-                                unpinJobMutation.mutate(job._id);
-                              } else if (staffId !== "review") {
-                                if (
-                                  !onlineStaffIds.has(staffId) &&
-                                  !window.confirm(
-                                    "Designer is OFFLINE. Pin anyway?",
-                                  )
-                                )
-                                  return;
-                                pinJobMutation.mutate({
-                                  jobId: job._id,
-                                  staffId,
-                                });
+                        <td
+                          className="aqt-cell tc-num"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={selectedJobs.has(job._id)}
+                            onChange={() => {
+                              const next = new Set(selectedJobs);
+                              if (next.has(job._id)) {
+                                next.delete(job._id);
+                                if (next.size === 0) setIsSelectionMode(false);
+                              } else {
+                                next.add(job._id);
+                                setIsSelectionMode(true);
                               }
+                              setSelectedJobs(next);
                             }}
-                          >
-                            <option value="none">— Pool —</option>
-                            {activeTab === "ADMIN_REVIEW" && (
-                              <>
-                                <option value="review">Review</option>
-                                <option value="pool">Pool</option>
-                              </>
-                            )}
-                            {assignmentStaffList.map((s: any) => (
-                              <option key={s._id} value={s._id}>
-                                {onlineStaffIds.has(s._id) ? "🟢" : "⚪"}{" "}
-                                {s.name}{" "}
-                                {!onlineStaffIds.has(s._id)
-                                  ? "(OFF)"
-                                  : busyStaffIds.has(s._id)
-                                    ? "(BUSY)"
-                                    : "(READY)"}
-                              </option>
-                            ))}
-                          </select>
-                        ) : (
-                          <div className="aqt-designer-chip mini">
-                            <span
-                              className={`aqt-chip-av ${activeTab === "COMPLETED" ? "green" : "blue"}`}
-                            >
-                              {job.assignedTo?.name?.charAt(0) || "?"}
+                            style={{
+                              width: "1.25rem",
+                              height: "1.25rem",
+                              cursor: "pointer",
+                              accentColor: "var(--q-primary)",
+                            }}
+                          />
+                        </td>
+
+                        <td className="aqt-cell tc-customer">
+                          <div className="aqt-customer-row-top">
+                            <span className="aqt-customer-name" title={job.customerName}>
+                              {job.customerName}
                             </span>
-                            <span>{job.assignedTo?.name || "Unassigned"}</span>
+                            {job.type === "WHATSAPP" && (
+                              <span className="aqt-source-badge wa">
+                                📱 WA
+                              </span>
+                            )}
+                            {(job.type === "WALKIN" || job.emailSubject?.includes("Walk-in")) && (
+                              <span className="aqt-source-badge walkin">
+                                🚶 WALK-IN
+                              </span>
+                            )}
+                            <div className="aqt-flags-inline">
+                              {job.threadId && (
+                                <span
+                                  className="aqt-flag-badge revision clickable"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setShowThreadHistoryModal(job.threadId);
+                                  }}
+                                  title="Click to view revision history"
+                                >
+                                  ↺ REV
+                                </span>
+                              )}
+                              {job.lastPausedBy && job.status === "QUEUED" && (
+                                <span
+                                  className="aqt-flag-badge prior"
+                                  title={`Prior work: ${job.lastPausedBy.name}`}
+                                >
+                                  PRIOR
+                                </span>
+                              )}
+                              {job.status === "PAUSED" && (
+                                <span
+                                  className="aqt-flag-badge paused"
+                                  title={`Paused by ${job.lastPausedBy?.name || 'unknown'}`}
+                                >
+                                  ⏸ HOLD
+                                </span>
+                              )}
+                              {job.status === "IN_PROGRESS" && (
+                                <span className="aqt-flag-badge active">
+                                  ▶ ACTIVE
+                                </span>
+                              )}
+                              {job.pinnedToStaff && job.status === "QUEUED" && (
+                                <span
+                                  className="aqt-flag-badge pinned"
+                                  title={`Pinned to ${job.pinnedToStaff.name}`}
+                                >
+                                  📌 {job.pinnedToStaff.name.split(" ")[0]}
+                                </span>
+                              )}
+                              {job.reassignedFrom &&
+                                job.status === "ADMIN_REVIEW" && (
+                                  <span
+                                    className="aqt-flag-badge reassign-req"
+                                    title={`Requested by ${job.reassignedFrom.name}`}
+                                  >
+                                    ⤨ REASSIGN
+                                  </span>
+                                )}
+                            </div>
                           </div>
-                        )}
-                      </td>
-
-                      <td
-                        className="aqt-cell tc-priority"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {activeTab === "QUEUED" ? (
-                          <select
-                            className={`aqt-inline-select priority-select p-${job.priorityScore >= 20 ? "imm" : job.priorityScore >= 10 ? "crit" : job.priorityScore >= 5 ? "urg" : "norm"}`}
-                            value={job.priorityScore}
-                            onChange={(e) =>
-                              updatePriorityMutation.mutate({
-                                jobId: job._id,
-                                priorityScore: Number(e.target.value),
-                              })
-                            }
-                          >
-                            <option value="0">NORMAL</option>
-                            <option value="5">URGENT</option>
-                            <option value="10">CRITICAL</option>
-                            <option value="20">IMMEDIATE</option>
-                          </select>
-                        ) : (
-                          <span
-                            className={`aqt-flag-badge p-level-${job.priorityScore >= 20 ? "imm" : "std"}`}
-                          >
-                            {job.priorityScore >= 20 ? "PRIORITY" : "STANDARD"}
-                          </span>
-                        )}
-                      </td>
-
-                      <td
-                        className="aqt-cell tc-order"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {activeTab === "QUEUED" ? (
-                          <div className="aqt-order-btns">
-                            <button
-                              className="aqt-order-btn"
-                              disabled={
-                                index === 0 || reorderQueueMutation.isPending
-                              }
-                              onClick={() =>
-                                reorderQueueMutation.mutate({
-                                  jobId: job._id,
-                                  queuePosition: index - 1,
-                                })
-                              }
-                              title="Move up"
-                            >
-                              ↑
-                            </button>
-                            <button
-                              className="aqt-order-btn"
-                              disabled={
-                                index === (queueData?.jobs?.length || 1) - 1 ||
-                                reorderQueueMutation.isPending
-                              }
-                              onClick={() =>
-                                reorderQueueMutation.mutate({
-                                  jobId: job._id,
-                                  queuePosition: index + 1,
-                                })
-                              }
-                              title="Move down"
-                            >
-                              ↓
-                            </button>
-                          </div>
-                        ) : (
-                          <span className={`aqt-status-pill ${job.status}`}>
-                            {job.status}
-                          </span>
-                        )}
-                      </td>
-
-                      <td
-                        className="aqt-cell tc-actions"
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        <div className="aqt-actions-group">
-                          {activeTab === "JUNK" && (
-                            <button
-                              className="aqt-act-btn restore"
-                              onClick={() => restoreJobMutation.mutate(job._id)}
-                              title="Restore to pool"
-                            >
-                              ↩
-                            </button>
+                          {(subjectClean || job.emailSubject) && (
+                            <div className="aqt-subject-line">
+                              {subjectClean || job.emailSubject}
+                            </div>
                           )}
-                          {job.assignedTo && (
-                            <button
-                              className="aqt-act-btn msg"
-                              onClick={() => {
-                                setChatSettings({
-                                  recipient: job.assignedTo._id,
-                                  jobId: job._id,
-                                  prefill: `Re Job #${job._id.substring(18).toUpperCase()}: `,
-                                });
-                                setShowMessages(true);
+
+                          {job.status === "COMPLETED" && job.complexityTag && (
+                            <div className="aqt-complexity-row">
+                              <span className={`badge-complexity ${job.complexityTag.toLowerCase()}`}>
+                                {job.complexityTag}
+                              </span>
+                            </div>
+                          )}
+                          {job.reassignedFrom &&
+                            job.status === "ADMIN_REVIEW" &&
+                            job.reassignedFrom.name && (
+                              <div className="aqt-reassign-container">
+                                <div className="aqt-designer-chip reassign">
+                                  <span className="aqt-chip-av orange">
+                                    {job.reassignedFrom.name.charAt(0)}
+                                  </span>
+                                  <span>From {job.reassignedFrom.name}</span>
+                                </div>
+                                {job.reassignReason && (
+                                  <div className="aqt-reassign-reason-bright">
+                                    <svg width="12" height="12" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                    </svg>
+                                    <span>Reason: {job.reassignReason}</span>
+                                  </div>
+                                )}
+                                {job.adminNotes && (
+                                  <div className="aqt-admin-notes-mini">
+                                    <strong>Admin Note:</strong> {job.adminNotes}
+                                  </div>
+                                )}
+                              </div>
+                            )}
+                        </td>
+
+                        <td className="aqt-cell tc-time">
+                          <div className="aqt-time-pill">
+                            <span className={`time-badge ${activeTab === "COMPLETED" ? "done" : "recv"}`}>
+                              {activeTab === "COMPLETED" ? "DONE" : "RECV"}
+                            </span>
+                            <div className="time-stack">
+                              <div className="aqt-subject-time">
+                                {new Date(activeTab === "COMPLETED" ? (job.completedAt || job.updatedAt) : job.createdAt).toLocaleDateString([], {
+                                  month: "short",
+                                  day: "numeric",
+                                })}
+                              </div>
+                              <div className="aqt-time-sub">
+                                {new Date(activeTab === "COMPLETED" ? (job.completedAt || job.updatedAt) : job.createdAt).toLocaleTimeString([], {
+                                  hour: "2-digit",
+                                  minute: "2-digit",
+                                })}
+                              </div>
+                            </div>
+                          </div>
+                        </td>
+
+                        <td
+                          className="aqt-cell tc-assign"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {activeTab === "QUEUED" ||
+                          activeTab === "ADMIN_REVIEW" ? (
+                            <select
+                              className="aqt-inline-select"
+                              value={
+                                job.pinnedToStaff?._id ||
+                                (activeTab === "ADMIN_REVIEW" ? "review" : "none")
+                              }
+                              onChange={(e) => {
+                                const staffId = e.target.value;
+                                if (
+                                  activeTab === "ADMIN_REVIEW" &&
+                                  (staffId === "pool" || staffId === "none")
+                                ) {
+                                  restoreJobMutation.mutate(job._id);
+                                } else if (staffId === "none") {
+                                  unpinJobMutation.mutate(job._id);
+                                } else if (staffId !== "review") {
+                                  if (
+                                    !onlineStaffIds.has(staffId) &&
+                                    !window.confirm(
+                                      "Designer is OFFLINE. Pin anyway?",
+                                    )
+                                  )
+                                    return;
+                                  pinJobMutation.mutate({
+                                    jobId: job._id,
+                                    staffId,
+                                  });
+                                }
                               }}
-                              title={`Message ${job.assignedTo.name}`}
                             >
-                              <svg
-                                width="13"
-                                height="13"
-                                fill="none"
-                                stroke="currentColor"
-                                viewBox="0 0 24 24"
+                              <option value="none">— Pool —</option>
+                              {activeTab === "ADMIN_REVIEW" && (
+                                <>
+                                  <option value="review">Review</option>
+                                  <option value="pool">Pool</option>
+                                </>
+                              )}
+                              {assignmentStaffList.map((s: any) => {
+                                const sess = (Array.isArray(sessions) ? sessions : []).find((se: any) => (se.staffId?._id || se.staffId) === s._id);
+                                const loadInfo = sess ? ` (H:${sess.pausedJobs?.length || 0} Q:${sess.pinnedJobs?.length || 0})` : "";
+                                return (
+                                  <option key={s._id} value={s._id}>
+                                    {onlineStaffIds.has(s._id) ? "🟢" : "⚪"}{" "}
+                                    {s.name}{" "}
+                                    {loadInfo}{" "}
+                                    {!onlineStaffIds.has(s._id)
+                                      ? "(OFF)"
+                                      : busyStaffIds.has(s._id)
+                                        ? "(BUSY)"
+                                        : "(READY)"}
+                                  </option>
+                                );
+                              })}
+                            </select>
+                          ) : (
+                            <div className="aqt-designer-chip mini">
+                              <span
+                                className={`aqt-chip-av ${activeTab === "COMPLETED" ? "green" : "blue"}`}
                               >
-                                <path
-                                  strokeLinecap="round"
-                                  strokeLinejoin="round"
-                                  strokeWidth="2"
-                                  d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-                                />
-                              </svg>
-                            </button>
+                                {job.assignedTo?.name?.charAt(0) || "?"}
+                              </span>
+                              <span>
+                                {job.assignedTo?.name || "Unassigned"}
+                                {(() => {
+                                  const sess = (Array.isArray(sessions) ? sessions : []).find((se: any) => (se.staffId?._id || se.staffId) === job.assignedTo?._id);
+                                  return sess ? (
+                                    <small style={{ marginLeft: "0.4rem", color: "#64748b", fontWeight: 600 }}>
+                                      (H:{sess.pausedJobs?.length || 0} Q:{sess.pinnedJobs?.length || 0})
+                                    </small>
+                                  ) : null;
+                                })()}
+                              </span>
+                            </div>
                           )}
-                          {activeTab === "ASSIGNED" &&
-                            job.assignedTo && (
+                        </td>
+
+                        <td
+                          className="aqt-cell tc-priority"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {activeTab === "QUEUED" ? (
+                            <select
+                              className={`aqt-inline-select priority-select p-${job.priorityScore >= 20 ? "imm" : job.priorityScore >= 10 ? "crit" : job.priorityScore >= 5 ? "urg" : "norm"}`}
+                              value={job.priorityScore}
+                              onChange={(e) =>
+                                updatePriorityMutation.mutate({
+                                  jobId: job._id,
+                                  priorityScore: Number(e.target.value),
+                                })
+                              }
+                            >
+                              <option value="0">NORMAL</option>
+                              <option value="5">URGENT</option>
+                              <option value="10">CRITICAL</option>
+                              <option value="20">IMMEDIATE</option>
+                            </select>
+                          ) : (
+                            <span
+                              className={`aqt-flag-badge p-level-${job.priorityScore >= 20 ? "imm" : "std"}`}
+                            >
+                              {job.priorityScore >= 20 ? "PRIORITY" : "STANDARD"}
+                            </span>
+                          )}
+                        </td>
+
+                        <td
+                          className="aqt-cell tc-order"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {activeTab === "QUEUED" ? (
+                            <div className="aqt-order-btns">
                               <button
-                                className="aqt-act-btn reassign"
-                                onClick={() => setShowReassignModal(job)}
-                                title="Force Reassign"
+                                className="aqt-order-btn"
+                                disabled={
+                                  index === 0 || reorderQueueMutation.isPending
+                                }
+                                onClick={() =>
+                                  reorderQueueMutation.mutate({
+                                    jobId: job._id,
+                                    queuePosition: index - 1,
+                                  })
+                                }
+                                title="Move up"
+                              >
+                                ↑
+                              </button>
+                              <button
+                                className="aqt-order-btn"
+                                disabled={
+                                  index === (queueData?.jobs?.length || 1) - 1 ||
+                                  reorderQueueMutation.isPending
+                                }
+                                onClick={() =>
+                                  reorderQueueMutation.mutate({
+                                    jobId: job._id,
+                                    queuePosition: index + 1,
+                                  })
+                                }
+                                title="Move down"
+                              >
+                                ↓
+                              </button>
+                            </div>
+                          ) : (
+                            <span className={`aqt-status-pill ${job.status}`}>
+                              {job.status}
+                            </span>
+                          )}
+                        </td>
+
+                        <td
+                          className="aqt-cell tc-actions"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          <div className="aqt-actions-group">
+                            {activeTab === "JUNK" && (
+                              <button
+                                className="aqt-act-btn restore"
+                                onClick={() => restoreJobMutation.mutate(job._id)}
+                                title="Restore to pool"
+                              >
+                                ↩
+                              </button>
+                            )}
+                            {job.assignedTo && (
+                              <button
+                                className="aqt-act-btn msg"
+                                onClick={() => {
+                                  setChatSettings({
+                                    recipient: job.assignedTo._id,
+                                    jobId: job._id,
+                                    prefill: `Re Job #${job._id.substring(18).toUpperCase()}: `,
+                                  });
+                                  setShowMessages(true);
+                                }}
+                                title={`Message ${job.assignedTo.name}`}
                               >
                                 <svg
                                   width="13"
@@ -1245,148 +1264,174 @@ export default function AdminQueuePanel() {
                                     strokeLinecap="round"
                                     strokeLinejoin="round"
                                     strokeWidth="2"
-                                    d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                    d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
                                   />
                                 </svg>
                               </button>
                             )}
-                          <button
-                            className="aqt-act-btn delete"
-                            onClick={() => handleDelete(job._id)}
-                            title="Delete permanently"
-                          >
-                            <svg
-                              width="13"
-                              height="13"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                            {activeTab === "ASSIGNED" &&
+                              job.assignedTo && (
+                                <button
+                                  className="aqt-act-btn reassign"
+                                  onClick={() => setShowReassignModal(job)}
+                                  title="Force Reassign"
+                                >
+                                  <svg
+                                    width="13"
+                                    height="13"
+                                    fill="none"
+                                    stroke="currentColor"
+                                    viewBox="0 0 24 24"
+                                  >
+                                    <path
+                                      strokeLinecap="round"
+                                      strokeLinejoin="round"
+                                      strokeWidth="2"
+                                      d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4"
+                                    />
+                                  </svg>
+                                </button>
+                              )}
+                            <button
+                              className="aqt-act-btn delete"
+                              onClick={() => handleDelete(job._id)}
+                              title="Delete permanently"
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
-                              />
-                            </svg>
-                          </button>
-                          <button
-                            className="aqt-act-btn audit"
-                            onClick={() => setShowJobAuditModal(job)}
-                            title="View Audit Log"
-                          >
-                            <svg
-                              width="13"
-                              height="13"
-                              fill="none"
-                              stroke="currentColor"
-                              viewBox="0 0 24 24"
+                              <svg
+                                width="13"
+                                height="13"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                                />
+                              </svg>
+                            </button>
+                            <button
+                              className="aqt-act-btn audit"
+                              onClick={() => setShowJobAuditModal(job)}
+                              title="View Audit Log"
                             >
-                              <path
-                                strokeLinecap="round"
-                                strokeLinejoin="round"
-                                strokeWidth="2"
-                                d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                              />
-                            </svg>
-                          </button>
-                        </div>
+                              <svg
+                                width="13"
+                                height="13"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                              >
+                                <path
+                                  strokeLinecap="round"
+                                  strokeLinejoin="round"
+                                  strokeWidth="2"
+                                  d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                              </svg>
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                  {(!queueData?.jobs || queueData.jobs.length === 0) && (
+                    <tr>
+                      <td
+                        colSpan={7}
+                        style={{
+                          textAlign: "center",
+                          padding: "3rem",
+                          color: "#94a3b8",
+                          fontSize: "0.875rem",
+                        }}
+                      >
+                        No jobs in this queue.
                       </td>
                     </tr>
-                  );
-                })}
-                {(!queueData?.jobs || queueData.jobs.length === 0) && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      style={{
-                        textAlign: "center",
-                        padding: "3rem",
-                        color: "#94a3b8",
-                        fontSize: "0.875rem",
-                      }}
-                    >
-                      No jobs in this queue.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
 
-          <div className="admin-queue-footer">
-            <div className="pagination-controls-hub">
-              <div className="pagination-info">
-                Page {page} of {queueData?.pages || 1} • {queueData?.total || 0}{" "}
-                total
+          {activeTab !== "LOAD" && (
+            <div className="admin-queue-footer">
+              <div className="pagination-controls-hub">
+                <div className="pagination-info">
+                  Page {page} of {queueData?.pages || 1} • {queueData?.total || 0}{" "}
+                  total
+                </div>
+                <div className="pagination-buttons">
+                  <button
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page === 1}
+                    className="btn-page-luxury"
+                  >
+                    ← PREV
+                  </button>
+                  <button
+                    onClick={() =>
+                      setPage((p) => Math.min(queueData?.pages || 1, p + 1))
+                    }
+                    disabled={page >= (queueData?.pages || 1)}
+                    className="btn-page-luxury"
+                  >
+                    NEXT →
+                  </button>
+                </div>
               </div>
-              <div className="pagination-buttons">
-                <button
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={page === 1}
-                  className="btn-page-luxury"
-                >
-                  ← PREV
-                </button>
-                <button
-                  onClick={() =>
-                    setPage((p) => Math.min(queueData?.pages || 1, p + 1))
-                  }
-                  disabled={page >= (queueData?.pages || 1)}
-                  className="btn-page-luxury"
-                >
-                  NEXT →
-                </button>
+
+              <div className="footer-density-controls">
+                <div className="density-row">
+                  <span className="density-label">Rows per page:</span>
+                  <select
+                    className="density-select"
+                    value={rowsPerPage}
+                    onChange={(e) => {
+                      setRowsPerPage(Number(e.target.value));
+                      setPage(1);
+                    }}
+                  >
+                    <option value={10}>10</option>
+                    <option value={20}>20</option>
+                    <option value={50}>50</option>
+                    <option value={100}>100</option>
+                  </select>
+                </div>
+                <div className="vertical-divider-mini" />
+                <div className="density-row">
+                  <span className="density-label">Row Space</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="2"
+                    step="1"
+                    className="density-slider-elite"
+                    value={
+                      lineSpacing === "compact"
+                        ? 0
+                        : lineSpacing === "normal"
+                          ? 1
+                          : 2
+                    }
+                    onChange={(e) => {
+                      const val = parseInt(e.target.value);
+                      setLineSpacing(
+                        val === 0
+                          ? "compact"
+                          : val === 1
+                            ? "normal"
+                            : "relaxed",
+                      );
+                    }}
+                  />
+                </div>
               </div>
             </div>
-
-            <div className="footer-density-controls">
-              <div className="density-row">
-                <span className="density-label">Rows per page:</span>
-                <select
-                  className="density-select"
-                  value={rowsPerPage}
-                  onChange={(e) => {
-                    setRowsPerPage(Number(e.target.value));
-                    setPage(1);
-                  }}
-                >
-                  <option value={10}>10</option>
-                  <option value={20}>20</option>
-                  <option value={50}>50</option>
-                  <option value={100}>100</option>
-                </select>
-              </div>
-              <div className="vertical-divider-mini" />
-              <div className="density-row">
-                <span className="density-label">Row Space</span>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="1"
-                  className="density-slider-elite"
-                  value={
-                    lineSpacing === "compact"
-                      ? 0
-                      : lineSpacing === "normal"
-                        ? 1
-                        : 2
-                  }
-                  onChange={(e) => {
-                    const val = parseInt(e.target.value);
-                    setLineSpacing(
-                      val === 0
-                        ? "compact"
-                        : val === 1
-                          ? "normal"
-                          : "relaxed",
-                    );
-                  }}
-                />
-              </div>
-            </div>
-          </div>
+          )}
         </div>
 
         <aside className="sessions-sidebar-deck">
@@ -1412,7 +1457,7 @@ export default function AdminQueuePanel() {
             </div>
             <div
               className="stat-box-vertical purple"
-              onClick={() => setShowDesignersDetail(true)}
+              onClick={() => setActiveTab("LOAD")}
             >
               <span className="stat-box-label">Designers</span>
               <span className="stat-box-num">{stats?.activeSessions || 0}</span>
@@ -1477,45 +1522,140 @@ export default function AdminQueuePanel() {
                       </div>
 
                       {(session.currentQueueJob ||
-                        session.currentWalkinJob) && (
+                        session.currentWalkinJob ||
+                        (session.pausedJobs?.length || 0) > 0 ||
+                        (session.pinnedJobs?.length || 0) > 0) && (
                         <div className="designer-job-box">
-                          <div className="job-box-title">
-                            Working on:{" "}
-                            <strong>
-                              {session.currentQueueJob?.customerName ||
-                                session.currentWalkinJob?.customerName ||
-                                "Active Job"}
-                            </strong>
-                          </div>
-                          <div className="job-box-row">
-                            <span className="job-label">Start Time:</span>
-                            <span className="job-value">
-                              {session.startTime
-                                ? new Date(
-                                    session.startTime,
-                                  ).toLocaleTimeString([], {
-                                    hour: "2-digit",
-                                    minute: "2-digit",
-                                  })
-                                : "N/A"}
-                            </span>
-                          </div>
-                          <div className="job-box-row">
-                            <span className="job-label">Elapsed:</span>
-                            <span className="job-value highlight">
-                              {session.elapsedTime || "0m"}
-                            </span>
-                          </div>
+                          {(session.currentQueueJob ||
+                            session.currentWalkinJob) ? (
+                            <>
+                              <div className="job-box-title">
+                                Working on:{" "}
+                                <strong>
+                                  {session.currentQueueJob?.customerName ||
+                                    session.currentWalkinJob?.customerName ||
+                                    "Active Job"}
+                                </strong>
+                              </div>
+                              <div className="job-box-row">
+                                <span className="job-label">Start Time:</span>
+                                <span className="job-value">
+                                  {session.startTime
+                                    ? new Date(
+                                        session.startTime,
+                                      ).toLocaleTimeString([], {
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                      })
+                                    : "N/A"}
+                                </span>
+                              </div>
+                              <div className="job-box-row">
+                                <span className="job-label">Elapsed:</span>
+                                <span className="job-value highlight">
+                                  {session.elapsedTime || "0m"}
+                                </span>
+                              </div>
+                            </>
+                          ) : (
+                            <div className="job-box-title" style={{ color: "#64748b", fontStyle: "italic", marginBottom: "0.5rem" }}>
+                              Currently awaiting assignment...
+                            </div>
+                          )}
+                            <div className="job-box-row" style={{ 
+                              marginTop: "0.4rem", 
+                              paddingTop: "0.4rem", 
+                              borderTop: "1px dashed #e2e8f0", 
+                              flexDirection: "column", 
+                              alignItems: "flex-start",
+                              width: "100%"
+                            }}>
+                              <div style={{ display: "flex", justifyContent: "space-between", width: "100%", marginBottom: "0.4rem" }}>
+                                <span className="job-label">Pending Load:</span>
+                                <div style={{ 
+                                  display: "flex", 
+                                  gap: "6px", 
+                                  background: "#f8fafc", 
+                                  padding: "2px 8px", 
+                                  borderRadius: "4px",
+                                  border: "1px solid #e2e8f0"
+                                }}>
+                                  <span style={{ color: "#f59e0b", fontWeight: 700, fontSize: "0.7rem" }}>H:{session.pausedJobs?.length || 0}</span>
+                                  <span style={{ color: "#cbd5e1" }}>|</span>
+                                  <span style={{ color: "#3b82f6", fontWeight: 700, fontSize: "0.7rem" }}>Q:{session.pinnedJobs?.length || 0}</span>
+                                </div>
+                              </div>
+                              
+                              <div style={{ 
+                                maxHeight: "60px", 
+                                overflowY: "auto", 
+                                width: "100%",
+                                paddingRight: "4px",
+                                scrollbarWidth: "thin"
+                              }}>
+                                {session.pausedJobs?.length > 0 && (
+                                  <div style={{ fontSize: "0.65rem", color: "#64748b", marginBottom: "0.2rem" }}>
+                                    <strong style={{ color: "#f59e0b" }}>Held:</strong> {session.pausedJobs.map((j: any) => j.customerName).join(", ")}
+                                  </div>
+                                )}
+                                {session.pinnedJobs?.length > 0 && (
+                                  <div style={{ fontSize: "0.65rem", color: "#64748b" }}>
+                                    <strong style={{ color: "#3b82f6" }}>Queue:</strong> {session.pinnedJobs.map((j: any) => j.customerName).join(", ")}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
                         </div>
                       )}
                     </div>
-                  ),
+                  )
                 )
               )}
             </div>
           </div>
         </aside>
       </div>
+
+      <button 
+        className="mobile-stats-fab" 
+        onClick={() => setShowStatsModal(true)}
+        title="View Queue Stats"
+      >
+        <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+        </svg>
+      </button>
+
+      {showStatsModal && (
+        <div className="modal-overlay" onClick={() => setShowStatsModal(false)}>
+          <div className="modal-content-luxury" onClick={(e) => e.stopPropagation()} style={{ maxWidth: "500px" }}>
+            <div className="modal-header-premium">
+              <h2>Queue Statistics</h2>
+              <button className="close-btn-p" onClick={() => setShowStatsModal(false)}>&times;</button>
+            </div>
+            <div className="modal-scroll-area" style={{ padding: "1.5rem" }}>
+               <div className="sidebar-stats-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "1rem" }}>
+                  <div className="stat-box-vertical blue" onClick={() => { setActiveTab("QUEUED"); setShowStatsModal(false); }}>
+                    <span className="stat-box-label">Waiting</span>
+                    <span className="stat-box-num">{stats?.totalQueued || 0}</span>
+                  </div>
+                  <div className="stat-box-vertical green" onClick={() => { setShowLiveLoadDetail(true); setShowStatsModal(false); }}>
+                    <span className="stat-box-label">Live Load</span>
+                    <span className="stat-box-num">{stats?.totalInProgress || 0}</span>
+                  </div>
+                  <div className="stat-box-vertical purple" onClick={() => { setActiveTab("LOAD"); setShowStatsModal(false); }}>
+                    <span className="stat-box-label">Designers</span>
+                    <span className="stat-box-num">{stats?.activeSessions || 0}</span>
+                  </div>
+                  <div className="stat-box-vertical gold" onClick={() => { setShowLeaderboard(true); setShowStatsModal(false); }}>
+                    <span className="stat-box-label">Completed</span>
+                    <span className="stat-box-num">{stats?.completed || 0}</span>
+                  </div>
+               </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {showStaffWorkspace && (
         <StaffInsightModal 
@@ -1677,7 +1817,6 @@ export default function AdminQueuePanel() {
           </div>
         </div>
       )}
-
       {selectedLogJob && (
         <div className="modal-overlay" onClick={() => setSelectedLogJob(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()}>
@@ -1887,165 +2026,6 @@ export default function AdminQueuePanel() {
         </div>
       )}
 
-      {showDesignersDetail && (
-        <div
-          className="modal-overlay"
-          onClick={() => setShowDesignersDetail(false)}
-        >
-          <div
-            className="modal-content-luxury"
-            onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "700px" }}
-          >
-            <div className="modal-header-premium">
-              <div>
-                <h2
-                  style={{
-                    margin: 0,
-                    fontSize: "1.25rem",
-                    fontWeight: 800,
-                    color: "#0f172a",
-                  }}
-                >
-                  Roster Activity
-                </h2>
-                <p
-                  style={{
-                    margin: "0.25rem 0 0 0",
-                    fontSize: "0.85rem",
-                    color: "#64748b",
-                  }}
-                >
-                  Live staff utilization status
-                </p>
-              </div>
-              <button
-                className="close-btn-p"
-                onClick={() => setShowDesignersDetail(false)}
-              >
-                &times;
-              </button>
-            </div>
-
-            <div
-              className="modal-scroll-area"
-              style={{
-                padding: "1.5rem",
-                maxHeight: "60vh",
-                display: "flex",
-                flexDirection: "column",
-                gap: "2rem",
-              }}
-            >
-              {/* Utilized List */}
-              <div>
-                <div className="tel-section-title">
-                  <span className="dot blue"></span> UTILIZED STAFF
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.75rem",
-                  }}
-                >
-                  {(Array.isArray(sessions) ? sessions : []).filter(
-                    (s: any) => s.currentQueueJob || s.currentWalkinJob,
-                  ).length === 0 ? (
-                    <div
-                      className="empty-state"
-                      style={{ color: "#94a3b8", fontSize: "0.875rem" }}
-                    >
-                      No busy designers at the moment.
-                    </div>
-                  ) : (
-                    (sessions || [])
-                      .filter(
-                        (s: any) => s.currentQueueJob || s.currentWalkinJob,
-                      )
-                      .map((s: any) => (
-                        <div
-                          key={s.staffId?._id || s._id}
-                          className="aqt-telemetry-row busy"
-                        >
-                          <div className="tel-staff">
-                            <span
-                              className={`av ${s.currentWalkinJob ? "orange" : "blue"}`}
-                            >
-                              {s.staffId?.name?.charAt(0) || "?"}
-                            </span>
-                            <span className="name">
-                              {s.staffId?.name || "Unknown"}
-                            </span>
-                          </div>
-                          <div className="tel-arrow">→</div>
-                          <div className="tel-job">
-                            <span className="cus">
-                              {s.currentQueueJob?.customerName ||
-                                s.currentWalkinJob?.customerName ||
-                                "Customer"}
-                            </span>
-                            <span className="sub">
-                              {s.currentQueueJob?.emailSubject ||
-                                s.currentWalkinJob?.description ||
-                                "Active Assignment"}
-                            </span>
-                          </div>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
-
-              {/* Ready List */}
-              <div>
-                <div className="tel-section-title">
-                  <span className="dot green"></span> READY STAFF (ON STANDBY)
-                </div>
-                <div
-                  style={{
-                    display: "flex",
-                    flexDirection: "column",
-                    gap: "0.75rem",
-                  }}
-                >
-                  {(Array.isArray(sessions) ? sessions : []).filter(
-                    (s: any) => !s.currentQueueJob && !s.currentWalkinJob,
-                  ).length === 0 ? (
-                    <div
-                      className="empty-state"
-                      style={{ color: "#94a3b8", fontSize: "0.875rem" }}
-                    >
-                      All staff are currently busy.
-                    </div>
-                  ) : (
-                    (sessions || [])
-                      .filter(
-                        (s: any) => !s.currentQueueJob && !s.currentWalkinJob,
-                      )
-                      .map((s: any) => (
-                        <div
-                          key={s.staffId?._id || s._id}
-                          className="aqt-telemetry-row ready"
-                        >
-                          <div className="tel-staff">
-                            <span className="av green">
-                              {s.staffId?.name?.charAt(0) || "?"}
-                            </span>
-                            <span className="name">
-                              {s.staffId?.name || "Unknown"}
-                            </span>
-                          </div>
-                          <span className="tel-status">Available / Idle</span>
-                        </div>
-                      ))
-                  )}
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {showLeaderboard && (
         <div
@@ -2216,9 +2196,7 @@ export default function AdminQueuePanel() {
           setViewImage={setViewImage}
           onTakeJob={async (batch: boolean) => {
             try {
-              // Ensure session is started so the job actually goes to "Active" slot
               await startSessionMutation.mutateAsync();
-
               reassignJobMutation.mutate(
                 {
                   jobId: showViewModal._id,
@@ -2257,7 +2235,6 @@ export default function AdminQueuePanel() {
         />
       )}
 
-      {/* System Settings Modal */}
       {showSettingsModal && (
         <div className="modal-overlay" onClick={() => setShowSettingsModal(false)}>
           <div className="modal" onClick={e => e.stopPropagation()} style={{ maxWidth: '500px' }}>
@@ -2285,7 +2262,6 @@ export default function AdminQueuePanel() {
                    </div>
                  </div>
                  
-                 {/* Reassignment Reasons Section */}
                  <div style={{ marginTop: '2rem', borderTop: '1px solid #e2e8f0', paddingTop: '1.5rem' }}>
                     <div className="settings-label" style={{ marginBottom: '1rem' }}>Reassignment Reasons & Rules</div>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>

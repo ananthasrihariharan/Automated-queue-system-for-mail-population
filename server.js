@@ -120,7 +120,7 @@ app.use(cors({
 }));
 
 app.use(express.json());
-app.get('/health', (req, res) => res.json({ status: 'Main System is UP' }));
+app.get('/health', (req, res) => res.json({ status: 'Main System is UP', v: '1.0.6-live-debug' }));
 
 const axios = require('axios');
 async function checkWalkinService() {
@@ -213,17 +213,19 @@ connectDB().then(() => {
     const eventHandlers = require("./services/eventHandlers");
     eventHandlers.init(io);
 
-    // 4. Run stale session cleanup (Resilient recursive loop)
-    const { cleanupStaleSessions } = require("./services/queueEngine");
-    const runCleanup = async () => {
+    // 4. Run stale session cleanup & Workload Syncer
+    const { cleanupStaleSessions, syncWorkloadToDb } = require("./services/queueEngine");
+    const runMaintenance = async () => {
         try {
             await cleanupStaleSessions();
+            // SYNCER: Pre-calculate workload and save to DB for multi-process stability
+            await syncWorkloadToDb().catch(e => console.error('[Syncer] Error:', e.message));
         } catch (err) {
-            console.error('[Cleanup] Loop Error:', err.message);
+            console.error('[Maintenance] Loop Error:', err.message);
         }
-        setTimeout(runCleanup, 2 * 60 * 1000); // Wait 2 mins after completion before next run
+        setTimeout(runMaintenance, 10000); // Run every 10 seconds
     };
-    runCleanup();
+    runMaintenance();
 
     console.log('[Server] All subsystems started.');
 });

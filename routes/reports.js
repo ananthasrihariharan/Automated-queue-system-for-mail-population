@@ -206,7 +206,10 @@ router.get('/activity-journal', auth, authorize('ADMIN'), async (req, res) => {
 
             // 2. Extract Reassignment History
             const reassignments = audit
-                .filter(l => ['REASSIGNED', 'REASSIGN_REQUESTED', 'PAUSED'].includes(l.action))
+                .filter(l => 
+                    ['REASSIGNED', 'REASSIGN_REQUESTED', 'PAUSED'].includes(l.action) ||
+                    (l.action === 'ASSIGNED' && (l.details.manualPick || l.details.viaFindJob))
+                )
                 .map(l => {
                     let reason = l.details.notes || l.details.reason || 'No reason provided';
                     
@@ -217,12 +220,18 @@ router.get('/activity-journal', auth, authorize('ADMIN'), async (req, res) => {
                     if (l.action === 'PAUSED' && l.details.isInterruption) {
                         reason = `[INTERRUPTED] ${reason}`;
                     }
+                    if (l.action === 'ASSIGNED' && (l.details.manualPick || l.details.viaFindJob)) {
+                        reason = `[FIND JOB] Staff manually claimed this job from the pool.`;
+                    }
+                    if (l.action === 'REASSIGNED' && l.details.action === 'TAKEN_BY_OTHER_STAFF') {
+                        reason = `[STAFF TAKEOVER] Claimed by ${l.details.toStaffName || 'another staff'} while it was held/pinned by ${l.details.fromStaffName || 'previous staff'}.`;
+                    }
 
                     return {
                         type: l.action,
                         timestamp: l.timestamp,
-                        from: l.details.fromStaffName || l.details.requestedByName || 'System',
-                        to: l.details.toStaffName || 'Pool',
+                        from: l.details.fromStaffName || l.details.requestedByName || 'Pool',
+                        to: l.details.toStaffName || l.details.staffName || 'System',
                         reason: reason,
                         forceMode: l.details.forceMode,
                         batchMode: l.details.batchMode

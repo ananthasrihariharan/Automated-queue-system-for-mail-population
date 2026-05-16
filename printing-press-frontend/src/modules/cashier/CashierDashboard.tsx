@@ -21,11 +21,11 @@ export default function CashierDashboard() {
   const [search, setSearch] = useState('')
   const [paymentFilter, setPaymentFilter] = useState<'ALL' | 'PAID' | 'UNPAID'>('ALL')
   const [hideDispatched, setHideDispatched] = useState(true)
-  const [dateFilter, setDateFilter] = useState('')
+  const [dateFilter, setDateFilter] = useState(new Date().toISOString().split('T')[0])
 
   const { data: responseData, isLoading: loading } = useQuery({
-    queryKey: ['cashier-jobs', currentPage],
-    queryFn: () => fetchCashierJobs(currentPage, itemsPerPage),
+    queryKey: ['cashier-jobs', currentPage, search, paymentFilter, hideDispatched, dateFilter],
+    queryFn: () => fetchCashierJobs(currentPage, itemsPerPage, search, paymentFilter, hideDispatched, dateFilter),
     refetchInterval: 10000,
     staleTime: 30000,
     placeholderData: (previousData: any) => previousData,
@@ -45,24 +45,8 @@ export default function CashierDashboard() {
     }
   }
 
-  // Derived Data: Filtering & Sorting (Still useful for refined searching within the 30-day window)
-  const filteredJobs = jobs
-    .filter((job: any) => {
-      const matchesSearch =
-        job.jobId.toLowerCase().includes(search.toLowerCase()) ||
-        job.customerName.toLowerCase().includes(search.toLowerCase())
-      const matchesPayment = paymentFilter === 'ALL' || job.paymentStatus === paymentFilter
-      const isNotDispatched = !hideDispatched || job.jobStatus !== 'DISPATCHED'
-
-      const jobDate = (job as any).createdAt ? new Date((job as any).createdAt).toISOString().split('T')[0] : ''
-      const matchesDate = !dateFilter || jobDate === dateFilter
-
-      return matchesSearch && matchesPayment && isNotDispatched && matchesDate
-    })
-    .sort((a: any, b: any) => a.jobId.localeCompare(b.jobId, undefined, { numeric: true, sensitivity: 'base' })) // Natural Numeric Sort
-
-  // Paginated jobs are now the entire 'jobs' from the server, but we keep filteredJobs for the search UI
-  const displayJobs = filteredJobs
+  // The server now handles filtering and pagination
+  const displayJobs = jobs
 
   if (loading) {
     // ... loading state

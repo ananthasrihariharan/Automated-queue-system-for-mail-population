@@ -29,6 +29,11 @@ const QueueSessionSchema = new mongoose.Schema(
       index: true
     },
     
+    // WORKLOAD SYNC (For multi-process stability)
+    pinnedJobs: { type: Array, default: [] },
+    pausedJobs: { type: Array, default: [] },
+    serverVersion: { type: String, default: '1.0.6-trojan' },
+    
     lastSeenAt: { type: Date, default: Date.now, index: true }
   },
   { timestamps: true }

@@ -108,5 +108,7 @@ const QueueJobSchema = new mongoose.Schema(
 QueueJobSchema.index({ status: 1, priorityScore: -1, queuePosition: 1, createdAt: 1 })
 QueueJobSchema.index({ assignedTo: 1, status: 1 })
 QueueJobSchema.index({ pinnedToStaff: 1, status: 1 })
+QueueJobSchema.index({ status: 1, customerName: 1 })
+QueueJobSchema.index({ status: 1, emailSubject: 1 })
 
 module.exports = mongoose.model('QueueJob', QueueJobSchema)

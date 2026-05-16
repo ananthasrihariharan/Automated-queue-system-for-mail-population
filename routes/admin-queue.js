@@ -4,16 +4,25 @@
  */
 
 const express = require('express')
+const mongoose = require('mongoose')
+const fs = require('fs')
+const path = require('path')
 const router = express.Router()
 
 const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 const queueEngine = require('../services/queueEngine')
+const pathService = require('../services/pathService')
+const eventBus = require('../services/eventBus')
+const statsService = require('../services/statsService')
 const QueueJob = require('../models/QueueJob')
 const QueueSession = require('../models/QueueSession')
 const QueueRequest = require('../models/QueueRequest')
 const CustomerPreference = require('../models/CustomerPreference')
 const User = require('../models/User')
+const JobEvent = require('../models/JobEvent')
+const SystemConfig = require('../models/SystemConfig')
+const QueueStats = require('../models/QueueStats')
 
 /**
  * GET /jobs — Full queue view (all statuses)
@@ -140,7 +149,7 @@ router.get('/sessions', auth, authorize('ADMIN'), async (req, res) => {
       isActive: true,
       lastSeenAt: { $gte: ninetyMinsAgo }
     })
-      .populate('staffId', 'name phone')
+      .populate('staffId', 'name phone _id')
       .populate({
         path: 'currentQueueJob',
         select: 'status customerName emailSubject relativeFolderPath assignedAt'
@@ -149,13 +158,59 @@ router.get('/sessions', auth, authorize('ADMIN'), async (req, res) => {
         path: 'currentWalkinJob',
         select: 'status customerName description relativeFolderPath assignedAt'
       })
+      .lean()
+      .exec()
 
     // Transform to include compatibility fields for Admin Panel
-    const processedSessions = sessions.map(s => {
-      const sess = s.toObject()
+    const processedSessions = await Promise.all(sessions.map(async s => {
+      const sess = { ...s }
       sess.staffName = s.staffId?.name || 'Unknown Staff'
       
+      const rawStaffId = s.staffId?._id || s.staffId
+      sess.serverVersion = '1.0.6-live-debug';
+      
+      let pinnedJobs = [];
+      let pausedJobs = [];
+      if (rawStaffId) {
+        const staffIdStr = rawStaffId.toString();
+        const staffIdObj = mongoose.Types.ObjectId.isValid(staffIdStr) ? new mongoose.Types.ObjectId(staffIdStr) : null;
+        const idQuery = staffIdObj ? { $in: [staffIdObj, staffIdStr] } : staffIdStr;
+
+        const [pinned, paused] = await Promise.all([
+          QueueJob.find({ 
+            pinnedToStaff: idQuery, 
+            status: { $regex: /^QUEUED$/i } 
+          })
+            .select('jobId customerName emailSubject description type createdAt')
+            .sort({ createdAt: 1 })
+            .limit(100)
+            .lean(),
+          QueueJob.find({ 
+            assignedTo: idQuery, 
+            status: { $regex: /^PAUSED$/i } 
+          })
+            .select('jobId customerName emailSubject description type updatedAt')
+            .sort({ updatedAt: -1 })
+            .limit(100)
+            .lean()
+        ])
+        pinnedJobs = pinned || [];
+        pausedJobs = paused || [];
+      }
+
+      sess.pinnedJobs = pinnedJobs.map(j => ({
+        ...j,
+        customerName: j.customerName || j.emailSubject || 'No Name'
+      }));
+      sess.pausedJobs = pausedJobs.map(j => ({
+        ...j,
+        customerName: j.customerName || j.emailSubject || 'No Name'
+      }));
+      
       const activeJob = s.currentQueueJob || s.currentWalkinJob
+      if (activeJob) {
+        sess.activeJobCustomer = activeJob.customerName || activeJob.emailSubject || 'In Progress'
+      }
       if (activeJob && activeJob.assignedAt) {
         sess.startTime = activeJob.assignedAt
         const diff = Date.now() - new Date(activeJob.assignedAt).getTime()
@@ -164,7 +219,10 @@ router.get('/sessions', auth, authorize('ADMIN'), async (req, res) => {
       }
       
       return sess
-    })
+    }))
+
+    // DIAGNOSTIC: Write the actual response to a file so we can see it
+    fs.writeFileSync(path.join(__dirname, '../last_api_response.json'), JSON.stringify(processedSessions, null, 2))
 
     res.json(processedSessions)
   } catch (err) {
@@ -261,7 +319,6 @@ router.patch('/jobs/:id/pin', auth, authorize('ADMIN'), async (req, res) => {
 router.patch('/jobs/:id/unpin', auth, authorize('ADMIN'), async (req, res) => {
   try {
     const job = await queueEngine.unpinJob(req.params.id)
-
     res.json({ message: 'Pin removed', job })
   } catch (err) {
     res.status(500).json({ message: err.message })
@@ -311,7 +368,6 @@ router.patch('/jobs/:id/retrieve', auth, authorize('ADMIN'), async (req, res) =>
  */
 router.get('/requests', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const QueueRequest = require('../models/QueueRequest')
     const requests = await QueueRequest.find({ status: 'PENDING' })
       .populate('requestedBy', 'name')
       .populate('jobId', 'customerName emailSubject')
@@ -379,28 +435,9 @@ router.delete('/jobs/:id', auth, authorize('ADMIN'), async (req, res) => {
     await QueueJob.findByIdAndDelete(req.params.id)
 
     // Cleanup disk footprint
-    if (job.folderPath) {
-       const fs = require('fs');
-       const path = require('path');
-       try {
-          if (fs.existsSync(job.folderPath)) {
-             fs.rmSync(job.folderPath, { recursive: true, force: true });
-          }
-          // Remove parent if empty
-          const parentPath = path.dirname(job.folderPath);
-          const watchRoot = process.env.N8N_WATCH_PATH;
-          if (watchRoot && parentPath !== watchRoot && parentPath.includes(watchRoot)) {
-             if (fs.existsSync(parentPath) && fs.readdirSync(parentPath).length === 0) {
-                 fs.rmdirSync(parentPath);
-             }
-          }
-       } catch (err) {
-          console.error('[Delete] Failed to cleanup folder:', err);
-       }
-    }
+    pathService.deleteJobFolder(job);
 
     // Fix #2: Use eventBus to maintain the audit trail instead of raw io push
-    const eventBus = require('../services/eventBus')
     eventBus.emit('job:deleted', { jobId: req.params.id, assignedTo: job.assignedTo, status: job.status })
 
     res.json({ message: 'Job deleted permanently' })
@@ -424,10 +461,6 @@ router.post('/jobs/bulk-delete', auth, authorize('ADMIN'), async (req, res) => {
        return res.status(404).json({ message: 'No matching jobs found' });
     }
 
-    const fs = require('fs');
-    const path = require('path');
-    const watchRoot = process.env.N8N_WATCH_PATH;
-
     for (const job of jobs) {
       if (job.assignedTo) {
         const session = await QueueSession.findOne({ staffId: job.assignedTo, isActive: true });
@@ -442,24 +475,8 @@ router.post('/jobs/bulk-delete', auth, authorize('ADMIN'), async (req, res) => {
       await QueueJob.findByIdAndDelete(job._id);
 
       // Cleanup disk footprint
-      if (job.folderPath) {
-         try {
-            if (fs.existsSync(job.folderPath)) {
-               fs.rmSync(job.folderPath, { recursive: true, force: true });
-            }
-            // Remove parent if empty
-            const parentPath = path.dirname(job.folderPath);
-            if (watchRoot && parentPath !== watchRoot && parentPath.includes(watchRoot)) {
-               if (fs.existsSync(parentPath) && fs.readdirSync(parentPath).length === 0) {
-                   fs.rmdirSync(parentPath);
-               }
-            }
-         } catch (err) {
-            console.error('[Bulk Delete] Failed to cleanup folder:', err);
-         }
-      }
+      pathService.deleteJobFolder(job);
 
-      const eventBus = require('../services/eventBus');
       eventBus.emit('job:deleted', { jobId: job._id, assignedTo: job.assignedTo, status: job.status });
     }
 
@@ -484,7 +501,6 @@ router.post('/jobs/bulk-status', auth, authorize('ADMIN'), async (req, res) => {
        return res.status(404).json({ message: 'No matching jobs found' });
     }
 
-    const eventBus = require('../services/eventBus');
     let movedCount = 0;
 
     for (const job of jobs) {
@@ -507,11 +523,11 @@ router.post('/jobs/bulk-status', auth, authorize('ADMIN'), async (req, res) => {
        movedCount++;
        
        // Log audit natively via JobEvent to keep UI robust
-       require('../models/JobEvent').create({ jobId: job._id, actionType: 'CREATED', details: { action: `MOVED_TO_${status}` } }).catch(() => {});
+       JobEvent.create({ jobId: job._id, actionType: 'CREATED', details: { action: `MOVED_TO_${status}` } }).catch(() => {});
     }
 
     // Force stats to recalculate dynamically rather than manually adjusting them
-    await require('../services/statsService').recalculate();
+    await statsService.recalculate();
 
     res.json({ message: `${movedCount} jobs moved to ${status}` });
   } catch (err) {
@@ -539,12 +555,10 @@ router.get('/customer-preferences', auth, authorize('ADMIN'), async (req, res) =
  */
 router.get('/stats', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const QueueStats = require('../models/QueueStats')
     let stats = await QueueStats.findOne({})
     
     // Auto-recovery if stats are missing
     if (!stats) {
-      const statsService = require('../services/statsService')
       await statsService.recalculate()
       stats = await QueueStats.findOne({})
     }
@@ -609,7 +623,6 @@ router.patch('/jobs/:id/restore', auth, authorize('ADMIN'), async (req, res) => 
     // Reactive sweep — funnel restored job to any idle staff immediately
     await queueEngine.triggerAssignmentSweep().catch(e => console.error('[restore] sweep error:', e))
 
-    const eventBus = require('../services/eventBus')
     eventBus.emit('job:restored', { jobId: job._id })
 
     res.json({ message: 'Job restored to queue', job })
@@ -635,7 +648,6 @@ router.post('/jobs/bulk-restore', auth, authorize('ADMIN'), async (req, res) => 
     }
 
     let maxPos = await QueueJob.countDocuments({ status: 'QUEUED' });
-    const eventBus = require('../services/eventBus');
 
     for (const job of jobs) {
        maxPos++;
@@ -672,7 +684,6 @@ router.get('/stats/staff-leaderboard', auth, authorize('ADMIN'), async (req, res
     const startOfDay = new Date()
     startOfDay.setHours(0, 0, 0, 0)
 
-    const JobEvent = require('../models/JobEvent')
     const leaderboard = await JobEvent.aggregate([
       {
         $match: {
@@ -717,7 +728,6 @@ router.get('/stats/staff-leaderboard', auth, authorize('ADMIN'), async (req, res
  */
 router.get('/config', auth, async (req, res) => {
   try {
-    const SystemConfig = require('../models/SystemConfig')
     let configs = await SystemConfig.find()
     
     // Auto-init reassignment reasons if missing or empty
@@ -752,7 +762,6 @@ router.get('/config', auth, async (req, res) => {
  */
 router.patch('/config/:key', auth, authorize('ADMIN'), async (req, res) => {
   try {
-    const SystemConfig = require('../models/SystemConfig')
     const { value } = req.body
     const config = await SystemConfig.findOneAndUpdate(
       { key: req.params.key },

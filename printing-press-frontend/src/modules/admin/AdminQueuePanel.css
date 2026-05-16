@@ -29,9 +29,16 @@
   overflow: hidden;
 }
 
-@media (max-width: 1400px) {
+@media (max-width: 1024px) {
   .admin-main-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+/* Narrow sidebar for medium-large screens to preserve table space */
+@media (min-width: 1025px) and (max-width: 1400px) {
+  .admin-main-grid {
+    grid-template-columns: minmax(0, 1fr) 250px;
   }
 }
 

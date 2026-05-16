@@ -61,7 +61,8 @@ class EventHandlers {
       // Real-time direct push for assignment (it's critical/urgent)
       if (this.io) {
         const staffRoom = `staff:${String(staffId).toLowerCase()}`
-        this.io.to(staffRoom).emit('job:assigned', { job, slot: 'queue' })
+        const slot = details.slot || (job.type === 'WALKIN' ? 'walkin' : 'queue')
+        this.io.to(staffRoom).emit('job:assigned', { job, slot })
       }
     })
 
@@ -221,6 +222,39 @@ class EventHandlers {
     eventBus.on('job:unpinned', async ({ jobId }) => {
       await this.logEvent(jobId, 'CREATED', { action: 'UNPIN' })
       this.triggerSweep()
+    })
+
+    // Fired when a staff member takes a PAUSED/QUEUED job that was held by someone else
+    eventBus.on('job:taken-by-other', async ({ jobId, newStaffId, oldStaffId }) => {
+      try {
+        const [newStaff, oldStaff] = await Promise.all([
+          User.findById(newStaffId).select('name').lean(),
+          User.findById(oldStaffId).select('name').lean()
+        ])
+
+        await this.logEvent(jobId, 'REASSIGNED', {
+          action: 'TAKEN_BY_OTHER_STAFF',
+          fromStaffId: oldStaffId,
+          fromStaffName: oldStaff?.name || 'Unknown Staff',
+          toStaffId: newStaffId,
+          toStaffName: newStaff?.name || 'Another Staff',
+          reason: `Job claimed from ${oldStaff?.name || 'another staff'} via Find Job.`
+        }, newStaffId)
+
+        if (this.io) {
+          // Notify old staff: their held job was taken — clear it from their screen
+          this.io.to(`staff:${String(oldStaffId).toLowerCase()}`).emit('job:removed', {
+            jobId,
+            reason: 'taken_by_other_staff',
+            message: `⚠️ Job #${jobId.toString().substring(18).toUpperCase()} was taken by ${newStaff?.name || 'another staff member'}.`
+          })
+        }
+
+        // Trigger a sweep so the old staff (now possibly idle) can get a new job
+        this.triggerSweep()
+      } catch (err) {
+        console.error('[Events] job:taken-by-other handler failed:', err.message)
+      }
     })
 
     eventBus.on('job:batch-reserved', async ({ customerEmail, staffId }) => {

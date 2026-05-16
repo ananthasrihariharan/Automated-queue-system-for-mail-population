@@ -27,10 +27,14 @@ function parseSenderEmail(folderName) {
  * e.g. "2026-03-09T14-25-08_Print_file" → { timestamp: "2026-03-09T14:25:08", subject: "Print file" }
  */
 function parseSubfolderName(folderName) {
-  // Match: YYYY-MM-DDTHH-MM-SS_rest_of_subject
-  const match = folderName.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2})_(.+)$/)
+  // Match: YYYY-MM-DDTHH-MM-SS or YYYY-MM-DDTHH-MM-SS-mmm followed by _subject
+  const match = folderName.match(/^(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}(?:-\d{3})?)_(.+)$/)
   if (match) {
-    const timestamp = match[1].replace(/-(\d{2})-(\d{2})$/, ':$1:$2') // fix time separators
+    const timestampStr = match[1];
+    const parts = timestampStr.split('T');
+    const timePart = parts[1].replace(/-/g, ':').replace(/:(\d{3})$/, '.$1'); 
+    const timestamp = `${parts[0]}T${timePart}`;
+    
     const subject = match[2].replace(/_/g, ' ').trim()
     return { timestamp, subject }
   }
@@ -52,67 +56,70 @@ async function processEmailFolder(emailFolderPath) {
     const eventBus = require('./eventBus')
 
     // Verify it's a directory
-    const stats = fs.statSync(normalizedPath)
-    if (!stats.isDirectory()) return null
+    if (!fs.existsSync(normalizedPath) || !fs.statSync(normalizedPath).isDirectory()) return null
 
     // Check depth and roots (Robust Windows handling)
     const n8nRoot = process.env.N8N_WATCH_PATH ? path.resolve(process.env.N8N_WATCH_PATH).toLowerCase() : null;
     const waRoot = process.env.WHATSAPP_WATCH_PATH ? path.resolve(process.env.WHATSAPP_WATCH_PATH).toLowerCase() : null;
+    const wiRoot = process.env.WALKIN_UPLOAD_PATH ? path.resolve(process.env.WALKIN_UPLOAD_PATH).toLowerCase() : null;
     const absPath = path.resolve(normalizedPath).toLowerCase();
     
     // Valid jobs are subdirectories of the roots, but not the roots themselves
     const isInsideN8n = n8nRoot && absPath.startsWith(n8nRoot) && absPath !== n8nRoot;
     const isInsideWA = waRoot && absPath.startsWith(waRoot) && absPath !== waRoot;
+    const isInsideWI = wiRoot && absPath.startsWith(wiRoot) && absPath !== wiRoot;
 
-    if (!isInsideN8n && !isInsideWA) {
-      console.warn(`[FileWatcher] Skipping folder outside watch roots: ${normalizedPath}`);
+    if (!isInsideN8n && !isInsideWA && !isInsideWI) {
+      // console.warn(`[FileWatcher] Skipping folder outside watch roots: ${normalizedPath}`);
       return null
     }
 
-    // Skip the first-level "sender" folders (they hold job subfolders, not files directly)
-    // E:\InboundJobs\sender@email.com  <- skip
-    // E:\WhatsappJobs\9840401538@whatsapp.local <- skip  
-    // E:\InboundJobs\sender@email.com\job_folder <- process
-    // E:\WhatsappJobs\9840401538@whatsapp.local\job_folder <- process
+    // Skip the first-level "identity" folders (Email/Phone folders)
     const parentDir = path.dirname(absPath);
-    const isFirstLevelN8n = isInsideN8n && parentDir === n8nRoot;
-    const isFirstLevelWA = isInsideWA && parentDir === waRoot;
-    if (isFirstLevelN8n || isFirstLevelWA) {
+    const isFirstLevel = (isInsideN8n && parentDir === n8nRoot) || 
+                         (isInsideWA && parentDir === waRoot) || 
+                         (isInsideWI && parentDir === wiRoot);
+
+    if (isFirstLevel) {
       return null;
     }
 
-    // Check if a valid QueueJob already exists for this folder (already ingested and in queue)
+    // Check if a valid QueueJob already exists for this folder
+    // ROBUSTNESS: Check both direct path and relative path (Identity/Folder) 
+    // to catch duplicates even if path style differs (UNC vs Mapped Drive)
+    const folderName = path.basename(normalizedPath);
+    const parentName = path.basename(path.dirname(normalizedPath));
+    const relativePath = `${parentName}/${folderName}`.replace(/\\/g, '/');
+
     const existingJob = await QueueJob.findOne({
-      folderPath: normalizedPath
+      $or: [
+        { folderPath: normalizedPath },
+        { relativeFolderPath: relativePath }
+      ]
     })
     if (existingJob) {
-      // Already live in the queue — skip silently
       processedFolders.add(normalizedPath)
       return null
     }
 
-    // Anti-Duplication: If a task already exists for this folder and hasn't finished,
-    // don't overwrite it. This prevents the watcher from interfering with manual uploads.
-    const IngestionTaskModel = require('../models/IngestionTask')
-    const existingTask = await IngestionTaskModel.findOne({ 
+    // Anti-Duplication check for in-flight tasks
+    const existingTask = await IngestionTask.findOne({ 
       folderPath: normalizedPath,
       status: { $in: ['PENDING', 'PROCESSING'] }
     })
     if (existingTask) {
-      console.log(`[FileWatcher] Task already in-flight for: ${normalizedPath} - skipping duplicate trigger.`)
       return null
     }
 
-    // Create or RESET IngestionTask to PENDING so the worker re-processes it
+    // Create or RESET IngestionTask to PENDING
     const task = await IngestionTask.findOneAndUpdate(
       { folderPath: normalizedPath },
-      { $set: { folderPath: normalizedPath, status: 'PENDING', error: null, attempts: 0 } },
+      { $set: { folderPath: normalizedPath, status: 'PENDING', error: null, attempts: 0, createdAt: new Date() } },
       { upsert: true, new: true }
     )
 
-
     processedFolders.add(normalizedPath)
-    console.log(`[FileWatcher] Task queued for: ${normalizedPath}`)
+    console.log(`\n✅ [FileWatcher] Ingested job: "${path.basename(normalizedPath)}"`)
     
     // Notify worker
     eventBus.emit('task:new', task)
@@ -127,28 +134,27 @@ async function processEmailFolder(emailFolderPath) {
 }
 
 /**
- * Scan existing folders on startup to ingest any unprocessed emails.
+ * Scan existing folders on startup to ingest any unprocessed jobs.
  */
 async function scanExistingFolders(roots) {
   let ingested = 0
+  console.log('[FileWatcher] Starting startup scan...')
+  
   for (const watchPath of roots) {
-    if (!fs.existsSync(watchPath)) {
-      console.log(`[FileWatcher] Watch path does not exist: ${watchPath}`)
-      continue
-    }
+    if (!fs.existsSync(watchPath)) continue
 
-    const senderFolders = fs.readdirSync(watchPath)
+    const identityFolders = fs.readdirSync(watchPath)
+    for (const identityFolder of identityFolders) {
+      const identityPath = path.join(watchPath, identityFolder)
+      if (!fs.statSync(identityPath).isDirectory()) continue
 
-    for (const senderFolder of senderFolders) {
-      const senderPath = path.join(watchPath, senderFolder)
-      if (!fs.statSync(senderPath).isDirectory()) continue
+      // Support 2-level structure: Root / Identity / Job_Folder
+      const jobFolders = fs.readdirSync(identityPath)
+      for (const jobFolder of jobFolders) {
+        const jobPath = path.join(identityPath, jobFolder)
+        if (!fs.statSync(jobPath).isDirectory()) continue
 
-      const subfolders = fs.readdirSync(senderPath)
-      for (const subfolder of subfolders) {
-        const subPath = path.join(senderPath, subfolder)
-        if (!fs.statSync(subPath).isDirectory()) continue
-
-        const result = await processEmailFolder(subPath)
+        const result = await processEmailFolder(jobPath)
         if (result) ingested++
       }
     }
@@ -163,16 +169,12 @@ function startWatcher(io) {
   ioInstance = io
   
   const rootsToWatch = []
-  
-  if (process.env.N8N_WATCH_PATH) {
-     rootsToWatch.push(process.env.N8N_WATCH_PATH)
-  }
-  if (process.env.WHATSAPP_WATCH_PATH) {
-     rootsToWatch.push(process.env.WHATSAPP_WATCH_PATH)
-  }
+  if (process.env.N8N_WATCH_PATH) rootsToWatch.push(process.env.N8N_WATCH_PATH)
+  if (process.env.WHATSAPP_WATCH_PATH) rootsToWatch.push(process.env.WHATSAPP_WATCH_PATH)
+  if (process.env.WALKIN_UPLOAD_PATH) rootsToWatch.push(process.env.WALKIN_UPLOAD_PATH)
 
   if (rootsToWatch.length === 0) {
-    console.warn('[FileWatcher] No watch paths set in .env — file watcher disabled')
+    console.warn('[FileWatcher] No watch paths set — file watcher disabled')
     return null
   }
 
@@ -181,23 +183,23 @@ function startWatcher(io) {
   // First scan existing folders
   scanExistingFolders(rootsToWatch)
 
-  // Watch for new directories (depth 2: sender/timestamp_subject)
+  // Watch for new directories (depth 2: identity/job_folder)
   const watcher = chokidar.watch(rootsToWatch, {
-    ignored: /(^|[\/\\])\../, // ignore dotfiles
+    ignored: /(^|[\/\\])\../,
     persistent: true,
-    ignoreInitial: true,       // we already scanned
+    ignoreInitial: true,
     depth: 2,
     awaitWriteFinish: {
-      stabilityThreshold: 2000, // wait 2s for n8n to finish writing
+      stabilityThreshold: 3000, 
       pollInterval: 500
     }
   })
 
   watcher.on('addDir', async (dirPath) => {
-    // Small delay to let system finish writing all files
+    // Small delay to allow files to finish writing
     setTimeout(async () => {
       await processEmailFolder(dirPath)
-    }, 3000)
+    }, 5000)
   })
 
   watcher.on('error', (err) => {
@@ -207,4 +209,4 @@ function startWatcher(io) {
   return watcher
 }
 
-module.exports = { startWatcher, processEmailFolder, parseSenderEmail, parseSubfolderName }
+module.exports = { startWatcher, processEmailFolder, parseSenderEmail, parseSubfolderName, processedFolders }

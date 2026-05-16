@@ -6,6 +6,7 @@ import CustomerManager from './CustomerManager'
 import AdminReports from './AdminReports'
 import ModuleNavigation from '../../components/ModuleNavigation'
 import './AdminDashboard.css'
+import './AdminDashboardMobile.css'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { fetchAdminJobs } from '../../services/api'
 

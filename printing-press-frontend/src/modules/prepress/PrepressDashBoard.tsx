@@ -215,48 +215,66 @@ export default function PrepressDashboard() {
           </thead>
 
           <tbody>
-            {filteredJobs.map((job: Job, index: number) => (
-              <tr key={job.jobId}>
-                <td><span style={{ fontWeight: 600, color: '#64748b' }}>{index + 1}</span></td>
-                <td>{job.jobId}</td>
-                <td>{job.customerName}</td>
-                <td>{job.totalItems}</td>
-                <td>
-                  <span className={`status-badge ${job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED' ? 'status-paid' : 'status-unpaid'}`}>
-                    {job.paymentStatus}
-                  </span>
-                </td>
-                <td>{new Date(job.createdAt).toLocaleDateString()}</td>
-                <td className="actions-cell">
-                  <div className="actions-wrapper">
-                    <button
-                      className="btn-secondary btn-sm"
-                      onClick={() => setPreviewJob(job)}
-                    >
-                      View
-                    </button>
-                    <button
-                      className="btn-primary btn-sm"
-                      onClick={() => navigate(`/prepress/edit/${job.jobId}`)}
-                    >
-                      Edit
-                    </button>
-                    {job.itemScreenshots && job.itemScreenshots.length >= 1 && (
-                      <button
-                        className="btn-download-premium btn-sm"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const url = `${BACKEND_URL}/api/attachments/${job.jobId}/download-all`;
-                          handleDownload(url, `${job.jobId}_attachments.zip`);
-                        }}
-                      >
-                        Download All (ZIP)
-                      </button>
-                    )}
-                  </div>
+            {!search && !dateFilter ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '4rem 2rem', color: '#64748b' }}>
+                  <div style={{ fontSize: '2rem', marginBottom: '1rem' }}>📋</div>
+                  <div style={{ fontWeight: 800, fontSize: '1.1rem', color: '#1e293b' }}>History Search Mode</div>
+                  <p style={{ marginTop: '0.5rem', maxWidth: '300px', marginInline: 'auto' }}>
+                    Use the search bar above or select a date to view your completed jobs.
+                  </p>
                 </td>
               </tr>
-            ))}
+            ) : filteredJobs.length === 0 ? (
+              <tr>
+                <td colSpan={7} style={{ textAlign: 'center', padding: '4rem 2rem', color: '#64748b' }}>
+                  No jobs found for this search.
+                </td>
+              </tr>
+            ) : (
+              filteredJobs.map((job: Job, index: number) => (
+                <tr key={job.jobId}>
+                  <td><span style={{ fontWeight: 600, color: '#64748b' }}>{index + 1}</span></td>
+                  <td>{job.jobId}</td>
+                  <td>{job.customerName}</td>
+                  <td>{job.totalItems}</td>
+                  <td>
+                    <span className={`status-badge ${job.paymentStatus === 'PAID' || job.paymentStatus === 'ADMIN_APPROVED' ? 'status-paid' : 'status-unpaid'}`}>
+                      {job.paymentStatus}
+                    </span>
+                  </td>
+                  <td>{new Date(job.createdAt).toLocaleDateString()}</td>
+                  <td className="actions-cell">
+                    <div className="actions-wrapper">
+                      <button
+                        className="btn-secondary btn-sm"
+                        onClick={() => setPreviewJob(job)}
+                      >
+                        View
+                      </button>
+                      <button
+                        className="btn-primary btn-sm"
+                        onClick={() => navigate(`/prepress/edit/${job.jobId}`)}
+                      >
+                        Edit
+                      </button>
+                      {job.itemScreenshots && job.itemScreenshots.length >= 1 && (
+                        <button
+                          className="btn-download-premium btn-sm"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            const url = `${BACKEND_URL}/api/attachments/${job.jobId}/download-all`;
+                            handleDownload(url, `${job.jobId}_attachments.zip`);
+                          }}
+                        >
+                          Download All (ZIP)
+                        </button>
+                      )}
+                    </div>
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>

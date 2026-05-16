@@ -52,7 +52,12 @@ router.get('/settings', async (req, res) => {
 router.post('/upload/:staffId', uploadAny.array('files', 10), async (req, res) => {
   try {
     const { staffId } = req.params;
-    const { customerName, customerPhone, description, latitude, longitude } = req.body;
+    let { customerName, customerPhone, description, latitude, longitude } = req.body;
+    
+    // PHONE NORMALIZATION
+    if (customerPhone && /^\d{10,15}$/.test(customerPhone) && customerPhone.startsWith('91')) {
+      customerPhone = customerPhone.substring(2);
+    }
     
     if (!customerName || !customerPhone || !req.files || req.files.length === 0) {
       return res.status(400).json({ message: 'Missing required fields or files.' });
@@ -101,23 +106,75 @@ router.post('/upload/:staffId', uploadAny.array('files', 10), async (req, res) =
       attachmentMeta[f.filename] = f.originalname;
     });
 
-    const job = await QueueJob.create({
-      emailSubject: `Walk-in: ${customerName}`,
-      customerName,
-      customerPhone,
-      mailBody: description || 'Walk-in customer uploaded files via QR portal.',
-      folderPath: walkinFolder,
-      relativeFolderPath: path.relative(uploadBase, walkinFolder).replace(/\\/g, '/'),
-      attachments,
-      attachmentMeta,
-      type: 'WALKIN',
-      status: 'QUEUED',
-      assignedTo: null,
-      pinnedToStaff: staffId,
-      priorityScore: 5
-    });
+    // DEDUPLICATION / MERGING LOGIC:
+    // Check if there's already a WALKIN job assigned/pinned to this staff with no files.
+    // This happens when a staff member manually requests a walk-in approval before the upload.
+    let job = await QueueJob.findOneAndUpdate(
+      {
+        type: 'WALKIN',
+        $or: [
+          { pinnedToStaff: staffId },
+          { assignedTo: staffId }
+        ],
+        folderPath: { $in: ['', null] },
+        status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'QUEUED'] }
+      },
+      {
+        $set: {
+          emailSubject: `Walk-in: ${customerName}`,
+          customerName,
+          customerPhone,
+          mailBody: description || 'Walk-in customer uploaded files via QR portal.',
+          folderPath: walkinFolder,
+          relativeFolderPath: path.relative(uploadBase, walkinFolder).replace(/\\/g, '/'),
+          attachments,
+          attachmentMeta,
+          pinnedToStaff: staffId, 
+          continuityContext: `Pinned to ${staff.name} via QR`, // Explicitly tag with staff name
+          status: 'QUEUED' 
+        },
+        $push: {
+          auditLog: {
+            action: 'JOB_INGESTED',
+            timestamp: new Date(),
+            details: { 
+              note: 'Physical files linked to existing walk-in placeholder.',
+              attachmentsIngested: attachments.length
+            }
+          }
+        }
+      },
+      { new: true }
+    );
+
+    if (!job) {
+      job = await QueueJob.create({
+        emailSubject: `Walk-in: ${customerName}`,
+        customerName,
+        customerPhone,
+        mailBody: description || 'Walk-in customer uploaded files via QR portal.',
+        folderPath: walkinFolder,
+        relativeFolderPath: path.relative(uploadBase, walkinFolder).replace(/\\/g, '/'),
+        attachments,
+        attachmentMeta,
+        type: 'WALKIN',
+        status: 'QUEUED',
+        assignedTo: null,
+        pinnedToStaff: staffId,
+        continuityContext: `Pinned to ${staff.name} via QR`,
+        priorityScore: 5,
+        auditLog: [{
+          action: 'JOB_INGESTED',
+          timestamp: new Date(),
+          details: { attachmentsIngested: attachments.length }
+        }]
+      });
+    }
 
     eventBus.emit('job:walkin_received', { job, staffId });
+    if (staffId) {
+      eventBus.emit('job:pinned', { jobId: job._id, staffId });
+    }
 
     res.json({ message: 'Upload successful!', jobId: job._id });
 

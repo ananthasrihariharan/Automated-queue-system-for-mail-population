@@ -32,6 +32,10 @@ const UserSchema = new mongoose.Schema(
         lastLoginAt: {
             type: Date
         },
+        lastJobCompletedAt: {
+            type: Date,
+            default: Date.now
+        },
 
         // Legacy field for migration fallback
         role: String

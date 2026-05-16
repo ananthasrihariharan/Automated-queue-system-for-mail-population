@@ -50,3 +50,63 @@ export function formatDuration(ms: number): string {
   if (m < 60) return `${m}m`
   return `${Math.floor(m / 60)}h ${m % 60}m`
 }
+
+/**
+ * Safe clipboard copy that works on LAN HTTP (non-secure) environments.
+ */
+export function safeCopy(text: string, onDone?: (label: string) => void) {
+  const legacy = () => {
+    const el = document.createElement('textarea')
+    el.value = text
+    el.style.cssText = 'position:fixed;opacity:0;top:0;left:0;width:1px;height:1px'
+    document.body.appendChild(el)
+    el.select()
+    try { document.execCommand('copy') } catch {}
+    document.body.removeChild(el)
+    onDone?.('Copied!')
+  }
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).then(() => onDone?.('Copied!')).catch(legacy)
+  } else {
+    legacy()
+  }
+}
+
+/**
+ * Authenticated file download that sends the Authorization header.
+ */
+export async function downloadWithAuth(url: string, filename: string, onStart?: () => void, onEnd?: () => void) {
+  onStart?.()
+  try {
+    const token = localStorage.getItem('token')
+    const res = await fetch(url, {
+      headers: token ? { Authorization: `Bearer ${token}` } : {}
+    })
+    if (!res.ok) throw new Error(`${res.status} ${res.statusText}`)
+    const blob = await res.blob()
+    const objUrl = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = objUrl
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    document.body.removeChild(a)
+    setTimeout(() => URL.revokeObjectURL(objUrl), 5000)
+  } catch (err: any) {
+    alert(`Download failed: ${err.message}`)
+  } finally {
+    onEnd?.()
+  }
+}
+
+/**
+ * Returns a simple emoji icon based on the cloud storage URL.
+ */
+export function cloudIcon(url: string) {
+  const u = url.toLowerCase()
+  if (u.includes('drive.google')) return '📁'
+  if (u.includes('dropbox')) return '📦'
+  if (u.includes('wetransfer')) return '✈️'
+  if (u.includes('icloud')) return '☁️'
+  return '🔗'
+}

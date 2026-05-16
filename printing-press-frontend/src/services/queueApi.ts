@@ -77,13 +77,13 @@ export const queueApi = {
     return res.data
   },
 
-  getGeneralPool: async () => {
-    const res = await api.get('/api/queue/general-pool')
+  getGeneralPool: async (search: string = '') => {
+    const res = await api.get(`/api/queue/general-pool?search=${encodeURIComponent(search)}`)
     return res.data
   },
 
-  takeJob: async (jobId: string) => {
-    const res = await api.post('/api/queue/take-job', { jobId })
+  takeJob: async (jobId: string, takeAll: boolean = false) => {
+    const res = await api.post('/api/queue/take-job', { jobId, takeAll })
     return res.data
   },
 
@@ -127,7 +127,7 @@ export const queueApi = {
   },
 
   getAdminSessions: async () => {
-    const res = await api.get('/api/admin/queue/sessions')
+    const res = await api.get(`/api/admin/queue/sessions?t=${Date.now()}`)
     return res.data
   },
 

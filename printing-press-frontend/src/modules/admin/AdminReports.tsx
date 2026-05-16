@@ -78,6 +78,7 @@ export default function AdminReports() {
         start: new Date().toISOString().split('T')[0],
         end: new Date().toISOString().split('T')[0]
     })
+    const [showOnlyManualPicks, setShowOnlyManualPicks] = useState(false)
 
     // Formatting durations to "5m 20s" style
     const formatDuration = (ms: number) => {
@@ -128,6 +129,21 @@ export default function AdminReports() {
         enabled: activeTab === 'JOURNAL',
         refetchInterval: 60000
     })
+
+    const filteredJournal = useMemo(() => {
+        if (!journalData) return []
+        if (!showOnlyManualPicks) return journalData
+        return journalData.filter(job => 
+            job.reassignments.some(r => r.reason.includes('[FIND JOB]'))
+        )
+    }, [journalData, showOnlyManualPicks])
+
+    const manualPickCount = useMemo(() => {
+        if (!journalData) return 0
+        return journalData.filter(job => 
+            job.reassignments.some(r => r.reason.includes('[FIND JOB]'))
+        ).length
+    }, [journalData])
 
     const staffData = reportData?.staff || []
     const jobSummary = reportData?.jobSummary
@@ -360,8 +376,47 @@ export default function AdminReports() {
                                 onChange={(e) => setDateRange(prev => ({ ...prev, start: e.target.value }))}
                             />
                         </div>
+                        
+                        <div 
+                            className={`manual-pick-toggle ${showOnlyManualPicks ? 'active' : ''}`}
+                            onClick={() => setShowOnlyManualPicks(!showOnlyManualPicks)}
+                            style={{ 
+                                background: showOnlyManualPicks ? '#fef2f2' : 'white', 
+                                padding: '0.75rem 1.25rem', 
+                                borderRadius: '1rem', 
+                                border: `1px solid ${showOnlyManualPicks ? '#ef4444' : '#e2e8f0'}`, 
+                                display: 'inline-flex', 
+                                alignItems: 'center', 
+                                gap: '0.75rem',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                boxShadow: showOnlyManualPicks ? '0 4px 6px -1px rgba(239, 68, 68, 0.1)' : 'none'
+                            }}
+                        >
+                            <div style={{ 
+                                width: '10px', 
+                                height: '10px', 
+                                borderRadius: '50%', 
+                                background: '#ef4444',
+                                boxShadow: '0 0 0 4px rgba(239, 68, 68, 0.1)'
+                            }} />
+                            <span style={{ fontSize: '0.8125rem', fontWeight: 700, color: showOnlyManualPicks ? '#ef4444' : '#64748b' }}>
+                                {showOnlyManualPicks ? 'Showing Only Manual Picks' : 'Filter Manual Picks'}
+                            </span>
+                            <div style={{ 
+                                background: showOnlyManualPicks ? '#ef4444' : '#f1f5f9', 
+                                color: showOnlyManualPicks ? 'white' : '#64748b',
+                                padding: '2px 8px',
+                                borderRadius: '20px',
+                                fontSize: '0.7rem',
+                                fontWeight: 800
+                            }}>
+                                {manualPickCount}
+                            </div>
+                        </div>
+
                         <div style={{ fontSize: '0.8rem', color: '#94a3b8', fontWeight: 600 }}>
-                            Showing detailed job logs for {new Date(dateRange.start).toLocaleDateString()}
+                            {showOnlyManualPicks ? 'Showing manual "Find Job" interceptions' : `Showing all ${journalData?.length || 0} job logs`} for {new Date(dateRange.start).toLocaleDateString()}
                         </div>
                     </div>
 
@@ -383,14 +438,14 @@ export default function AdminReports() {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    {!journalData || journalData.length === 0 ? (
+                                    {!filteredJournal || filteredJournal.length === 0 ? (
                                         <tr>
                                             <td colSpan={5} style={{ textAlign: 'center', padding: '5rem', color: '#94a3b8', fontWeight: 600 }}>
-                                                No activity recorded for this date.
+                                                {showOnlyManualPicks ? 'No manual "Find Job" picks detected for this date.' : 'No activity recorded for this date.'}
                                             </td>
                                         </tr>
                                     ) : (
-                                        journalData.map((job) => (
+                                        filteredJournal.map((job) => (
                                             <tr key={job._id}>
                                                 <td>
                                                     <span className="email-cell">{job.customerEmail}</span>
