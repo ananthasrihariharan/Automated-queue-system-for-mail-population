@@ -2,9 +2,13 @@ const express = require('express')
 const router = express.Router()
 const jwt = require('jsonwebtoken')
 
-const User = require('../models/User')
+const { User } = require('../repositories')
 
 const bcrypt = require('bcryptjs')
+
+const resolveQuery = async (query) => (
+  query && typeof query.select === 'function' ? query.select('+password') : query
+)
 
 router.post('/', async (req, res) => {
   try {
@@ -14,12 +18,12 @@ router.post('/', async (req, res) => {
       return res.status(400).json({ message: 'Phone and password required' })
     }
 
-    let user = await User.findOne({ phone, isActive: true }).select('+password')
+    let user = await resolveQuery(User.findOne({ phone, isActive: true }))
     let isCustomer = false
 
     if (!user) {
-      const Customer = require('../models/Customer')
-      user = await Customer.findOne({ phone }).select('+password')
+      const { Customer } = require('../repositories')
+      user = await resolveQuery(Customer.findOne({ phone }))
       if (user) isCustomer = true
     }
 
@@ -37,8 +41,12 @@ router.post('/', async (req, res) => {
     }
 
     if (!isCustomer) {
-      user.lastLoginAt = new Date()
-      await user.save()
+      if (typeof user.save === 'function') {
+        user.lastLoginAt = new Date()
+        await user.save()
+      } else if (typeof User.updateLastLogin === 'function') {
+        await User.updateLastLogin(user._id || user.id)
+      }
     }
 
     // Recover roles from legacy 'role' field if 'roles' array is empty
@@ -56,11 +64,23 @@ router.post('/', async (req, res) => {
       return res.status(401).json({ message: 'No roles assigned to this user' })
     }
 
-    const payload = { roles: roles }
+    const LEGACY_ROLE_ALIASES = {
+      'FINISHING CUTTING': 'FINISHING_CUTTING',
+      'FINISHING DIE CUTTING': 'FINISHING_DIE_CUTTING',
+      'FINISHING CREASING': 'FINISHING_CREASING',
+      'FINISHING CORNER CUT': 'FINISHING_CORNER_CUT',
+      'FINISHING CORNER CUTTING': 'FINISHING_CORNER_CUT',
+    }
+    const normalizedRoles = roles.map((r) => {
+      const upper = String(r || '').trim().toUpperCase()
+      return LEGACY_ROLE_ALIASES[upper] || upper.replace(/\s+/g, '_')
+    })
+
+    const payload = { roles: normalizedRoles }
     if (isCustomer) {
-      payload.customerId = user._id
+      payload.customerId = user._id || user.id
     } else {
-      payload.userId = user._id
+      payload.userId = user._id || user.id
     }
 
     const token = jwt.sign(
@@ -74,7 +94,7 @@ router.post('/', async (req, res) => {
       user: {
         id: user._id.toString(),
         name: user.name,
-        roles: roles
+        roles: normalizedRoles
       }
     })
   } catch (err) {
@@ -84,3 +104,4 @@ router.post('/', async (req, res) => {
 })
 
 module.exports = router
+

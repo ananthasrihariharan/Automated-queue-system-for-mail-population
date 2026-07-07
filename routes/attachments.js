@@ -3,11 +3,9 @@ const router = express.Router()
 const archiver = require('archiver')
 const fs = require('fs')
 const path = require('path')
-const QueueJob = require('../models/QueueJob')
-const Job = require('../models/Job')
+const { QueueJob } = require('../repositories')
+const { Job } = require('../repositories')
 const auth = require('../middleware/auth')
-
-const mongoose = require('mongoose')
 
 /**
  * GET /jobs/:id/download-all
@@ -23,7 +21,7 @@ router.get('/:id/download-all', auth, async (req, res) => {
 
     const pathService = require('../services/pathService')
 
-    if (mongoose.Types.ObjectId.isValid(id)) {
+    if (!isNaN(Number(id))) {
       job = await QueueJob.findById(id)
     }
 
@@ -31,11 +29,10 @@ router.get('/:id/download-all', auth, async (req, res) => {
       customerPrefix = (job.customerEmail || 'unknown').split('@')[0]
       folderPath = pathService.resolveJobFolder(job)
     } else {
-      // Try finding by _id in Job model (Prepress Jobs)
-      if (mongoose.Types.ObjectId.isValid(id)) {
+      if (!isNaN(Number(id))) {
         job = await Job.findById(id)
       }
-      
+
       if (!job) {
         // Try finding by jobId in Job model
         job = await Job.findOne({ jobId: id })
@@ -60,7 +57,7 @@ router.get('/:id/download-all', auth, async (req, res) => {
     const isAssigned = String(job.assignedTo) === String(user._id)
     const isPinned = String(job.pinnedToStaff) === String(user._id)
     
-    // 🛡️ SECURITY CHECK: Broad access for staff/admins; restricted for others
+    // ðŸ›¡ï¸ SECURITY CHECK: Broad access for staff/admins; restricted for others
     if (!isAdmin && !isStaff && !isAssigned && !isPinned) {
        console.warn(`[Security] Unauthorized ZIP download attempt by ${user.email} for job ${id}`)
        return res.status(403).json({ message: 'Access Denied: You are not authorized for this job' })
@@ -119,3 +116,4 @@ router.get('/:id/download-all', auth, async (req, res) => {
 })
 
 module.exports = router
+

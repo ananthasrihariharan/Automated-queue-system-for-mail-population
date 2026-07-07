@@ -1,0 +1,39 @@
+{
+  "compilerOptions": {
+    "allowJs": true,
+    "checkJs": false,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "esModuleInterop": true,
+    "moduleResolution": "bundler",
+    "target": "ES2022",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "strict": false,
+    "baseUrl": ".",
+    "ignoreDeprecations": "5.0",
+    "paths": {
+      "@core/*": ["printing-press-frontend/src/*"],
+      "@modules/*": ["modules/*"],
+      "react": ["printing-press-frontend/node_modules/@types/react", "printing-press-frontend/node_modules/react"],
+      "react/jsx-runtime": ["printing-press-frontend/node_modules/@types/react/jsx-runtime", "printing-press-frontend/node_modules/react/jsx-runtime"],
+      "react-dom": ["printing-press-frontend/node_modules/@types/react-dom", "printing-press-frontend/node_modules/react-dom"],
+      "react-router-dom": ["printing-press-frontend/node_modules/react-router-dom"],
+      "@tanstack/react-query": ["printing-press-frontend/node_modules/@tanstack/react-query"],
+      "axios": ["printing-press-frontend/node_modules/axios"]
+    },
+    "typeRoots": [
+      "printing-press-frontend/node_modules/@types",
+      "node_modules/@types"
+    ]
+  },
+  "include": [
+    "modules/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "printing-press-frontend"
+  ]
+}
+

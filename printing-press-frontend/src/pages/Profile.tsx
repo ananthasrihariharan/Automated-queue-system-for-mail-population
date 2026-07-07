@@ -3,6 +3,9 @@ import { fetchProfile, updateProfile, changePassword } from '../services/api'
 import { QRCodeSVG } from 'qrcode.react'
 import './Profile.css'
 import { useNavigate } from 'react-router-dom'
+import { getAccessibleModules } from '../utils/navigationConfig'
+import { normalizeRoles } from '../utils/finishingRoles'
+import { useAuth } from '../hooks/useAuth'
 
 type ProfileData = {
     _id: string
@@ -14,10 +17,87 @@ type ProfileData = {
 }
 
 export default function ProfilePage() {
+    const { user: authUser } = useAuth()
     const [profile, setProfile] = useState<ProfileData | null>(null)
     const [loading, setLoading] = useState(true)
     const [isEditing, setIsEditing] = useState(false)
     const navigate = useNavigate()
+
+    // Use the same user ID as ModuleSidebar — from auth session, not profile response
+    const userId = authUser?.id || authUser?._id
+
+    const [orderedModules, setOrderedModules] = useState<any[]>([])
+    const [pinnedModulePath, setPinnedModulePath] = useState<string>('')
+    const dragIndex = { current: -1 }
+    const [savedOrder, setSavedOrder] = useState(false)
+
+    useEffect(() => {
+        if (profile) {
+            const roles = normalizeRoles(profile.roles || [])
+            const customOrderStr = localStorage.getItem(`sidebar-order-${userId}`)
+            const customOrder = customOrderStr ? JSON.parse(customOrderStr) : undefined
+            const modules = getAccessibleModules(roles, customOrder)
+            setOrderedModules(modules)
+
+            const savedPinned = localStorage.getItem(`mobile-pinned-module-${userId}`)
+            setPinnedModulePath(savedPinned || (modules[0]?.path || ''))
+        }
+    }, [profile])
+
+    const saveOrder = (newList: any[], showFlash = false) => {
+        setOrderedModules(newList)
+        const pathsOrder = newList.map(m => m.path)
+        localStorage.setItem(`sidebar-order-${userId}`, JSON.stringify(pathsOrder))
+        window.dispatchEvent(new Event('sidebar-order-updated'))
+        if (showFlash) {
+            setSavedOrder(true)
+            setTimeout(() => setSavedOrder(false), 2000)
+        }
+    }
+
+    const handleSaveOrderClick = () => {
+        saveOrder(orderedModules, true)
+    }
+
+    const handleResetOrder = () => {
+        if (!profile) return
+        localStorage.removeItem(`sidebar-order-${userId}`)
+        localStorage.removeItem(`mobile-pinned-module-${userId}`)
+        const roles = normalizeRoles(profile.roles || [])
+        const defaultModules = getAccessibleModules(roles, undefined)
+        saveOrder(defaultModules, true)
+        setPinnedModulePath(defaultModules[0]?.path || '')
+    }
+
+    const handlePinModuleChange = (path: string) => {
+        setPinnedModulePath(path)
+        localStorage.setItem(`mobile-pinned-module-${userId}`, path)
+        window.dispatchEvent(new Event('sidebar-order-updated'))
+    }
+
+    const moveItem = (index: number, direction: number) => {
+        const nextIdx = index + direction
+        if (nextIdx < 0 || nextIdx >= orderedModules.length) return
+        const newList = [...orderedModules]
+        const temp = newList[index]
+        newList[index] = newList[nextIdx]
+        newList[nextIdx] = temp
+        saveOrder(newList)
+    }
+
+    const handleDragStart = (index: number) => {
+        dragIndex.current = index
+    }
+
+    const handleDrop = (dropIndex: number) => {
+        const from = dragIndex.current
+        if (from === dropIndex || from === -1) return
+        const newList = [...orderedModules]
+        const [moved] = newList.splice(from, 1)
+        newList.splice(dropIndex, 0, moved)
+        dragIndex.current = -1
+        saveOrder(newList)
+    }
 
     // Form States
     const [formData, setFormData] = useState({ name: '', phone: '' })
@@ -94,10 +174,10 @@ export default function ProfilePage() {
                 <div className="profile-sidebar">
                     <div className="profile-avatar">{initial}</div>
                     <h2 className="profile-name">{profile.name}</h2>
-                    <div className="profile-role-badge">
-                        {profile.roles.join(' / ')}
-                    </div>
 
+                    <div className="profile-role-badge">
+                        {(profile.roles || []).join(' / ')}
+                    </div>
                     {!isEditing && (
                         <button className="profile-edit-btn" onClick={() => setIsEditing(true)}>
                             Edit Profile
@@ -173,6 +253,171 @@ export default function ProfilePage() {
 
                             </div>
                         )}
+                    </div>
+
+                    {/* Sidebar Reordering Card */}
+                    <div className="profile-card no-print" style={{ marginTop: '2rem' }}>
+                        <div className="card-title">
+                            <svg width="24" height="24" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 6h16M4 12h16m-7 6h7" /></svg>
+                            Sidebar Menu Customization
+                        </div>
+                        <p style={{ fontSize: '0.85rem', color: '#64748b', marginBottom: '1.25rem' }}>
+                            Adjust the order of navigation links in your left sidebar. Changes are applied instantly.
+                        </p>
+
+                        <div className="reorder-list" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                            {orderedModules.map((m, idx) => (
+                                <div
+                                    key={m.role}
+                                    draggable
+                                    onDragStart={() => handleDragStart(idx)}
+                                    onDragOver={(e) => e.preventDefault()}
+                                    onDrop={() => handleDrop(idx)}
+                                    style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '0.65rem 0.75rem',
+                                        background: '#f8fafc',
+                                        border: '1px solid #e2e8f0',
+                                        borderRadius: '6px',
+                                        cursor: 'grab',
+                                        transition: 'background 0.15s, box-shadow 0.15s',
+                                        userSelect: 'none'
+                                    }}
+                                    onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                                    onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
+                                >
+                                    {/* Drag handle grip icon */}
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+                                        <span style={{ color: '#94a3b8', display: 'flex', cursor: 'grab', paddingRight: '0.15rem' }}>
+                                            <svg width="14" height="14" fill="currentColor" viewBox="0 0 24 24">
+                                                <circle cx="9" cy="6" r="2"/><circle cx="15" cy="6" r="2"/>
+                                                <circle cx="9" cy="12" r="2"/><circle cx="15" cy="12" r="2"/>
+                                                <circle cx="9" cy="18" r="2"/><circle cx="15" cy="18" r="2"/>
+                                            </svg>
+                                        </span>
+                                        <span style={{ color: '#64748b', fontSize: '0.875rem', display: 'flex', alignItems: 'center' }}>{m.icon}</span>
+                                        <span style={{ fontWeight: 600, fontSize: '0.85rem', color: '#0f172a' }}>{m.label}</span>
+                                    </div>
+                                    {/* Up/Down buttons as keyboard fallback */}
+                                    <div style={{ display: 'flex', gap: '0.25rem' }}>
+                                        <button
+                                            type="button"
+                                            disabled={idx === 0}
+                                            onClick={() => moveItem(idx, -1)}
+                                            style={{
+                                                padding: '0.2rem 0.45rem',
+                                                fontSize: '0.7rem',
+                                                borderRadius: '4px',
+                                                border: '1px solid #cbd5e1',
+                                                background: '#fff',
+                                                cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                                opacity: idx === 0 ? 0.35 : 0.8,
+                                                lineHeight: 1
+                                            }}
+                                            title="Move Up"
+                                        >▲</button>
+                                        <button
+                                            type="button"
+                                            disabled={idx === orderedModules.length - 1}
+                                            onClick={() => moveItem(idx, 1)}
+                                            style={{
+                                                padding: '0.2rem 0.45rem',
+                                                fontSize: '0.7rem',
+                                                borderRadius: '4px',
+                                                border: '1px solid #cbd5e1',
+                                                background: '#fff',
+                                                cursor: idx === orderedModules.length - 1 ? 'not-allowed' : 'pointer',
+                                                opacity: idx === orderedModules.length - 1 ? 0.35 : 0.8,
+                                                lineHeight: 1
+                                            }}
+                                            title="Move Down"
+                                        >▼</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+
+                        {/* Mobile pinned module dropdown (only shown if user has 3+ modules) */}
+                        {orderedModules.length > 2 && (
+                            <div style={{ marginTop: '1.25rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                                <label style={{ display: 'block', fontSize: '0.75rem', color: '#6b7280', fontWeight: 600, textTransform: 'uppercase', marginBottom: '0.35rem' }}>
+                                    Mobile Pinned Module
+                                </label>
+                                <p style={{ fontSize: '0.75rem', color: '#64748b', marginBottom: '0.5rem' }}>
+                                    Choose one module to display directly on your mobile bottom navigation bar.
+                                </p>
+                                <select
+                                    value={pinnedModulePath}
+                                    onChange={e => handlePinModuleChange(e.target.value)}
+                                    style={{
+                                        width: '100%',
+                                        padding: '0.5rem 0.75rem',
+                                        fontSize: '0.85rem',
+                                        borderRadius: '6px',
+                                        border: '1px solid #cbd5e1',
+                                        background: '#fff',
+                                        color: '#0f172a',
+                                        fontWeight: 600,
+                                        cursor: 'pointer'
+                                    }}
+                                >
+                                    {orderedModules.map(m => (
+                                        <option key={m.role} value={m.path}>
+                                            {m.label}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )}
+
+                        {/* Save / Reset buttons */}
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', marginTop: '1.25rem', justifyContent: 'flex-end' }}>
+                            <button
+                                type="button"
+                                onClick={handleResetOrder}
+                                style={{
+                                    padding: '0.5rem 1.1rem',
+                                    fontSize: '0.82rem',
+                                    fontWeight: 600,
+                                    borderRadius: '6px',
+                                    border: '1px solid #cbd5e1',
+                                    background: '#f8fafc',
+                                    color: '#475569',
+                                    cursor: 'pointer'
+                                }}
+                            >
+                                Reset to Default
+                            </button>
+                            <button
+                                type="button"
+                                onClick={handleSaveOrderClick}
+                                style={{
+                                    padding: '0.5rem 1.4rem',
+                                    fontSize: '0.85rem',
+                                    fontWeight: 700,
+                                    borderRadius: '6px',
+                                    border: 'none',
+                                    background: savedOrder ? '#22c55e' : '#2563eb',
+                                    color: '#fff',
+                                    cursor: 'pointer',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '0.4rem',
+                                    transition: 'background 0.3s ease'
+                                }}
+                            >
+                                {savedOrder ? (
+                                    <>
+                                        <svg width="15" height="15" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" /></svg>
+                                        Saved!
+                                    </>
+                                ) : (
+                                    'Save Order'
+                                )}
+                            </button>
+                        </div>
                     </div>
 
                     {/* Walk-in QR Code Card (Only for Staff) */}

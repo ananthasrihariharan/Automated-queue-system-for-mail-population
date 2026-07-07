@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
-const User = require('../models/User');
-const QueueJob = require('../models/QueueJob');
+const { User } = require('../repositories');
+const { QueueJob } = require('../repositories');
 const eventBus = require('../services/eventBus');
 const path = require('path');
 const fileWatcher = require('../services/fileWatcher');
@@ -120,7 +120,7 @@ router.post('/sync-walkin-job', checkInternalAuth, async (req, res) => {
 // 3. Get System Settings (for Microservice sync)
 router.get('/settings', checkInternalAuth, async (req, res) => {
     try {
-        const SystemConfig = require('../models/SystemConfig');
+        const { SystemConfig } = require('../repositories');
         const config = await SystemConfig.findOne({ key: 'walkinGeoRequired' });
         res.json({ walkinGeoRequired: config ? config.value : true });
     } catch (err) {
@@ -129,3 +129,4 @@ router.get('/settings', checkInternalAuth, async (req, res) => {
 });
 
 module.exports = router;
+

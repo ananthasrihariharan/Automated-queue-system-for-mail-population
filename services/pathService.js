@@ -168,7 +168,7 @@ class PathService {
 
       for (const p of paths) {
         if (fs.existsSync(p)) {
-          // 🧹 Traversal check: ensure the resolved path is inside the root
+          // ðŸ§¹ Traversal check: ensure the resolved path is inside the root
           const normalized = path.resolve(p);
           const absoluteRoot = path.resolve(root);
           if (normalized.toLowerCase().startsWith(absoluteRoot.toLowerCase())) {
@@ -182,3 +182,4 @@ class PathService {
 }
 
 module.exports = new PathService();
+

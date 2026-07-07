@@ -10,6 +10,8 @@ export interface JobCardState {
         creasing: boolean;
         cornerCut: boolean;
         binding: boolean;
+        foil: boolean;
+        idCard: boolean;
     };
     vcBox: { count: string };
     binding: {
@@ -20,6 +22,7 @@ export interface JobCardState {
         wiroBindingQty: string;
         pouchLaminationQty: string;
         specialQty: string;
+        specialDesc: string;
         date: string;
         centerPin: boolean;
         perfect: boolean;
@@ -63,6 +66,7 @@ export interface JobCardState {
     };
     creasingPerforation: {
         noOfSheets: string;
+        noOfStock: string;
         date: string;
         creasing: boolean;
         creasingNo: string;
@@ -70,6 +74,17 @@ export interface JobCardState {
         perforationNo: string;
         wheelPerforation: boolean;
         wheelPerforationNo: string;
+    };
+    foil: {
+        type: string;
+        qty: string;
+    };
+    idCard: {
+        fusing: boolean;
+        fusingType: string;
+        fusingQty: string;
+        holes: boolean;
+        holesType: string;
     };
 }
 
@@ -84,7 +99,9 @@ export const useJobCardForm = () => {
             ncBox: false,
             creasing: false,
             cornerCut: false,
-            binding: false
+            binding: false,
+            foil: false,
+            idCard: false
         },
         // VC Box Section (Top checkbox only)
         vcBox: {
@@ -99,6 +116,7 @@ export const useJobCardForm = () => {
             wiroBindingQty: '',
             pouchLaminationQty: '',
             specialQty: '',
+            specialDesc: '',
             date: '',
             centerPin: false,
             perfect: false,
@@ -121,7 +139,7 @@ export const useJobCardForm = () => {
         },
         // Cutting section
         cutting: {
-            noOfCutting: '',
+            noOfCutting: '1',
             date: '',
             sizes: ['']
         },
@@ -147,6 +165,7 @@ export const useJobCardForm = () => {
         // Creasing & Perforation section
         creasingPerforation: {
             noOfSheets: '',
+            noOfStock: '',
             date: '',
             creasing: false,
             creasingNo: '',
@@ -154,6 +173,19 @@ export const useJobCardForm = () => {
             perforationNo: '',
             wheelPerforation: false,
             wheelPerforationNo: ''
+        },
+        // Foil section
+        foil: {
+            type: '',
+            qty: ''
+        },
+        // ID Card section
+        idCard: {
+            fusing: false,
+            fusingType: 'GLOSSY',
+            fusingQty: '',
+            holes: false,
+            holesType: 'square'
         }
     });
 

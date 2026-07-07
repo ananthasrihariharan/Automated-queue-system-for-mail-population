@@ -2,8 +2,8 @@ import { api } from './api'
 
 export const queueApi = {
   // ── Staff Endpoints ────────────────────────────────
-  startSession: async () => {
-    const res = await api.post('/api/queue/start-session')
+  startSession: async (options?: { autoAssign?: boolean }) => {
+    const res = await api.post('/api/queue/start-session', options)
     return res.data
   },
 
@@ -57,8 +57,13 @@ export const queueApi = {
     return res.data
   },
 
-  pauseJob: async (jobId: string, fetchNext: boolean = true) => {
-    const res = await api.post(`/api/queue/jobs/${jobId}/pause`, { fetchNext })
+  getOlderHistory: async (search: string = '') => {
+    const res = await api.get(`/api/queue/history-older?search=${encodeURIComponent(search)}`)
+    return res.data
+  },
+
+  pauseJob: async (jobId: string, fetchNext: boolean = true, isHardPin: boolean = false, reason: string = '') => {
+    const res = await api.post(`/api/queue/jobs/${jobId}/pause`, { fetchNext, isHardPin, reason })
     return res.data
   },
 
@@ -223,6 +228,11 @@ export const queueApi = {
 
   bulkUpdateStatus: async (jobIds: string[], status: string) => {
     const res = await api.post('/api/admin/queue/jobs/bulk-status', { jobIds, status })
+    return res.data
+  },
+
+  bulkReassignJobs: async (jobIds: string[], data: { toStaffId: string | null; notes: string; forceMode?: 'PUSH' | 'PARK' }) => {
+    const res = await api.post('/api/admin/queue/jobs/bulk-reassign', { jobIds, ...data })
     return res.data
   },
 

@@ -1,5 +1,7 @@
 const express = require("express");
 const cors = require("cors");
+const compression = require("compression");
+const rateLimit = require("express-rate-limit");
 require("dotenv").config();
 const connectDB = require("./config/db");
 const path = require("path");
@@ -46,7 +48,7 @@ io.on("connection", (socket) => {
         if (!fromId || !toId || !message?.trim()) return;
 
         try {
-            const QueueMessage = require("./models/QueueMessage");
+            const { QueueMessage } = require("./repositories");
             const isBroadcast = String(toId).toLowerCase() === "all";
 
             const saved = await QueueMessage.create({
@@ -81,7 +83,7 @@ io.on("connection", (socket) => {
             // Update unread count for recipient
             if (!isBroadcast) {
                 try {
-                    const QueueUnread = require("./models/QueueUnread");
+                    const { QueueUnread } = require("./repositories");
                     const threadId = String(fromId).trim().toLowerCase();
                     await QueueUnread.findOneAndUpdate(
                         { userId: toId, threadId },
@@ -119,8 +121,39 @@ app.use(cors({
     credentials: true,
 }));
 
-app.use(express.json());
-app.get('/health', (req, res) => res.json({ status: 'Main System is UP', v: '1.0.6-live-debug' }));
+/* =======================
+   COMPRESSION
+======================= */
+app.use(compression());
+
+/* =======================
+   BODY PARSER (with size cap)
+======================= */
+app.use(express.json({ limit: '10mb' }));
+
+/* =======================
+   RATE LIMITING
+======================= */
+// Auth endpoints: 20 attempts per minute per IP
+const authLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    message: { message: 'Too many login attempts, please try again in a minute.' },
+});
+
+// Queue action endpoints: 120 req/min per IP (staff polling every ~3s × 20 staff)
+const queueLimiter = rateLimit({
+    windowMs: 60_000,
+    max: 120,
+    standardHeaders: true,
+    legacyHeaders: false,
+    skip: (req) => req.method === 'GET', // read-only polls are exempt; only writes are throttled
+    message: { message: 'Request rate exceeded, please slow down.' },
+});
+
+app.get('/health', (_req, res) => res.json({ status: 'Main System is UP', v: '1.0.6-live-debug' }));
 
 const axios = require('axios');
 async function checkWalkinService() {
@@ -160,27 +193,49 @@ app.use("/walkin-files", express.static(process.env.WALKIN_UPLOAD_PATH || path.j
 // ✅ SERVE REACT BUILD (THIS IS THE KEY)
 app.use(
     express.static(
-        path.join(__dirname, "printing-press-frontend", "dist")
+        path.join(__dirname, "printing-press-frontend", "dist"),
+        {
+            setHeaders: (res, filePath) => {
+                // Never cache index.html — ensures browser picks up new asset hashes after a build
+                if (filePath.endsWith('index.html')) {
+                    res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+                    res.setHeader('Pragma', 'no-cache');
+                    res.setHeader('Expires', '0');
+                }
+                const contentType = res.getHeader('Content-Type');
+                if (contentType && !contentType.includes('charset')) {
+                    if (filePath.endsWith('.js') || filePath.endsWith('.css') || filePath.endsWith('.html') || filePath.endsWith('.json')) {
+                        res.setHeader('Content-Type', `${contentType}; charset=utf-8`);
+                    }
+                }
+            }
+        }
     )
 );
+
 
 /* =======================
    API ROUTES
 ======================= */
-app.use("/api/prepress", require("./routes/prepress"));
-app.use("/api/customer", require("./routes/customer"));
-app.use("/api/customer-auth", require("./routes/customer-auth"));
-app.use("/api/login", require("./routes/login"));
-app.use("/api/cashier", require("./routes/cashier"));
-app.use("/api/admin", require("./routes/admin"));
-app.use("/api/admin", require("./routes/admin-users"));
-app.use("/api/admin/reports", require("./routes/reports"));
-app.use("/api/dispatch", require("./routes/dispatch"));
+app.use("/api/prepress", require("./modules/prepress/backend/prepress"));
+app.use("/api/customer", require("./modules/customer/backend/customer"));
+app.use("/api/customer-auth", authLimiter, require("./modules/customer/backend/customer-auth"));
+app.use("/api/login", authLimiter, require("./routes/login"));
+app.use("/api/cashier", require("./modules/cashier/backend/cashier"));
+app.use("/api/admin", require("./modules/admin/backend/admin"));
+app.use("/api/admin", require("./modules/admin/backend/admin-users"));
+app.use("/api/admin/reports", require("./modules/admin/backend/reports"));
+app.use("/api/dispatch", require("./modules/despatch/backend/dispatch"));
 app.use("/api/profile", require("./routes/profile"));
 app.use("/api/job-cards", require("./routes/jobCards"));
+app.use("/api/boards", require("./routes/board"));
+app.use("/api/machines", require("./routes/machine"));
+app.use("/api/press", require("./modules/press/backend/press"));
+app.use("/api/post-press", require("./modules/postpress/backend/post-press"));
+app.use("/api/finishing", require("./modules/finishing/backend/finishing"));
 
-app.use("/api/queue", require("./routes/queue"));
-app.use("/api/admin/queue", require("./routes/admin-queue"));
+app.use("/api/queue", queueLimiter, require("./routes/queue"));
+app.use("/api/admin/queue", require("./modules/admin/backend/admin-queue"));
 app.use("/api/messages", require("./routes/messages"));
 app.use("/api/attachments", require("./routes/attachments"));
 app.use("/api/whatsapp", require("./routes/whatsapp"));
@@ -192,6 +247,10 @@ app.use("/job-files", require("./routes/fileProxy"));
    SPA FALLBACK
 ======================= */
 app.get("*", (req, res) => {
+    // Never cache the SPA entry point — ensures new builds load the correct asset hashes
+    res.set('Cache-Control', 'no-cache, no-store, must-revalidate');
+    res.set('Pragma', 'no-cache');
+    res.set('Expires', '0');
     res.sendFile(
         path.join(__dirname, "printing-press-frontend", "dist", "index.html")
     );
@@ -223,7 +282,7 @@ connectDB().then(() => {
         } catch (err) {
             console.error('[Maintenance] Loop Error:', err.message);
         }
-        setTimeout(runMaintenance, 10000); // Run every 10 seconds
+        setTimeout(runMaintenance, 60000); // Run every 60 seconds (was 10s)
     };
     runMaintenance();
 

@@ -1,5 +1,5 @@
 const eventBus = require('./eventBus')
-const QueueJob = require('../models/QueueJob')
+const { queueJobRepo } = require('../repositories')
 
 /**
  * Shell for Audio Transcription Service.
@@ -37,3 +37,4 @@ class AudioTranscriptService {
 }
 
 module.exports = new AudioTranscriptService()
+

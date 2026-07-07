@@ -103,7 +103,7 @@
   font-weight: 600;
   color: #1e293b;
   background: #ffffff;
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
   appearance: none;
 }
 
@@ -150,7 +150,7 @@
   border-radius: 0.75rem;
   padding: 0 1rem;
   height: 40px;
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .date-filter-icon {
@@ -310,7 +310,7 @@
   font-size: 1.25rem;
   cursor: pointer;
   color: #475569;
-  transition: all 0.2s;
+  transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .close-btn:hover {

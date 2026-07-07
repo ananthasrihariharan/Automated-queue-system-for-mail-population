@@ -4,10 +4,10 @@ const path = require('path')
 const fs = require('fs')
 const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
-const QueueJob = require('../models/QueueJob')
+const { QueueJob } = require('../repositories')
 
 /**
- * GET /job-files/* — Secure Proxy for Legacy & Archive Job Files
+ * GET /job-files/* â€” Secure Proxy for Legacy & Archive Job Files
  * Handles files in N8N_WATCH_PATH and COMPLETED_JOBS_PATH
  */
 router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req, res) => {
@@ -56,8 +56,8 @@ router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req,
         a:hover{background:#eff6ff;color:#1d4ed8}
         .meta{font-size:0.8rem;color:#64748b;margin-bottom:2rem}
       </style></head><body>`
-      html += `<h2>📁 Folder: ${requestedPath}</h2>`
-      html += `<div class="meta">Secure Asset Proxy • Authenticated as ${req.user.name}</div>`
+      html += `<h2>ðŸ“ Folder: ${requestedPath}</h2>`
+      html += `<div class="meta">Secure Asset Proxy â€¢ Authenticated as ${req.user.name}</div>`
       html += `<a href="../">.. (Up)</a>`
       files.forEach(f => {
         const itemPath = path.join(req.originalUrl, f)
@@ -76,3 +76,4 @@ router.get('/*', auth, authorize(['ADMIN', 'PREPRESS', 'DISPATCH']), async (req,
 })
 
 module.exports = router
+

@@ -1,9 +1,9 @@
 const express = require('express')
 const router = express.Router()
 const customerAuth = require('../middleware/customerAuth')
-const QueueSession = require('../models/QueueSession')
-const QueueJob = require('../models/QueueJob')
-const User = require('../models/User')
+const { QueueSession } = require('../repositories')
+const { QueueJob } = require('../repositories')
+const { User } = require('../repositories')
 
 /**
  * GET /staff-status
@@ -65,3 +65,4 @@ router.get('/my-jobs', customerAuth, async (req, res) => {
 })
 
 module.exports = router
+

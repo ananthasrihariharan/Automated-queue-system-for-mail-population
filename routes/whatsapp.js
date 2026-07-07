@@ -5,9 +5,9 @@ const authorize = require('../middleware/authorize')
 const uploadAny = require('../middleware/uploadAny')
 const fs = require('fs')
 const path = require('path')
-const Customer = require('../models/Customer')
-const CustomerPreference = require('../models/CustomerPreference')
-const IngestionTask = require('../models/IngestionTask')
+const { Customer } = require('../repositories')
+const { CustomerPreference } = require('../repositories')
+const { IngestionTask } = require('../repositories')
 const eventBus = require('../services/eventBus')
 
 /**
@@ -40,10 +40,7 @@ router.post(
       // 0. BURST PROTECTION: Check for very recent tasks for this phone
       // This stops rapid double-clicks from creating two separate folders
       const recentTask = await IngestionTask.findOne({
-        $or: [
-          { folderPath: new RegExp(customerPhone, 'i') },
-          { subject: new RegExp(customerPhone, 'i') }
-        ],
+        folderPath: { $regex: customerPhone },
         createdAt: { $gte: new Date(Date.now() - 15 * 1000) }
       })
       if (recentTask) {
@@ -180,7 +177,7 @@ router.post(
  */
 router.get('/jobs/recent', auth, authorize('ADMIN', 'PREPRESS'), async (req, res) => {
   try {
-    const QueueJob = require('../models/QueueJob')
+    const { QueueJob } = require('../repositories')
     const jobs = await QueueJob.find({ type: 'WHATSAPP' })
       .sort({ createdAt: -1 })
       .limit(20)
@@ -194,3 +191,4 @@ router.get('/jobs/recent', auth, authorize('ADMIN', 'PREPRESS'), async (req, res
 })
 
 module.exports = router
+

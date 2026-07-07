@@ -1,0 +1,59 @@
+1. Release 3 is still too large because JobItem + Parcels + TaskLog + PackingOverride + DualWrite are all being changed in one deployment.
+
+2. jobWorkflow.js is still the single highest-risk component because 200+ embedded JSON access patterns must eventually be rewritten and can cause silent business logic regressions.
+
+3. responseAdapters.js becomes a long-term technical debt layer because it permanently emulates old Mongo object shapes instead of forcing proper relational consumption.
+
+4. prismaMongooseCompat.js still creates ORM abstraction mismatch because Prisma behavior and Mongoose behavior are fundamentally different and edge cases will keep appearing.
+
+5. Dual-write architecture still accepts unavoidable temporary inconsistency because Mongo writes can succeed while PostgreSQL writes fail before SyncFailureWorker catches up.
+
+6. SyncFailureQueue lacks full stack trace/error metadata which will make production debugging of Prisma failures harder during replay.
+
+7. syncVersion based conflict detection is weak because Mongo __v does not guarantee correct ordering under concurrent updates across services.
+
+8. WriteSyncLog.sourceHash conflict detection is underspecified because hashing strategy is not defined and inconsistent hashing can create false sync states.
+
+9. CustomerPhone and CustomerEmail normalization increases write complexity for a low-value gain because simple array storage was already operationally sufficient.
+
+10. Soft-delete Prisma middleware on $allOperations is risky because automatic query mutation can create hard-to-debug hidden filtering behavior.
+
+11. findUnique interception in soft-delete middleware can break Prisma semantics because unique lookups may unexpectedly return null when records are soft deleted.
+
+12. JobCard Release 2 still partially over-normalizes operational data because JobCard is almost always read as a single unit and decomposition adds unnecessary query complexity.
+
+13. JobItemProcess.processVariant remains weakly typed because it is still String and can allow invalid uncontrolled values like GLOSSY/MATTE typo variants.
+
+14. JobItemProcessDetail is too generic because multiple unrelated process structures are forced into one table causing sparse columns and schema ambiguity.
+
+15. ProcessDetailType enum is under-modeled because DIE_CUTTING_ROW, CUTTING_SIZE, and CORNER_FLAG have fundamentally different data structures.
+
+16. JobItem decomposition creates extremely heavy joins for dashboard queries and may perform worse than current JSONB querying under production load.
+
+17. Benchmarking only before Release 3 is insufficient because performance regression must be continuously measured after every release.
+
+18. DualWriteBase writes Mongo first without rollback strategy so MongoDB remains source of truth and PostgreSQL can silently lag behind.
+
+19. SyncFailureWorker re-reading current Mongo state can still miss intermediate states if multiple rapid updates happen before retry execution.
+
+20. Queue subsystem postponed to Release 5 creates architecture inconsistency because half the system becomes relational while queue still depends on legacy JSON design.
+
+21. Keeping QueueSession pinnedJobs and pausedJobs as JSON until Release 5 means queueEngine.js must later undergo another risky hot-path rewrite.
+
+22. Mongo read-only fallback after DB_MODE=postgres introduces operational complexity because both database infrastructures must still stay online.
+
+23. DB_FALLBACK=mongo-readonly can hide PostgreSQL production bugs because the system may silently fallback instead of forcing immediate failure visibility.
+
+24. Migration scripts depending on WriteSyncLog for idempotency can fail if partial writes happen before transaction boundaries are reached.
+
+25. Per-job transaction migration in Release 3 may become very slow when migrating large production datasets with deeply nested item/process structures.
+
+26. API compatibility adapters preserve old response shapes which delays proper refactoring and increases future maintenance burden.
+
+27. Existing frontend remains tightly coupled to Mongo-style nested object structure and no progressive frontend normalization strategy exists.
+
+28. No clear rollback strategy exists if Release 4 partially refactors jobWorkflow.js and business workflow logic starts failing mid-production.
+
+29. Too much reliance on Prisma include trees can create memory-heavy large object graphs when loading Jobs with Items + Processes + Parcels simultaneously.
+
+30. Entire architecture still underestimates total testing effort because every workflow module (Prepress, Press, Postpress, Dispatch, Billing, Queue, Reports) depends on these schema changes.

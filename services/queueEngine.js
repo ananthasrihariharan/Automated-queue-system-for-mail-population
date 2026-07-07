@@ -1,39 +1,127 @@
 /**
- * Queue Engine — Core blind assignment logic
+ * Queue Engine â€” Core blind assignment logic
  * 
  * Handles FIFO job assignment with priority sorting,
  * pin-aware skipping, and parallel walk-in slots.
  */
 
-const mongoose = require('mongoose')
 const fs = require('fs')
 const path = require('path')
-const QueueJob = require('../models/QueueJob')
-const QueueSession = require('../models/QueueSession')
-const CustomerPreference = require('../models/CustomerPreference')
-const QueueRequest = require('../models/QueueRequest')
-const SystemConfig = require('../models/SystemConfig')
-const JobEvent = require('../models/JobEvent')
-const IngestionTask = require('../models/IngestionTask')
-const QueueStats = require('../models/QueueStats')
-const QueueMessage = require('../models/QueueMessage')
+const { QueueJob } = require('../repositories')
+const { QueueSession } = require('../repositories')
+const { CustomerPreference } = require('../repositories')
+const { QueueRequest } = require('../repositories')
+const { SystemConfig } = require('../repositories')
+const { JobEvent } = require('../repositories')
+const { IngestionTask } = require('../repositories')
+const { QueueStats } = require('../repositories')
+const { QueueMessage } = require('../repositories')
 const eventBus = require('./eventBus')
 const statsService = require('./statsService')
+const prisma = require('../lib/prisma')
 
 /**
- * Per-staff in-memory assignment lock.
- * Prevents concurrent assignNextJob(staffId) calls from double-assigning
- * the same staff member when event sweeps fire simultaneously.
+ * Per-staff in-memory lock — prevents concurrent in-process calls for the
+ * SAME staff member from racing. Cross-process safety is handled at the DB
+ * level via FOR UPDATE SKIP LOCKED inside atomicClaimQueueJob / atomicClaimWalkin.
  */
 const assignmentLocks = new Set()
 
 /**
- * Global assignment semaphore.
- * Ensures that only one assignment cycle is actively evaluating candidates at a time.
- * This is crucial for protecting the "Clash Shield" logic when multiple staff members
- * request jobs simultaneously for the same customer.
+ * Atomically claim the best QUEUED non-walkin job for a staff member.
+ * The entire candidate selection (priority sort, pin filter, Clash Shield) and
+ * status flip happen inside one UPDATE statement — there is no window for a
+ * race between finding a candidate and claiming it.
+ *
+ * FOR UPDATE SKIP LOCKED: if two processes evaluate simultaneously, each will
+ * grab a different row rather than both targeting the same one.
+ *
+ * Returns the claimed job row, or null if no suitable job exists.
  */
-let assignmentSema = false;
+async function atomicClaimQueueJob(staffId) {
+  const id = Number(staffId);
+  const rows = await prisma.$queryRaw`
+    UPDATE "QueueJob"
+    SET
+      status        = 'ASSIGNED',
+      "assignedToId" = ${id},
+      "assignedAt"  = NOW(),
+      "updatedAt"   = NOW()
+    WHERE id = (
+      SELECT id FROM "QueueJob"
+      WHERE status = 'QUEUED'
+        AND type   != 'WALKIN'
+        AND (
+          "pinnedToStaffId" = ${id}
+          OR (
+            "pinnedToStaffId" IS NULL
+            AND ("reassignedFromId" IS NULL OR "reassignedFromId" != ${id})
+          )
+        )
+        -- Clash Shield: skip jobs whose customer is already handled by someone else
+        AND (
+          "customerEmail" IS NULL OR "customerEmail" = ''
+          OR "customerEmail" NOT IN (
+            SELECT DISTINCT c."customerEmail"
+            FROM   "QueueJob" c
+            WHERE  c.status IN ('ASSIGNED','IN_PROGRESS','PAUSED')
+              AND  c."assignedToId" != ${id}
+              AND  c."customerEmail" IS NOT NULL
+              AND  c."customerEmail" != ''
+          )
+        )
+        AND (
+          "customerPhone" IS NULL OR "customerPhone" = ''
+          OR "customerPhone" NOT IN (
+            SELECT DISTINCT p."customerPhone"
+            FROM   "QueueJob" p
+            WHERE  p.status IN ('ASSIGNED','IN_PROGRESS','PAUSED')
+              AND  p."assignedToId" != ${id}
+              AND  p."customerPhone" IS NOT NULL
+              AND  p."customerPhone" != ''
+          )
+        )
+      ORDER BY
+        CASE WHEN "pinnedToStaffId" = ${id} THEN 0 ELSE 1 END,
+        "priorityScore" DESC,
+        "queuePosition" ASC,
+        "createdAt"     ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING id
+  `;
+  return rows.length > 0 ? Number(rows[0].id) : null;
+}
+
+/**
+ * Atomically claim the best QUEUED walkin job for a staff member's secondary slot.
+ */
+async function atomicClaimWalkin(staffId) {
+  const id = Number(staffId);
+  const rows = await prisma.$queryRaw`
+    UPDATE "QueueJob"
+    SET
+      status        = 'ASSIGNED',
+      "assignedToId" = ${id},
+      "assignedAt"  = NOW(),
+      "updatedAt"   = NOW()
+    WHERE id = (
+      SELECT id FROM "QueueJob"
+      WHERE status = 'QUEUED'
+        AND type   = 'WALKIN'
+        AND ("pinnedToStaffId" = ${id} OR "pinnedToStaffId" IS NULL)
+      ORDER BY
+        CASE WHEN "pinnedToStaffId" = ${id} THEN 0 ELSE 1 END,
+        "priorityScore" DESC,
+        "createdAt"     ASC
+      FOR UPDATE SKIP LOCKED
+      LIMIT 1
+    )
+    RETURNING id
+  `;
+  return rows.length > 0 ? Number(rows[0].id) : null;
+}
 
 /**
  * Helper: Silently pause any active job for a staff member.
@@ -73,26 +161,15 @@ async function parkActiveJobs(staffId, session = null) {
   }
 }
 
-async function assignNextJob(staffId, existingSession = null) {
+async function assignNextJob(staffId, existingSession = null, options = {}) {
   const lockKey = String(staffId)
 
-  // 1. Stale Lock Protection: If the semaphore has been held for > 30s, assume it's stuck and release.
-  const now = Date.now();
-  if (assignmentSema && (now - assignmentSemaTimestamp > 30000)) {
-    console.warn(`[Engine] STALE SEMAPHORE DETECTED (Held for ${Math.round((now - assignmentSemaTimestamp)/1000)}s). Forcing release.`);
-    assignmentSema = false;
-  }
-
-  // Per-staff lock: if an assignment is already in-flight for this staff member,
-  // bail out immediately to prevent concurrent double-assignment races.
+  // Per-staff in-process lock — prevents duplicate in-flight calls for the same staff.
+  // Cross-process / cross-instance race safety comes from FOR UPDATE SKIP LOCKED in the DB.
   if (assignmentLocks.has(lockKey)) {
     console.log(`[Engine] Lock: assignNextJob already in-flight for staff ${lockKey}, skipping.`)
     return null
   }
-  if (assignmentSema) return null; // Global across-all-staff lock to protect search logic
-  
-  assignmentSema = true;
-  assignmentSemaTimestamp = Date.now();
   assignmentLocks.add(lockKey)
 
   try {
@@ -100,51 +177,17 @@ async function assignNextJob(staffId, existingSession = null) {
     if (!session) return null
     if (session.isQueuePaused) return null
 
-    // Auto-Pause Guardian: If they already have an active job, park it before assigning a new one!
+    // Auto-Pause Guardian: park any active job before taking a new one
     if (session.currentQueueJob || session.currentWalkinJob) {
       await parkActiveJobs(staffId, session)
     }
 
+    // Single atomic SQL: candidate selection (priority, pin, Clash Shield) + claim in one statement.
+    // No window exists between finding a candidate and owning it.
+    const claimedId = await atomicClaimQueueJob(staffId)
+    if (!claimedId) return null
 
-    // 1.1 Find all customer identities currently being handled by OTHER staff (Clash Shield)
-    const [clashedEmails, clashedPhones] = await Promise.all([
-      QueueJob.find({
-        status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] },
-        assignedTo: { $ne: staffId },
-        customerEmail: { $ne: null }
-      }).distinct('customerEmail'),
-      QueueJob.find({
-        status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'PAUSED'] },
-        assignedTo: { $ne: staffId },
-        customerPhone: { $ne: null }
-      }).distinct('customerPhone')
-    ])
-
-    // 1.2 Find the single best candidate that respects ALL rules (Priority, Pin, Clash Shield)
-    const jobCandidate = await QueueJob.findOne({
-      status: 'QUEUED',
-      type: { $ne: 'WALKIN' },
-      $or: [
-        { pinnedToStaff: staffId },
-        { pinnedToStaff: null, reassignedFrom: { $ne: staffId } }
-      ],
-      // Multi-layer Clash Shield
-      $and: [
-        { customerEmail: { $nin: clashedEmails } },
-        { customerPhone: { $nin: clashedPhones } }
-      ]
-    }).sort({ pinnedToStaff: -1, priorityScore: -1, queuePosition: 1, createdAt: 1 })
-      .select('_id customerEmail customerPhone')
-
-    if (!jobCandidate) return null;
-
-    // 1.3 Atomic Assignment
-    const job = await QueueJob.findOneAndUpdate(
-      { _id: jobCandidate._id, status: 'QUEUED' },
-      { $set: { status: 'ASSIGNED', assignedTo: staffId, assignedAt: new Date() } },
-      { new: true }
-    )
-
+    const job = await QueueJob.findById(claimedId)
     if (!job) return null
 
     // 1.4 BATCH LOCK: Immediately claim all other queued jobs from this customer
@@ -163,7 +206,7 @@ async function assignNextJob(staffId, existingSession = null) {
       {
         $set: {
           pinnedToStaff: staffId,
-          continuityContext: (job.continuityContext || '') + ` [Auto-reserved: Sequential Batching with Job #${job._id.toString().substring(18).toUpperCase()}]`
+          continuityContext: (job.continuityContext || '') + ` [Auto-reserved: Sequential Batching with Job #${String(job._id).slice(-6).toUpperCase()}]`
         }
       }
     )
@@ -174,7 +217,7 @@ async function assignNextJob(staffId, existingSession = null) {
       staffId 
     })
 
-    // 1.5 Update Session — ATOMIC DB-level claim
+    // 1.5 Update Session â€” ATOMIC DB-level claim
     // We allow the claim if currentQueueJob is null. 
     // The busy-check at the start of the function already handles the Walk-in clash.
     const claimedSession = await QueueSession.findOneAndUpdate(
@@ -197,9 +240,7 @@ async function assignNextJob(staffId, existingSession = null) {
     console.error('[Engine] Assign Failure:', err)
     return null
   } finally {
-    // Always release the locks, even on error, so the staff member can be re-attempted
     assignmentLocks.delete(lockKey)
-    assignmentSema = false;
   }
 }
 
@@ -217,29 +258,14 @@ async function assignNextWalkin(staffId, existingSession = null) {
     const session = existingSession || await QueueSession.findOne({ staffId, isActive: true });
     if (!session || session.currentWalkinJob) return null;
 
-    // Find the best walk-in candidate
-    // Priority: Pinned to this staff -> Unpinned general walk-ins -> FIFO
-    const jobCandidate = await QueueJob.findOne({
-      status: 'QUEUED',
-      type: 'WALKIN',
-      $or: [
-        { pinnedToStaff: staffId },
-        { pinnedToStaff: null }
-      ]
-    }).sort({ pinnedToStaff: -1, priorityScore: -1, createdAt: 1 });
+    // Single atomic SQL: select best walkin + claim with FOR UPDATE SKIP LOCKED
+    const claimedId = await atomicClaimWalkin(staffId);
+    if (!claimedId) return null;
 
-    if (!jobCandidate) return null;
-
-    // Atomic claim
-    const job = await QueueJob.findOneAndUpdate(
-      { _id: jobCandidate._id, status: 'QUEUED' },
-      { $set: { status: 'ASSIGNED', assignedTo: staffId, assignedAt: new Date() } },
-      { new: true }
-    );
-
+    const job = await QueueJob.findById(claimedId);
     if (!job) return null;
 
-    // Update Session — ATOMIC DB-level claim
+    // Update Session â€” ATOMIC DB-level claim
     const claimedSession = await QueueSession.findOneAndUpdate(
       { _id: session._id, currentWalkinJob: null },
       { $set: { currentWalkinJob: job._id } },
@@ -290,7 +316,7 @@ async function onJobComplete(staffId, jobId) {
   // 2. Clear Session Slots & Update Fairness Timer
   const [session] = await Promise.all([
     QueueSession.findOne({ staffId, isActive: true }),
-    require('../models/User').findByIdAndUpdate(staffId, { lastJobCompletedAt: new Date() })
+    require('../repositories').UserRepository.findByIdAndUpdate(staffId, { lastJobCompletedAt: new Date() })
   ]);
 
   if (session) {
@@ -370,7 +396,7 @@ async function onJobComplete(staffId, jobId) {
   }
 
   // 4. Emit completed (Moved up to avoid early return during Batch Promotion)
-  eventBus.emit('job:completed', { jobId: job._id, staffId })
+  eventBus.emit('job:completed', { jobId: job.id || job._id, staffId })
   await new Promise(resolve => setImmediate(resolve))
 
   // 5. Batch Promotion: Prioritize next job for SAME customer before global queue
@@ -435,7 +461,7 @@ async function onJobComplete(staffId, jobId) {
 /**
  * Handle staff login to queue system.
  */
-async function onStaffLogin(staffId) {
+async function onStaffLogin(staffId, options = {}) {
   const oldSessions = await QueueSession.find({ staffId, isActive: true })
   for (const os of oldSessions) {
     await onStaffLogout(staffId, 'Session Terminated by New Login (Refresh)')
@@ -446,11 +472,14 @@ async function onStaffLogin(staffId) {
       loginAt: new Date(),
       isActive: true
     }),
-    require('../models/User').findByIdAndUpdate(staffId, { lastJobCompletedAt: new Date() })
+    require('../repositories').UserRepository.findByIdAndUpdate(staffId, { lastJobCompletedAt: new Date() })
   ]);
 
-  const job = await assignNextJob(staffId)
-  eventBus.emit('session:started', { staffId, sessionId: session._id })
+  let job = null
+  if (options.autoAssign !== false && options.autoAssign !== 'false') {
+    job = await assignNextJob(staffId, null, { force: true })
+  }
+  eventBus.emit('session:started', { staffId, sessionId: session.id || session._id })
 
   return { session, job }
 }
@@ -471,7 +500,8 @@ async function onStaffLogout(staffId, reason) {
       job.assignedTo = null
       job.assignedAt = null
       // Clear pin on manual logout so others can take it; preserve on refresh/inactivity
-      job.pinnedToStaff = isManualLogout ? null : staffId 
+      const shouldKeepPin = !isManualLogout || job.isHardPinned;
+      job.pinnedToStaff = shouldKeepPin ? staffId : null
       if (reason) job.returnReason = reason
       await job.save()
     }
@@ -484,7 +514,8 @@ async function onStaffLogout(staffId, reason) {
     pJob.assignedTo = null
     pJob.assignedAt = null
     // Clear pin on manual logout so others can take it; preserve on refresh/inactivity
-    pJob.pinnedToStaff = isManualLogout ? null : staffId 
+    const shouldKeepPin = !isManualLogout || pJob.isHardPinned;
+    pJob.pinnedToStaff = shouldKeepPin ? staffId : null 
     if (reason) pJob.returnReason = reason
     await pJob.save()
   }
@@ -495,10 +526,47 @@ async function onStaffLogout(staffId, reason) {
       walkinJob.status = 'QUEUED'
       walkinJob.assignedTo = null
       walkinJob.assignedAt = null
-      walkinJob.pinnedToStaff = isManualLogout ? null : (walkinJob.pinnedToStaff || staffId)
+      walkinJob.pinnedToStaff = (isManualLogout && !walkinJob.isHardPinned) ? null : (walkinJob.pinnedToStaff || staffId)
       if (reason) walkinJob.returnReason = reason
       await walkinJob.save()
     }
+  }
+
+  // —————————————————————————————————— Stray ASSIGNED/IN_PROGRESS sweep ——————————————————————————————————
+  // Catches jobs flipped to ASSIGNED by the batch-continuity path in takeJob
+  // (those sibling jobs that appear in the frontend "pendingTray") but are NOT
+  // tracked in session.currentQueueJob / session.currentWalkinJob.
+  // Without this they stay ASSIGNED to a logged-out staff member for up to
+  // 90 minutes until the ghost-job cleanup cron fires.
+  const trackedSlotIds = [session.currentQueueJob, session.currentWalkinJob].filter(Boolean)
+  if (isManualLogout) {
+    // Non-hard-pinned stray: clear pin so others can pick up immediately
+    await QueueJob.updateMany(
+      { assignedTo: staffId, status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, isHardPinned: { $ne: true }, _id: { $nin: trackedSlotIds } },
+      { $set: { status: 'QUEUED', assignedTo: null, assignedAt: null, pinnedToStaff: null, returnReason: reason || 'Returned: staff logged out' } }
+    )
+    // Hard-pinned stray: return to pool but keep pin so it comes back on re-login
+    await QueueJob.updateMany(
+      { assignedTo: staffId, status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, isHardPinned: true, _id: { $nin: trackedSlotIds } },
+      { $set: { status: 'QUEUED', assignedTo: null, assignedAt: null, returnReason: reason || 'Returned: staff logged out (pinned)' } }
+    )
+    // —————————————————— Release soft-pinned QUEUED batch jobs on manual logout ———————————————————
+    // assignNextJob and takeJob batch-reserve sibling QUEUED jobs by setting
+    // pinnedToStaff = staffId. Without this sweep they remain locked to this
+    // staff member for up to 2 hours (stale-pin cleanup), blocking other
+    // designers from picking them up. Hard-pinned jobs are kept so they
+    // return to the same staff member on next login.
+    await QueueJob.updateMany(
+      { pinnedToStaff: staffId, status: 'QUEUED', isHardPinned: { $ne: true } },
+      { $set: { pinnedToStaff: null, returnReason: 'Released: staff logged out' } }
+    )
+  } else {
+    // Non-manual logout (session refresh / inactivity timeout):
+    // Keep jobs pinned to this staff member so they resume where they left off.
+    await QueueJob.updateMany(
+      { assignedTo: staffId, status: { $in: ['ASSIGNED', 'IN_PROGRESS'] }, _id: { $nin: trackedSlotIds } },
+      { $set: { status: 'QUEUED', assignedTo: null, assignedAt: null, pinnedToStaff: staffId, returnReason: reason || 'Session ended (preserve pin)' } }
+    )
   }
 
   session.isActive = false
@@ -507,7 +575,7 @@ async function onStaffLogout(staffId, reason) {
   session.currentWalkinJob = null
   await session.save()
 
-  eventBus.emit('session:ended', { staffId, sessionId: session._id, reason })
+  eventBus.emit('session:ended', { staffId, sessionId: session.id || session._id, reason })
 
   return session
 }
@@ -565,7 +633,7 @@ async function pinJob(jobId, targetStaffId) {
 
   eventBus.emit('job:pinned', { jobId, staffId: targetStaffId })
   if (wasReview) {
-    await statsService.recalculate().catch(err => console.error('[pin-review] stats recalc failed:', err.message))
+    statsService.schedule()
     assignIdleStaff().catch(() => { })
   }
 
@@ -639,7 +707,7 @@ async function reassignJob(jobId, fromStaffId, toStaffId, notes, options = {}) {
         const oldActiveJob = await QueueJob.findById(currentJobId)
         if (oldActiveJob && oldActiveJob.status === 'ASSIGNED') {
           oldActiveJob.status = 'PAUSED'
-          oldActiveJob.returnReason = `Interrupted by forced admin handoff (#${job._id.toString().substring(18)})`
+          oldActiveJob.returnReason = `Interrupted by forced admin handoff (#${String(job._id).slice(-6)})`
           await oldActiveJob.save()
           eventBus.emit('job:paused', { job: oldActiveJob, staffId: toStaffId, details: { isInterruption: true } })
         }
@@ -657,6 +725,7 @@ async function reassignJob(jobId, fromStaffId, toStaffId, notes, options = {}) {
       job.status = 'ASSIGNED'
       job.assignedAt = new Date()
       newSession.currentQueueJob = job._id
+      await newSession.save()
     }
   } else {
     // 2.5 Logic Guardian: Return to general pool if no owner is assigned
@@ -666,6 +735,7 @@ async function reassignJob(jobId, fromStaffId, toStaffId, notes, options = {}) {
     job.pinnedToStaff = null
   }
 
+  job.isHardPinned = false; // Always clear hard pin on admin reassignment
   await job.save()
 
   // 3. Batch Mode: Move all other pinned jobs for this customer
@@ -735,8 +805,8 @@ async function handleRequest(requestId, decision, adminAction, targetStaffId) {
         job.returnReason = `Reassignment Rejected: ${adminAction || 'No reason provided'}`
         await job.save()
 
-        // Ensure stats and dashboard are synced
-        await statsService.recalculate()
+        // Schedule a stats refresh — queue:reordered also triggers one via eventHandlers
+        statsService.schedule()
 
         eventBus.emit('queue:reordered', { reason: 'Reassignment Rejected' })
       }
@@ -915,7 +985,7 @@ async function requestReassignment(staffId, jobId, reason) {
 /**
  * Staff: Pause current active job
  */
-async function pauseJob(staffId, jobId, pauseQueue = false) {
+async function pauseJob(staffId, jobId, pauseQueue = false, isHardPin = false, reason = '') {
   const job = await QueueJob.findById(jobId)
   if (!job) throw new Error('Job not found')
   if (String(job.assignedTo) !== String(staffId)) throw new Error('Not authorized for this job')
@@ -924,7 +994,30 @@ async function pauseJob(staffId, jobId, pauseQueue = false) {
   const session = await QueueSession.findOne({ staffId, isActive: true })
   if (!session) throw new Error('No active session found')
 
+  let holdUntil = null
+  let holdBehavior = 'STAY_HOLD'
+
+  if (reason) {
+    const config = await SystemConfig.findOne({ key: 'hold_reasons' })
+    const reasons = config?.value || []
+    const reasonConfig = reasons.find(r => r.label === reason || r.id === reason)
+    if (reasonConfig) {
+      holdBehavior = reasonConfig.behavior || 'STAY_HOLD'
+      if (reasonConfig.timeLimit && reasonConfig.timeLimit > 0) {
+        holdUntil = new Date(Date.now() + reasonConfig.timeLimit * 60 * 1000)
+      }
+    }
+  }
+
   job.status = 'PAUSED'
+  job.pauseReason = reason || 'Manual Hold'
+  job.holdUntil = holdUntil
+  job.holdBehavior = holdBehavior
+
+  if (isHardPin) {
+    job.isHardPinned = true
+    job.pinnedToStaff = staffId
+  }
   await job.save()
 
   // Always clear the slot if this job was tracked (use String comparison safely)
@@ -981,6 +1074,7 @@ async function resumeJob(staffId, jobId) {
   await parkActiveJobs(staffId, session)
 
   job.status = 'IN_PROGRESS'
+  job.isHardPinned = false
   await job.save()
 
   session.currentQueueJob = job._id
@@ -996,35 +1090,45 @@ async function resumeJob(staffId, jobId) {
  * Updated: Handles Queue and Walkin slots independently.
  */
 async function assignIdleStaff() {
-  const User = require('../models/User');
-  const activeSessions = await QueueSession.find({ isActive: true })
-    .populate('staffId', 'lastJobCompletedAt');
+  const { User } = require('../repositories');
+  const activeSessions = await QueueSession.find({ isActive: true });
 
-  // FAIRNESS SORT: Longest idle first
+  if (activeSessions.length === 0) return [];
+
+  // FAIRNESS SORT: Longest idle first.
+  // Fetch lastJobCompletedAt separately to avoid .populate() overwriting session.staffId
+  // with a user object, which would break assignNextJob(staffId) calls below.
+  const numericIds = activeSessions.map(s => Number(s.staffId)).filter(n => n > 0);
+  const staffUsers = numericIds.length
+    ? await User.find({ _id: { $in: numericIds } }).select('lastJobCompletedAt').lean()
+    : [];
+  const staffByIdMap = new Map(staffUsers.map(u => [Number(u.id || u._id), u]));
+
   activeSessions.sort((a, b) => {
-    const staffA = a.staffId;
-    const staffB = b.staffId;
-    const timeA = new Date(staffA?.lastJobCompletedAt || 0).getTime();
-    const timeB = new Date(staffB?.lastJobCompletedAt || 0).getTime();
+    const timeA = new Date(staffByIdMap.get(Number(a.staffId))?.lastJobCompletedAt || 0).getTime();
+    const timeB = new Date(staffByIdMap.get(Number(b.staffId))?.lastJobCompletedAt || 0).getTime();
     return timeA - timeB; // Ascending: Oldest timestamp (longest idle) first
   });
 
   const results = [];
   for (const session of activeSessions) {
+    // session.staffId is always the original numeric ID — never a populated object
+    const staffId = Number(session.staffId);
+    if (!staffId) continue;
     try {
       // 1. Fill standard Queue slot if empty
       if (!session.currentQueueJob && !session.isQueuePaused) {
-        const qJob = await assignNextJob(session.staffId);
+        const qJob = await assignNextJob(staffId);
         if (qJob) results.push({ staffId: qJob.assignedTo, jobId: qJob._id, slot: 'queue' });
       }
 
       // 2. Fill Walkin slot if empty
       if (!session.currentWalkinJob) {
-        const wJob = await assignNextWalkin(session.staffId);
+        const wJob = await assignNextWalkin(staffId);
         if (wJob) results.push({ staffId: wJob.assignedTo, jobId: wJob._id, slot: 'walkin' });
       }
     } catch (err) {
-      console.error(`[Engine] assignIdleStaff failed for ${session.staffId}:`, err.message);
+      console.error(`[Engine] assignIdleStaff failed for ${staffId}:`, err.message);
     }
   }
 
@@ -1042,126 +1146,174 @@ async function assignIdleStaff() {
  */
 async function syncWorkloadToDb() {
   const sessions = await QueueSession.find({ isActive: true });
-  for (const session of sessions) {
+  if (!sessions.length) return;
+
+  const staffIds = sessions.map(s => Number(s.staffId)).filter(n => n > 0);
+
+  // 2 bulk reads instead of 2 reads per session
+  const [allPinned, allPaused] = await Promise.all([
+    QueueJob.find({ pinnedToStaff: { $in: staffIds }, status: 'QUEUED' })
+      .select('pinnedToStaff customerName emailSubject type createdAt')
+      .sort({ createdAt: 1 })
+      .lean(),
+    QueueJob.find({ assignedTo: { $in: staffIds }, status: 'PAUSED' })
+      .select('assignedTo customerName emailSubject type updatedAt')
+      .sort({ updatedAt: -1 })
+      .lean()
+  ]);
+
+  // Group results by staffId in memory
+  const pinnedByStaff = {};
+  const pausedByStaff = {};
+  for (const j of allPinned) {
+    const sid = Number(j.pinnedToStaff);
+    if (!pinnedByStaff[sid]) pinnedByStaff[sid] = [];
+    if (pinnedByStaff[sid].length < 100)
+      pinnedByStaff[sid].push({ _id: j._id, customerName: j.customerName || j.emailSubject || 'Unknown', type: j.type });
+  }
+  for (const j of allPaused) {
+    const sid = Number(j.assignedTo);
+    if (!pausedByStaff[sid]) pausedByStaff[sid] = [];
+    if (pausedByStaff[sid].length < 100)
+      pausedByStaff[sid].push({ _id: j._id, customerName: j.customerName || j.emailSubject || 'Unknown', type: j.type });
+  }
+
+  // Parallel writes — each session row is independent, no lock contention
+  await Promise.all(sessions.map(async session => {
     try {
-      const staffIdStr = session.staffId.toString();
-      const staffIdObj = mongoose.Types.ObjectId.isValid(staffIdStr) ? new mongoose.Types.ObjectId(staffIdStr) : null;
-      const idQuery = staffIdObj ? { $in: [staffIdObj, staffIdStr] } : staffIdStr;
-
-      const [pinned, paused] = await Promise.all([
-        QueueJob.find({ 
-          pinnedToStaff: idQuery, 
-          status: { $regex: /^QUEUED$/i } 
-        })
-          .select('jobId customerName emailSubject type createdAt')
-          .sort({ createdAt: 1 })
-          .limit(100)
-          .lean(),
-        QueueJob.find({ 
-          assignedTo: idQuery, 
-          status: { $regex: /^PAUSED$/i } 
-        })
-          .select('jobId customerName emailSubject type updatedAt')
-          .sort({ updatedAt: -1 })
-          .limit(100)
-          .lean()
-      ]);
-
-      session.pinnedJobs = (pinned || []).map(j => ({
-        _id: j._id,
-        jobId: j.jobId,
-        customerName: j.customerName || j.emailSubject || 'Unknown',
-        type: j.type
-      }));
-
-      session.pausedJobs = (paused || []).map(j => ({
-        _id: j._id,
-        jobId: j.jobId,
-        customerName: j.customerName || j.emailSubject || 'Unknown',
-        type: j.type
-      }));
-
+      const sid = Number(session.staffId);
+      session.pinnedJobs = pinnedByStaff[sid] || [];
+      session.pausedJobs = pausedByStaff[sid] || [];
       session.serverVersion = '1.0.6-trojan-sync';
       await session.save();
     } catch (err) {
       console.error(`[Syncer] Failed for staff ${session.staffId}:`, err.message);
     }
-  }
+  }));
 }
 
 async function cleanupStaleSessions() {
   const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000);
   try {
-    // 1. Finalize inactive sessions
+    // 1. Finalize inactive sessions (including those with lastSeenAt: null that are older than 90 mins)
     const staleSessions = await QueueSession.find({
       isActive: true,
-      lastSeenAt: { $lt: ninetyMinsAgo }
+      $or: [
+        { lastSeenAt: { $lt: ninetyMinsAgo } },
+        { lastSeenAt: null, loginAt: { $lt: ninetyMinsAgo } }
+      ]
     });
     for (const session of staleSessions) {
       await onStaffLogout(session.staffId, 'Inactivity (Heartbeat Timeout)');
     }
 
-    // 2. Ghost Job Recovery: Find jobs stuck in 'IN_PROGRESS' or 'ASSIGNED' with no active session
-    // UPDATED: Now respects "Batch Stream" — don't recover if part of an active session's batch!
-    const ghostJobs = await QueueJob.find({ status: { $in: ['ASSIGNED', 'IN_PROGRESS'] } });
-    let recoveredCount = 0;
-    for (const job of ghostJobs) {
-      const session = await QueueSession.findOne({ staffId: job.assignedTo, isActive: true });
-      
-      let isActuallyActive = false;
-      if (session) {
-        const isInSlot = (String(session.currentQueueJob) === String(job._id) || String(session.currentWalkinJob) === String(job._id));
+    // 1.5. Expired Hold Recovery: Find jobs in 'PAUSED' state with an expired hold timer
+    const expiredHoldJobs = await QueueJob.find({
+      status: 'PAUSED',
+      holdUntil: { $ne: null, $lt: new Date() }
+    });
+    
+    let expiredHoldCount = 0;
+    const affectedStaffIds = []; // Track who held the returned jobs for real-time notifications
+    for (const job of expiredHoldJobs) {
+      if (job.holdBehavior === 'RETURN_TO_POOL') {
+        console.log(`[Engine] Returning job ${job._id} to pool: hold timer expired`);
         
-        // BATCH AWARENESS: Even if not in slot, is it part of the active batch for this session?
-        // If the session has an active queue job, check if this ghost job shares the same customerEmail
-        let isInBatch = false;
-        if (!isInSlot && session.currentQueueJob && job.customerEmail) {
-            const activeQueueJob = await QueueJob.findById(session.currentQueueJob);
-            if (activeQueueJob && activeQueueJob.customerEmail === job.customerEmail) {
-                isInBatch = true;
-            }
-        }
-        
-        if (isInSlot || isInBatch) {
-            isActuallyActive = true;
-        }
-      }
+        // Capture the holder BEFORE clearing assignedTo — used for real-time socket notification
+        const holderId = job.assignedTo ? String(job.assignedTo) : null;
+        if (holderId) affectedStaffIds.push(holderId);
 
-      if (!isActuallyActive) {
-        console.log(`[Engine] Recovering ghost job ${job._id} (Assigned to ${job.assignedTo} who is offline/idle)`);
+        // Remove from the assigned staff's session slots if active
+        if (job.assignedTo) {
+          const session = await QueueSession.findOne({ staffId: job.assignedTo, isActive: true });
+          if (session) {
+            if (String(session.currentQueueJob) === String(job._id)) session.currentQueueJob = null;
+            if (String(session.currentWalkinJob) === String(job._id)) session.currentWalkinJob = null;
+            await session.save();
+          }
+        }
+        
+        job.lastPausedBy = job.assignedTo; // Preserve who held it for the audit trail
         job.status = 'QUEUED';
         job.assignedTo = null;
         job.assignedAt = null;
-        job.returnReason = 'System Recovery (Ghost Job Detected)';
+        job.pinnedToStaff = null;
+        job.isHardPinned = false;
+        job.returnReason = `Hold Expired: ${job.pauseReason || 'Timer reached'}`;
         await job.save();
-        recoveredCount++;
-
-        if (session) {
-          if (job.type === 'EMAIL') session.currentQueueJob = null;
-          else session.currentWalkinJob = null;
-          await session.save();
-        }
+        expiredHoldCount++;
+      } else {
+        // STAY_HOLD behavior: does not return to pool. Just clear the timer so we don't process it again.
+        job.holdUntil = null;
+        await job.save();
       }
+    }
+    
+    if (expiredHoldCount > 0) {
+      // Pass affectedStaffIds so the event handler can immediately notify those staff sockets
+      eventBus.emit('queue:reordered', { reason: 'Hold Timer Expired Recovery', affectedStaffIds: [...new Set(affectedStaffIds)] });
+      assignIdleStaff().catch(() => {});
+    }
+
+    // 2. Ghost Job Recovery: single LEFT JOIN finds all jobs whose staff has no active session.
+    // Replaces the previous N+1 (one session lookup per ghost job) with 2 queries total.
+    const ghostRows = await prisma.$queryRaw`
+      SELECT qj.id
+      FROM   "QueueJob" qj
+      LEFT JOIN "QueueSession" qs
+        ON  qs."staffId" = qj."assignedToId"
+        AND qs."isActive" = true
+      WHERE qj.status IN ('ASSIGNED', 'IN_PROGRESS')
+        AND qs.id IS NULL
+      LIMIT 50
+    `;
+    let recoveredCount = 0;
+    if (ghostRows.length > 0) {
+      const ghostIds = ghostRows.map(r => Number(r.id));
+      await prisma.queueJob.updateMany({
+        where: { id: { in: ghostIds } },
+        data: {
+          status: 'QUEUED',
+          assignedToId: null,
+          assignedAt: null,
+          returnReason: 'System Recovery (Ghost Job Detected)',
+          updatedAt: new Date()
+        }
+      });
+      recoveredCount = ghostIds.length;
+      console.log(`[Engine] Ghost recovery: cleared ${recoveredCount} jobs`);
     }
     if (recoveredCount > 0) {
       eventBus.emit('queue:reordered', { reason: 'Ghost Job Recovery' });
     }
 
-    // 2.5 Safety Release: Clear pins for offline staff
-    const twoHoursAgoLimit = new Date(Date.now() - 2 * 60 * 60 * 1000);
-    const stalePinnedJobs = await QueueJob.find({ status: 'QUEUED', pinnedToStaff: { $ne: null } });
+    // 2.5 Safety Release: clear pins for staff who have been offline 2+ hours.
+    // Single query: LEFT JOIN active sessions + check last-seen on any session — replaces N+1.
+    const stalePinRows = await prisma.$queryRaw`
+      SELECT qj.id
+      FROM   "QueueJob" qj
+      LEFT JOIN "QueueSession" active
+        ON  active."staffId" = qj."pinnedToStaffId"
+        AND active."isActive" = true
+      WHERE qj.status = 'QUEUED'
+        AND qj."pinnedToStaffId" IS NOT NULL
+        AND active.id IS NULL
+        AND qj."updatedAt" < NOW() - INTERVAL '2 hours'
+        AND NOT EXISTS (
+          SELECT 1 FROM "QueueSession" recent
+          WHERE recent."staffId"   = qj."pinnedToStaffId"
+            AND recent."lastSeenAt" > NOW() - INTERVAL '2 hours'
+        )
+      LIMIT 100
+    `;
     let releasedPins = 0;
-    for (const pJob of stalePinnedJobs) {
-      const activeSession = await QueueSession.findOne({ staffId: pJob.pinnedToStaff, isActive: true });
-      if (!activeSession) {
-        const lastSession = await QueueSession.findOne({ staffId: pJob.pinnedToStaff }).sort({ lastSeenAt: -1 });
-        if (!lastSession || lastSession.lastSeenAt < twoHoursAgoLimit) {
-          pJob.pinnedToStaff = null;
-          pJob.continuityContext = (pJob.continuityContext || '') + ' [System: Pin released due to staff inactivity]';
-          await pJob.save();
-          releasedPins++;
-        }
-      }
+    if (stalePinRows.length > 0) {
+      const pinIds = stalePinRows.map(r => Number(r.id));
+      await prisma.queueJob.updateMany({
+        where: { id: { in: pinIds } },
+        data: { pinnedToStaffId: null, updatedAt: new Date() }
+      });
+      releasedPins = pinIds.length;
     }
     if (releasedPins > 0) {
       eventBus.emit('queue:reordered', { reason: 'Stale Pin Release' });
@@ -1174,14 +1326,26 @@ async function cleanupStaleSessions() {
       { $set: { status: 'PENDING', error: 'Stale Task Recovered' } }
     );
 
-    // 3.5 Ghost Folder Recovery
-    const ghostCheckJobs = await QueueJob.find({ status: { $in: ['ADMIN_REVIEW', 'QUEUED'] } });
+    // 3.5 Ghost Folder Recovery — uses non-blocking fs.promises.access so the
+    // event loop is not frozen while the filesystem is checked.
+    const ghostCheckJobs = await QueueJob.find(
+      { status: { $in: ['ADMIN_REVIEW', 'QUEUED'] }, folderPath: { $ne: '' } }
+    ).select('_id folderPath').limit(200);
+
+    const missingIds = (
+      await Promise.all(
+        ghostCheckJobs.map(async j => {
+          if (!j.folderPath || !j.folderPath.trim()) return null;
+          try { await fs.promises.access(j.folderPath); return null; }
+          catch { return j._id; }
+        })
+      )
+    ).filter(Boolean);
+
     let wipedGhosts = 0;
-    for (const j of ghostCheckJobs) {
-      if (j.folderPath && j.folderPath.trim() !== '' && !fs.existsSync(j.folderPath)) {
-        await QueueJob.findByIdAndDelete(j._id);
-        wipedGhosts++;
-      }
+    if (missingIds.length > 0) {
+      await QueueJob.deleteMany({ _id: { $in: missingIds } });
+      wipedGhosts = missingIds.length;
     }
     if (wipedGhosts > 0) {
       eventBus.emit('queue:reordered', { reason: 'Ghost Folder Sweep' });
@@ -1297,8 +1461,18 @@ function removeEmptyParentsRecursive(dir, watchRoot) {
  * @param {boolean} takeAll - If true, pins all other waiting jobs from this customer
  */
 async function takeJob(staffId, jobId, takeAll = false) {
+  if (jobId === 'NEXT') {
+    const session = await QueueSession.findOne({ staffId, isActive: true })
+    if (!session) throw new Error('No active session found. Please enter the queue first.')
+    const job = await assignNextJob(staffId, session, { force: true });
+    if (!job) throw new Error('No jobs available in the queue.');
+    return { job, previousOwnerName: null };
+  }
+
   const lockKey = String(staffId);
-  if (assignmentLocks.has(lockKey)) return null;
+  if (assignmentLocks.has(lockKey)) {
+    throw new Error('LOCK_CONFLICT: An assignment is already in progress for this staff member. Please try again in a moment.');
+  }
   assignmentLocks.add(lockKey);
 
   try {
@@ -1312,8 +1486,8 @@ async function takeJob(staffId, jobId, takeAll = false) {
     const prevStatus = job.status;
     const oldAssignedTo = job.assignedTo;
     
-    // Status safety: Only allow taking jobs that are QUEUED, ASSIGNED (if by same staff), or PAUSED
-    if (job.status !== 'QUEUED' && job.status !== 'PAUSED' && (job.status !== 'ASSIGNED' || String(job.assignedTo) !== String(staffId))) {
+    // Status safety: Only allow taking jobs that are QUEUED, ASSIGNED (if by same staff), PAUSED, or ADMIN_REVIEW
+    if (job.status !== 'QUEUED' && job.status !== 'PAUSED' && job.status !== 'ADMIN_REVIEW' && (job.status !== 'ASSIGNED' || String(job.assignedTo) !== String(staffId))) {
        throw new Error(`Job is already being handled by someone else (Status: ${job.status})`);
     }
 
@@ -1332,7 +1506,7 @@ async function takeJob(staffId, jobId, takeAll = false) {
         
         // Emit takeover event before overwriting job fields
         eventBus.emit('job:taken-by-other', { 
-            jobId: job._id, 
+            jobId: job.id || job._id, 
             newStaffId: staffId, 
             oldStaffId: oldOwnerId 
         });
@@ -1341,7 +1515,7 @@ async function takeJob(staffId, jobId, takeAll = false) {
     // 3. Capture previous owner info for notification enrichment
     let previousOwnerName = null;
     if (oldOwnerId && String(oldOwnerId) !== String(staffId)) {
-        const User = require('../models/User');
+        const { User } = require('../repositories');
         const oldStaff = await User.findById(oldOwnerId).select('name').lean();
         previousOwnerName = oldStaff?.name || 'Another Staff';
     }
@@ -1351,6 +1525,7 @@ async function takeJob(staffId, jobId, takeAll = false) {
     job.assignedTo = staffId
     job.assignedAt = new Date()
     job.pinnedToStaff = null; // Always clear pin when taken
+    job.isHardPinned = false; // Reset hard pin when taken
     await job.save()
 
     // 5. Update session slots (Strict One-Job-At-A-Time)
@@ -1363,26 +1538,45 @@ async function takeJob(staffId, jobId, takeAll = false) {
     }
     await session.save()
 
-    // 6. BATCH MANAGEMENT: Conditionally pin all other waiting jobs from this same customer
+    // 6. BATCH MANAGEMENT: Conditionally pin/transfer all other active jobs from this same customer
     if (takeAll && (job.customerEmail || job.customerPhone)) {
-      const batchFilter = { 
+      // A. Pin all other QUEUED jobs of this customer
+      const queuedBatchFilter = { 
         _id: { $ne: job._id },
-        status: 'QUEUED',
-        pinnedToStaff: null
+        status: 'QUEUED'
       };
-      
-      if (job.customerEmail) batchFilter.customerEmail = job.customerEmail;
-      else if (job.customerPhone) batchFilter.customerPhone = job.customerPhone;
+      if (job.customerEmail) queuedBatchFilter.customerEmail = job.customerEmail;
+      else if (job.customerPhone) queuedBatchFilter.customerPhone = job.customerPhone;
 
       await QueueJob.updateMany(
-        batchFilter,
+        queuedBatchFilter,
         { 
           $set: { 
             pinnedToStaff: staffId,
-            continuityContext: (job.continuityContext || '') + ` [Batch Take: Sequential Batching with Job #${job._id.toString().substring(18).toUpperCase()}]`
+            continuityContext: (job.continuityContext || '') + ` [Batch Take: Sequential Batching with Job #${String(job._id).slice(-6).toUpperCase()}]`
           } 
         }
       );
+
+      // B. Transfer all other PAUSED jobs of this customer
+      const pausedBatchFilter = {
+        _id: { $ne: job._id },
+        status: 'PAUSED'
+      };
+      if (job.customerEmail) pausedBatchFilter.customerEmail = job.customerEmail;
+      else if (job.customerPhone) pausedBatchFilter.customerPhone = job.customerPhone;
+
+      await QueueJob.updateMany(
+        pausedBatchFilter,
+        {
+          $set: {
+            assignedTo: staffId,
+            pinnedToStaff: staffId,
+            continuityContext: (job.continuityContext || '') + ` [Batch Take Transfer: Sequential Batching with Job #${String(job._id).slice(-6).toUpperCase()}]`
+          }
+        }
+      );
+
       eventBus.emit('job:batch-reserved', { customerEmail: job.customerEmail, staffId });
     }
 
@@ -1503,6 +1697,7 @@ async function retrieveJob(jobId, toStaffId = null) {
   job.status = toStaffId ? 'PAUSED' : 'QUEUED';
   job.assignedTo = toStaffId || null;
   job.pinnedToStaff = toStaffId || null;
+  job.isHardPinned = false; // Reset hard pin on retrieval
   
   job.completedAt = null;
   job.completedBy = null;
@@ -1514,8 +1709,8 @@ async function retrieveJob(jobId, toStaffId = null) {
   
   await job.save();
 
-  // 3. Recalculate stats
-  await statsService.recalculate();
+  // 3. Schedule stats refresh
+  statsService.schedule();
 
   eventBus.emit('queue:reordered', { reason: 'Job Retrieved by Admin' });
   
@@ -1568,3 +1763,4 @@ async function handleNewJobArrival(jobId) {
     console.log(`[Engine] Batch Affinity: Job ${jobId} auto-pinned to active staff ${staffId}`);
   }
 }
+

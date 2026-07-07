@@ -1,0 +1,18 @@
+-- CreateTable
+CREATE TABLE "QueueStats" (
+    "id" SERIAL NOT NULL,
+    "queued" INTEGER NOT NULL DEFAULT 0,
+    "assigned" INTEGER NOT NULL DEFAULT 0,
+    "paused" INTEGER NOT NULL DEFAULT 0,
+    "completedToday" INTEGER NOT NULL DEFAULT 0,
+    "adminReview" INTEGER NOT NULL DEFAULT 0,
+    "junk" INTEGER NOT NULL DEFAULT 0,
+    "totalInProgress" INTEGER NOT NULL DEFAULT 0,
+    "activeSessions" INTEGER NOT NULL DEFAULT 0,
+    "breachRisk15" INTEGER NOT NULL DEFAULT 0,
+    "breachRisk5" INTEGER NOT NULL DEFAULT 0,
+    "staleJobs" INTEGER NOT NULL DEFAULT 0,
+    "lastUpdated" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "QueueStats_pkey" PRIMARY KEY ("id")
+);

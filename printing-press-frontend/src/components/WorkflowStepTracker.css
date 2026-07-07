@@ -1,0 +1,128 @@
+/* WorkflowStepTracker.css */
+
+.wst {
+  display: flex;
+  align-items: flex-start;
+  gap: 0;
+  padding: 0.75rem 0 0.5rem;
+  overflow-x: auto;
+  min-width: 0;
+}
+
+.wst--compact {
+  padding: 0.25rem 0;
+  align-items: center;
+}
+
+/* Each step = circle + optional label, positioned relative to allow connector */
+.wst-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex: 1;
+  min-width: 64px;
+}
+
+.wst--compact .wst-step {
+  min-width: 32px;
+}
+
+/* Dotted connector line */
+.wst-connector {
+  position: absolute;
+  top: 13px;   /* vertically centered on the 28px circle */
+  right: 50%;
+  width: 100%;
+  height: 2px;
+  border-top: 2px dashed #bfdbfe;
+  z-index: 0;
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+.wst-connector.done {
+  border-top-color: #3b82f6;
+}
+
+.wst--compact .wst-connector {
+  top: 10px;
+}
+
+/* Circle */
+.wst-circle {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.72rem;
+  font-weight: 900;
+  position: relative;
+  z-index: 1;
+  flex-shrink: 0;
+}
+
+.wst--compact .wst-circle {
+  width: 22px;
+  height: 22px;
+  font-size: 0.6rem;
+}
+
+.wst-circle--completed {
+  background: #2563eb;
+  color: #fff;
+  border: 2px solid #2563eb;
+}
+
+.wst-circle--current {
+  background: #fff;
+  color: #2563eb;
+  border: 2px solid #2563eb;
+  box-shadow: 0 0 0 3px #bfdbfe;
+}
+
+.wst-circle--pending {
+  background: #fff;
+  color: #ef4444;
+  border: 2px solid #ef4444;
+}
+
+/* Label block */
+.wst-label {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin-top: 0.4rem;
+  text-align: center;
+  gap: 0.1rem;
+}
+
+.wst-name {
+  font-size: 0.7rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.wst-name--completed { color: #1e40af; }
+.wst-name--current   { color: #2563eb; }
+.wst-name--pending   { color: #64748b; }
+
+.wst-detail {
+  font-size: 0.65rem;
+  color: #475569;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.wst-status {
+  font-size: 0.6rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.wst-status--completed { color: #2563eb; }
+.wst-status--current   { color: #2563eb; }
+.wst-status--pending   { color: #94a3b8; }

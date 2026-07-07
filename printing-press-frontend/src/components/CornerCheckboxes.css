@@ -157,7 +157,7 @@
     }
 
     /* 3. SHOW QUANTITY (Natural Flex centering) */
-    .print-corner-qty {
+    .corner-qty-display {
         display: block !important;
         position: static !important;
         transform: none !important;

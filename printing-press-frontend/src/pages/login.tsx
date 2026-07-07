@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { api } from '../services/api'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { FINISHING_SUBROLES, getFinishingLoginPath, normalizeRoles } from '../utils/finishingRoles'
 import './Login.css'
 
 export default function Login() {
@@ -24,15 +25,18 @@ export default function Login() {
                 password
             })
 
-            authLogin(res.data.token, res.data.user)
+            const normalizedRoles = normalizeRoles(res.data.user.roles || [])
+            authLogin(res.data.token, { ...res.data.user, roles: normalizedRoles })
 
-            const roles = res.data.user.roles
-
-            if (roles.includes('ADMIN')) navigate('/admin')
-            else if (roles.includes('PREPRESS')) navigate('/prepress')
-            else if (roles.includes('CASHIER')) navigate('/cashier')
-            else if (roles.includes('DISPATCH')) navigate('/dispatch')
-            else if (roles.includes('CUSTOMER')) navigate('/customer/dashboard')
+            if (normalizedRoles.includes('ADMIN')) navigate('/admin')
+            else if (normalizedRoles.includes('PREPRESS')) navigate('/prepress')
+            else if (normalizedRoles.includes('CASHIER')) navigate('/cashier')
+            else if (normalizedRoles.includes('DISPATCH')) navigate('/dispatch')
+            else if (normalizedRoles.includes('PRESS')) navigate('/press')
+            else if (normalizedRoles.includes('POST_PRESS')) navigate('/post-press')
+            else if (normalizedRoles.includes('FINISHING') || normalizedRoles.some(r => (FINISHING_SUBROLES as readonly string[]).includes(r))) navigate(getFinishingLoginPath(normalizedRoles))
+            else if (normalizedRoles.includes('CUSTOMER')) navigate('/customer/dashboard')
+            else navigate('/unauthorized')
         } catch (err: any) {
             console.error('Login failed', err)
             alert(err.response?.data?.message || 'Login failed')

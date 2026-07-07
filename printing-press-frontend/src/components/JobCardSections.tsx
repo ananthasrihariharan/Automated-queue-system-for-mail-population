@@ -9,6 +9,7 @@ interface SectionProps {
     formData: JobCardState;
     setFormData: React.Dispatch<React.SetStateAction<JobCardState>>;
     isPrint?: boolean;
+    registry?: any;
 }
 
 // Helper to format date
@@ -24,7 +25,16 @@ interface SectionProps {
 //     }).toUpperCase();
 // };
 
-export const BindingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+export const BindingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData, registry }) => {
+    const customSteps = [
+        ...(registry?.postPressStages || []),
+        ...(registry?.finishingStages || [])
+    ].map((step: any) => typeof step === 'string' ? step : step.key);
+
+    const customBindings = customSteps.filter((stepName: string) => {
+        return registry?.taskBasis?.[stepName] === 'binding';
+    });
+
     return (
         <div className="card-section" data-checked={formData.processes.binding}>
             <div className="section-header">BINDING</div>
@@ -118,28 +128,107 @@ export const BindingSection: React.FC<SectionProps> = ({ jobData, customerName, 
                 }))}
                 rowIndex={4}
             />
-            <BindingRow
-                label="SPECIAL"
-                isChecked={formData.binding.special}
-                onChange={(checked) => setFormData(prev => ({
-                    ...prev,
-                    binding: { ...prev.binding, special: checked },
-                    processes: { ...prev.processes, binding: true }
-                }))}
-                qty={formData.binding.specialQty}
-                onQtyChange={(val) => setFormData(prev => ({
-                    ...prev,
-                    binding: { ...prev.binding, specialQty: val },
-                    processes: { ...prev.processes, binding: true }
-                }))}
-                rowIndex={5}
-            />
+
+            {customBindings.map((stepName, index) => {
+                const displayName = stepName.replace(/([A-Z])/g, ' $1').toUpperCase();
+                const isChecked = !!(formData.binding as any)[stepName];
+                const qty = (formData.binding as any)[`${stepName}Qty`] || '';
+
+                return (
+                    <BindingRow
+                        key={stepName}
+                        label={displayName}
+                        isChecked={isChecked}
+                        onChange={(checked) => setFormData(prev => ({
+                            ...prev,
+                            binding: { ...prev.binding, [stepName]: checked },
+                            processes: { ...prev.processes, binding: true }
+                        }))}
+                        qty={qty}
+                        onQtyChange={(val) => setFormData(prev => ({
+                            ...prev,
+                            binding: { ...prev.binding, [`${stepName}Qty`]: val },
+                            processes: { ...prev.processes, binding: true }
+                        }))}
+                        rowIndex={5 + index}
+                    />
+                );
+            })}
+
+            {/* SPECIAL — with free-text description input like Lamination Other */}
+            <div className="binding-type-row-wrapper" data-row-checked={formData.binding.special}>
+                <div className="binding-type-row creasing-item">
+                    <label className="checkbox-item-sm">
+                        <input
+                            type="checkbox"
+                            checked={formData.binding.special}
+                            onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                binding: { ...prev.binding, special: e.target.checked, specialDesc: e.target.checked ? prev.binding.specialDesc : '', specialQty: e.target.checked ? prev.binding.specialQty : '' },
+                                processes: { ...prev.processes, binding: e.target.checked }
+                            }))}
+                            data-grid-row={5}
+                            data-grid-col={0}
+                            style={{ display: 'none' }}
+                        />
+                        <span>SPECIAL</span>
+                    </label>
+                    <span className="field-label-sm" style={{ marginLeft: '4px', marginRight: '1px' }}>NO:</span>
+                    <input
+                        type="text"
+                        className="field-input-box-sm-inline nav-input"
+                        placeholder="-"
+                        value={formData.binding.specialQty}
+                        onChange={(e) => {
+                            const val = e.target.value;
+                            setFormData(prev => ({
+                                ...prev,
+                                binding: { ...prev.binding, specialQty: val, special: val.trim() !== '' || prev.binding.specialDesc.trim() !== '' },
+                                processes: { ...prev.processes, binding: true }
+                            }));
+                        }}
+                        data-grid-row={5}
+                        data-grid-col={1}
+                    />
+                </div>
+                {formData.binding.special && (
+                    <div className="binding-special-details" style={{ padding: '0 0.5rem 0.5rem 0.5rem' }}>
+                        <input
+                            type="text"
+                            className="field-input-inline nav-input"
+                            placeholder="Specify type..."
+                            value={formData.binding.specialDesc || ''}
+                            onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                binding: { ...prev.binding, specialDesc: e.target.value, special: true },
+                                processes: { ...prev.processes, binding: true }
+                            }))}
+                            data-grid-row={5}
+                            data-grid-col={2}
+                            style={{ width: '100%', marginTop: '0.25rem' }}
+                        />
+                    </div>
+                )}
+            </div>
 
         </div>
     );
 };
 
 export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+    const noOfCardsRef = React.useRef<HTMLInputElement>(null)
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            const input = noOfCardsRef.current
+            if (input) {
+                input.focus()
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [])
+
     return (
         <div className="card-section" data-checked={formData.processes.cornerCut}>
             <div className="section-header">CORNER CUTTING</div>
@@ -154,8 +243,9 @@ export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customer
             <div className="field-row no-print-row no-print">
                 <span className="field-label-sm no-print">NO OF CARDS</span>
                 <input
+                    ref={noOfCardsRef}
                     type="text"
-                    className="field-input-inline no-print"
+                    className="field-input-inline no-print corner-qty-input"
                     value={formData.cornerCutting.noOfCards}
                     onChange={(e) => setFormData(prev => ({
                         ...prev,
@@ -196,7 +286,7 @@ export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customer
                     ${formData.cornerCutting.corners.bl ? 'cut-bl' : ''} 
                     ${formData.cornerCutting.corners.br ? 'cut-br' : ''}
                 `}>
-                    <div className="print-corner-qty only-print">{formData.cornerCutting.noOfCards}</div>
+                    <div className="corner-qty-display">{formData.cornerCutting.noOfCards}</div>
                     {Object.keys(formData.cornerCutting.corners).map((corner) => (
                         <React.Fragment key={corner}>
                             <div className={`corner-checkbox-wrapper corner-${corner} ${(formData.cornerCutting.corners as any)[corner] ? 'checked-state' : ''}`}>
@@ -222,7 +312,18 @@ export const CornerCuttingSection: React.FC<SectionProps> = ({ jobData, customer
     );
 };
 
-export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData, registry }) => {
+    const customSteps = [
+        ...(registry?.postPressStages || []),
+        ...(registry?.finishingStages || [])
+    ].map((step: any) => typeof step === 'string' ? step : step.key);
+
+    const customLaminationSteps = customSteps.filter((stepName: string) => {
+        return registry?.taskBasis?.[stepName] === 'lamination';
+    });
+
+    const laminationTypes = ['glossy', 'matt', 'velvet', ...customLaminationSteps];
+
     return (
         <div className="card-section" data-checked={formData.processes.lamination}>
             <div className="section-header">LAMINATION</div>
@@ -236,11 +337,11 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
             </div>
 
             {
-                (['glossy', 'matt', 'velvet'] as const).map((type, i) => (
+                laminationTypes.map((type, i) => (
                     <LaminationRow
                         key={type}
                         label={type.charAt(0).toUpperCase() + type.slice(1)}
-                        isChecked={(formData.lamination as any)[type]}
+                        isChecked={!!(formData.lamination as any)[type]}
                         onChange={(checked) => setFormData(prev => ({
                             ...prev,
                             lamination: { ...prev.lamination, [type]: checked },
@@ -280,21 +381,24 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
                     />
                     <span className="no-print">Other</span>
                 </label>
-                <input
-                    type="text"
-                    className="lamination-other-type-input nav-input"
-                    placeholder="Specify type..."
-                    value={formData.lamination.otherType || ''}
-                    onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        lamination: { ...prev.lamination, otherType: e.target.value, other: true },
-                        processes: { ...prev.processes, lamination: true }
-                    }))}
-                    data-grid-row={3}
-                    data-grid-col="1"
-                />
                 {formData.lamination.other && (
-                    <div className="lamination-details">
+                    <div className="lamination-details" style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem', width: '100%', marginTop: '0.5rem' }}>
+                        <div className="field-row">
+                            <input
+                                type="text"
+                                className="field-input-inline nav-input"
+                                placeholder="Specify type..."
+                                value={formData.lamination.otherType || ''}
+                                onChange={(e) => setFormData(prev => ({
+                                    ...prev,
+                                    lamination: { ...prev.lamination, otherType: e.target.value, other: true },
+                                    processes: { ...prev.processes, lamination: true }
+                                }))}
+                                data-grid-row={3}
+                                data-grid-col="1"
+                                style={{ width: '100%' }}
+                            />
+                        </div>
                         <div className="field-row">
                             <input
                                 type="text"
@@ -308,10 +412,11 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
                                 }))}
                                 data-grid-row={3}
                                 data-grid-col="2"
+                                style={{ width: '100%' }}
                             />
                         </div>
-                        <div className={`side-selection side-${formData.lamination.otherSide || 'none'}`}>
-                            <label className="radio-item-sm">
+                        <div className={`side-selection side-${formData.lamination.otherSide || 'none'}`} style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                            <label className={`radio-item-sm ${formData.lamination.otherSide === 'single' ? 'is-selected' : ''}`}>
                                 <input
                                     type="radio"
                                     checked={formData.lamination.otherSide === 'single'}
@@ -326,7 +431,7 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
                                 />
                                 <span>Single Side</span>
                             </label>
-                            <label className="radio-item-sm">
+                            <label className={`radio-item-sm ${formData.lamination.otherSide === 'double' ? 'is-selected' : ''}`}>
                                 <input
                                     type="radio"
                                     checked={formData.lamination.otherSide === 'double'}
@@ -350,7 +455,29 @@ export const LaminationSection: React.FC<SectionProps> = ({ jobData, customerNam
     );
 };
 
-export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData, registry }) => {
+    const noOfSheetsRef = React.useRef<HTMLInputElement>(null)
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            const input = noOfSheetsRef.current
+            if (input) {
+                input.focus()
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [])
+
+    const customSteps = [
+        ...(registry?.postPressStages || []),
+        ...(registry?.finishingStages || [])
+    ].map((step: any) => typeof step === 'string' ? step : step.key);
+
+    const customCreaseSteps = customSteps.filter((stepName: string) => {
+        return registry?.taskBasis?.[stepName] === 'creasing';
+    });
+
     return (
         <div className="card-section" data-checked={formData.processes.creasing || formData.processes.perforation}>
             <div className="section-header">CREASING / PERF</div>
@@ -359,12 +486,19 @@ export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName,
                     <span className="identifier-field">JOB ID: {jobData.jobId}</span>
                     <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
                     <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                    {formData.creasingPerforation.noOfSheets && (
+                        <span className="identifier-field only-print">SHEETS: {formData.creasingPerforation.noOfSheets}</span>
+                    )}
+                    {formData.creasingPerforation.noOfStock && (
+                        <span className="identifier-field only-print">STOCK: {formData.creasingPerforation.noOfStock}</span>
+                    )}
                 </div>
                 <div className="section-qr-code only-print">QR</div>
             </div>
-            <div className="field-row no-print">
+            <div className="field-row no-print-row no-print">
                 <span className="field-label-sm">NO OF SHEETS</span>
                 <input
+                    ref={noOfSheetsRef}
                     type="text"
                     className="field-input-inline"
                     value={formData.creasingPerforation.noOfSheets}
@@ -376,35 +510,71 @@ export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName,
                 />
             </div>
 
+
             <div className="creasing-grid">
                 {[
                     { key: 'creasing', label: 'CREASING', noKey: 'creasingNo', proc: 'creasing' },
                     { key: 'perforation', label: 'PERFORATION', noKey: 'perforationNo', proc: 'perforation' },
-                    { key: 'wheelPerforation', label: 'WHEEL PERFORATION', noKey: 'wheelPerforationNo', proc: 'perforation' }
+                    { key: 'wheelPerforation', label: 'WHEEL PERFORATION', noKey: 'wheelPerforationNo', proc: 'perforation' },
+                    ...customCreaseSteps.map(step => ({
+                        key: step,
+                        label: step.replace(/([A-Z])/g, ' $1').toUpperCase(),
+                        noKey: `${step}No`,
+                        proc: 'creasing'
+                    }))
                 ].map((item) => (
-                    <div className="creasing-item" key={item.key} data-row-checked={(formData.creasingPerforation as any)[item.key]}>
+                    <div className="creasing-item" key={item.key} data-row-checked={(formData.creasingPerforation as any)[item.key] || !!((formData.creasingPerforation as any)[item.noKey]?.trim())}>
                         <label className="checkbox-item-sm">
                             <input
                                 type="checkbox"
                                 checked={(formData.creasingPerforation as any)[item.key]}
-                                onChange={(e) => setFormData(prev => ({
-                                    ...prev,
-                                    creasingPerforation: { ...prev.creasingPerforation, [item.key]: e.target.checked },
-                                    processes: { ...prev.processes, [item.proc]: true }
-                                }))}
+                                onChange={(e) => setFormData(prev => {
+                                    const updatedCp = { ...prev.creasingPerforation, [item.key]: e.target.checked }
+                                    const creasingActive = updatedCp.creasing || customCreaseSteps.some(s => (updatedCp as any)[s])
+                                    const perforationActive = updatedCp.perforation || updatedCp.wheelPerforation
+                                    return {
+                                        ...prev,
+                                        creasingPerforation: updatedCp,
+                                        processes: {
+                                            ...prev.processes,
+                                            creasing: item.proc === 'creasing' ? creasingActive : prev.processes.creasing,
+                                            perforation: item.proc === 'perforation' ? perforationActive : prev.processes.perforation,
+                                        }
+                                    }
+                                })}
+                                style={{ display: 'none' }}
                             />
                             <span>{item.label}</span>
                         </label>
                         <span className="field-label-sm" style={{ marginLeft: '4mm', marginRight: '1mm' }}>NO:</span>
                         <input
                             type="text"
-                            className="field-input-box-sm-inline"
+                            className="field-input-box-sm-inline nav-input"
+                            placeholder="-"
                             value={(formData.creasingPerforation as any)[item.noKey]}
-                            onChange={(e) => setFormData(prev => ({
-                                ...prev,
-                                creasingPerforation: { ...prev.creasingPerforation, [item.noKey]: e.target.value },
-                                processes: { ...prev.processes, [item.proc]: true }
-                            }))}
+                            onChange={(e) => {
+                                const val = e.target.value
+                                const shouldCheck = val.trim() !== ''
+                                setFormData(prev => {
+                                    const updatedCp = {
+                                        ...prev.creasingPerforation,
+                                        [item.noKey]: val,
+                                        // auto-check when typing, auto-uncheck when cleared
+                                        [item.key]: shouldCheck ? true : (prev.creasingPerforation as any)[item.key],
+                                    }
+                                    const creasingActive = updatedCp.creasing || customCreaseSteps.some(s => (updatedCp as any)[s])
+                                    const perforationActive = updatedCp.perforation || updatedCp.wheelPerforation
+                                    return {
+                                        ...prev,
+                                        creasingPerforation: updatedCp,
+                                        processes: {
+                                            ...prev.processes,
+                                            creasing: item.proc === 'creasing' ? creasingActive : prev.processes.creasing,
+                                            perforation: item.proc === 'perforation' ? perforationActive : prev.processes.perforation,
+                                        }
+                                    }
+                                })
+                            }}
                         />
                     </div>
                 ))}
@@ -415,7 +585,34 @@ export const CreasingSection: React.FC<SectionProps> = ({ jobData, customerName,
 
 
 
-export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData, registry }) => {
+    const sheetsInputRef = React.useRef<HTMLInputElement>(null)
+
+    React.useEffect(() => {
+        const timer = setTimeout(() => {
+            const input = sheetsInputRef.current
+            if (input) {
+                input.focus()
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [])
+
+    const customSteps = [
+        ...(registry?.postPressStages || []),
+        ...(registry?.finishingStages || [])
+    ].map((step: any) => typeof step === 'string' ? step : step.key);
+
+    const customDieCutSteps = customSteps.filter((stepName: string) => {
+        return registry?.taskBasis?.[stepName] === 'dieCutting';
+    });
+
+    const rowItems = [
+        { key: 'default', label: 'DEFAULT' },
+        ...customDieCutSteps.map(s => ({ key: s, label: s.replace(/([A-Z])/g, ' $1').toUpperCase() }))
+    ];
+
     return (
         <div className="card-section" data-checked={formData.processes.dieCutting}>
             <div className="section-header">DIE CUTTING</div>
@@ -427,37 +624,29 @@ export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerNam
                 </div>
                 <div className="section-qr-code only-print">QR</div>
             </div>
-            <div className="field-row no-print">
-                <span className="field-label-sm">NO OF SHEETS</span>
-                <input
-                    type="text"
-                    className="field-input-inline"
-                    value={formData.dieCutting.noOfSheets}
-                    onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        dieCutting: { ...prev.dieCutting, noOfSheets: e.target.value },
-                        processes: { ...prev.processes, dieCutting: true }
-                    }))}
-                />
-            </div>
-
             <div className="die-cutting-table">
                 <div className="die-table-header">
+                    <div className="die-table-cell">PROCESS</div>
                     <div className="die-table-cell">SHEETS</div>
                     <div className="die-table-cell">CUT</div>
                     <div className="die-table-cell">TIMING</div>
                 </div>
-                {/* Always render exactly 8 rows */}
-                {Array.from({ length: 8 }).map((_, i) => {
+                {rowItems.map((item, i) => {
                     // Ensure formData has enough rows
                     const row = formData.dieCutting.rows[i] || { sheets: '', halfCut: '', throughCut: '', timing: '' };
                     const hasData = row.sheets || row.halfCut || row.throughCut || row.timing;
 
                     return (
-                        <div key={i} className="die-table-row" data-has-content={!!hasData}>
+                        <div key={item.key} className="die-table-row" data-has-content={!!hasData}>
+                            {/* Column 0: Label */}
+                            <div className="die-table-cell" style={{ fontWeight: 700, fontSize: '0.7rem', color: '#475569', textTransform: 'capitalize', display: 'flex', alignItems: 'center' }}>
+                                {item.label}
+                            </div>
+
                             {/* Column 1: Sheets */}
                             <div className="die-table-cell">
                                 <input
+                                    ref={i === 0 ? sheetsInputRef : undefined}
                                     type="text"
                                     className="table-input"
                                     placeholder="-"
@@ -502,7 +691,7 @@ export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerNam
                                     <option value="">-</option>
                                     <option value="HALF CUT">HALF CUT</option>
                                     <option value="THROUGH CUT">THROUGH CUT</option>
-                                    <option value="SHAPE CUT">SHAPE CUT</option>
+                                    <option value="SHAPE CUT">SCORING</option>
                                 </select>
                             </div>
 
@@ -539,6 +728,20 @@ export const DieCuttingSection: React.FC<SectionProps> = ({ jobData, customerNam
 
 
 export const CuttingSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+    const heightInputRef = React.useRef<HTMLInputElement>(null)
+
+    React.useEffect(() => {
+        // Wait for modal open animation + all click events to fully settle before grabbing focus
+        const timer = setTimeout(() => {
+            const input = heightInputRef.current
+            if (input) {
+                input.focus()
+                input.scrollIntoView({ behavior: 'smooth', block: 'center' })
+            }
+        }, 500)
+        return () => clearTimeout(timer)
+    }, [])
+
     return (
         <div className="card-section" data-checked={formData.processes.cutting}>
             <div className="section-header">CUTTING</div>
@@ -550,95 +753,81 @@ export const CuttingSection: React.FC<SectionProps> = ({ jobData, customerName, 
                 </div>
                 <div className="section-qr-code only-print">QR</div>
             </div>
-            <div className="field-row">
-                <span className="field-label-sm">NO OF CUTTING</span>
-                <input
-                    type="text"
-                    className="field-input-inline"
-                    value={formData.cutting.noOfCutting}
-                    onChange={(e) => setFormData(prev => ({
-                        ...prev,
-                        cutting: { ...prev.cutting, noOfCutting: e.target.value },
-                        processes: { ...prev.processes, cutting: true }
-                    }))}
-                />
-            </div>
 
             <div className="cutting-grid">
-                <div className="cutting-grid-header">
-                    <div className="cutting-grid-cell">H</div>
-                    <div className="cutting-grid-cell">W</div>
+                {/* No. of Cutting — inline row above the H/W grid */}
+                <div className="cutting-no-row">
+                    <span className="field-label-sm">NO. OF CUTTING</span>
+                    <input
+                        type="text"
+                        className="field-input-box-sm-inline nav-input"
+                        placeholder="-"
+                        tabIndex={3}
+                        value={formData.cutting.noOfCutting}
+                        onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            cutting: { ...prev.cutting, noOfCutting: e.target.value },
+                            processes: { ...prev.processes, cutting: true }
+                        }))}
+                    />
+                </div>
+                {/* H × W header */}
+                <div className="cutting-grid-header cutting-grid-header--single">
                     <div className="cutting-grid-cell">H</div>
                     <div className="cutting-grid-cell">W</div>
                 </div>
-                {/* Always render exactly 5 rows for 10 slots total (2 measurements per row) */}
-                {Array.from({ length: 5 }).map((_, rowIndex) => {
-                    // Check if this row has any data in its 2 slots
-                    const idx1 = rowIndex * 2;
-                    const idx2 = rowIndex * 2 + 1;
-                    const hasData = (formData.cutting.sizes[idx1] && formData.cutting.sizes[idx1].length > 1) ||
-                        (formData.cutting.sizes[idx2] && formData.cutting.sizes[idx2].length > 1);
+                {/* Single slot — one H×W measurement */}
+                {Array.from({ length: 1 }).map((_, rowIndex) => {
+                    const index = rowIndex;
+                    const size = formData.cutting.sizes[index] || '';
+                    const [h, w] = size.split('*').map(v => v.trim());
+                    const hasData = !!(h || w);
 
                     return (
-                        <div key={rowIndex} className="cutting-grid-row" data-has-content={!!hasData}>
-                            {[0, 1].map((colOffset) => {
-                                const index = rowIndex * 2 + colOffset;
-                                const size = formData.cutting.sizes[index] || '';
-                                const [h, w] = size.split('*').map(v => v.trim());
-
-                                return (
-                                    <React.Fragment key={colOffset}>
-                                        <div className="cutting-grid-cell">
-                                            <input
-                                                type="text"
-                                                className="grid-input"
-                                                placeholder="H"
-                                                value={h || ''}
-                                                onChange={(e) => {
-                                                    const newSizes = [...formData.cutting.sizes];
-                                                    // Ensure array has enough slots
-                                                    while (newSizes.length <= index) {
-                                                        newSizes.push('');
-                                                    }
-                                                    const newW = w || '';
-                                                    newSizes[index] = `${e.target.value}*${newW}`;
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        cutting: { ...prev.cutting, sizes: newSizes },
-                                                        processes: { ...prev.processes, cutting: true }
-                                                    }));
-                                                }}
-                                                data-grid-row={rowIndex}
-                                                data-grid-col={colOffset * 2}
-                                            />
-                                        </div>
-                                        <div className="cutting-grid-cell">
-                                            <input
-                                                type="text"
-                                                className="grid-input"
-                                                placeholder="W"
-                                                value={w || ''}
-                                                onChange={(e) => {
-                                                    const newSizes = [...formData.cutting.sizes];
-                                                    // Ensure array has enough slots
-                                                    while (newSizes.length <= index) {
-                                                        newSizes.push('');
-                                                    }
-                                                    const newH = h || '';
-                                                    newSizes[index] = `${newH}*${e.target.value}`;
-                                                    setFormData(prev => ({
-                                                        ...prev,
-                                                        cutting: { ...prev.cutting, sizes: newSizes },
-                                                        processes: { ...prev.processes, cutting: true }
-                                                    }));
-                                                }}
-                                                data-grid-row={rowIndex}
-                                                data-grid-col={colOffset * 2 + 1}
-                                            />
-                                        </div>
-                                    </React.Fragment>
-                                );
-                            })}
+                        <div key={rowIndex} className="cutting-grid-row cutting-grid-row--single" data-has-content={!!hasData}>
+                            <div className="cutting-grid-cell">
+                                <input
+                                    ref={heightInputRef}
+                                    type="text"
+                                    className="grid-input"
+                                    placeholder="00"
+                                    tabIndex={1}
+                                    value={h || ''}
+                                    onChange={(e) => {
+                                        const newSizes = [...formData.cutting.sizes];
+                                        while (newSizes.length <= index) newSizes.push('');
+                                        newSizes[index] = `${e.target.value}*${w || ''}`;
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            cutting: { ...prev.cutting, sizes: newSizes },
+                                            processes: { ...prev.processes, cutting: true }
+                                        }));
+                                    }}
+                                    data-grid-row={rowIndex}
+                                    data-grid-col={0}
+                                />
+                            </div>
+                            <div className="cutting-grid-cell">
+                                <input
+                                    type="text"
+                                    className="grid-input"
+                                    placeholder="00"
+                                    tabIndex={2}
+                                    value={w || ''}
+                                    onChange={(e) => {
+                                        const newSizes = [...formData.cutting.sizes];
+                                        while (newSizes.length <= index) newSizes.push('');
+                                        newSizes[index] = `${h || ''}*${e.target.value}`;
+                                        setFormData(prev => ({
+                                            ...prev,
+                                            cutting: { ...prev.cutting, sizes: newSizes },
+                                            processes: { ...prev.processes, cutting: true }
+                                        }));
+                                    }}
+                                    data-grid-row={rowIndex}
+                                    data-grid-col={1}
+                                />
+                            </div>
                         </div>
                     );
                 })}
@@ -646,3 +835,166 @@ export const CuttingSection: React.FC<SectionProps> = ({ jobData, customerName, 
         </div>
     );
 };
+
+export const IdCardSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+    const idCard = formData.idCard || {
+        cutting: false,
+        fusing: false,
+        cornerCutting: false,
+        holes: false,
+        fusingType: 'glossy',
+        fusingQty: '',
+        holesType: 'square',
+        cuttingValue: ''
+    };
+
+    const updateIdCard = (fields: Partial<typeof idCard>) => {
+        setFormData(prev => ({
+            ...prev,
+            idCard: {
+                ...(prev.idCard || idCard),
+                ...fields
+            },
+            processes: { ...prev.processes, idCard: true }
+        }));
+    };
+
+    return (
+        <div className="card-section" data-checked={formData.processes.idCard}>
+            <div className="section-header">ID CARD</div>
+            <div className="section-identifiers">
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
+            </div>
+
+            <div className="idcard-flow-options">
+                {/* Fusing Option */}
+                <div className="idcard-option-row" data-row-checked={idCard.fusing}>
+                    <label className="checkbox-item-sm">
+                        <input
+                            type="checkbox"
+                            checked={idCard.fusing}
+                            onChange={(e) => updateIdCard({ fusing: e.target.checked })}
+                        />
+                        <span>FUSING</span>
+                    </label>
+                    {idCard.fusing && (
+                        <div className="idcard-sub-fields">
+                            <span className="field-label-sm">TYPE:</span>
+                            <select
+                                className="field-input-inline nav-input"
+                                value={idCard.fusingType || 'glossy'}
+                                onChange={(e) => updateIdCard({ fusingType: e.target.value })}
+                            >
+                                <option value="glossy">GLOSSY</option>
+                                <option value="matt">MATT</option>
+                                <option value="thick glossy">THICK GLOSSY</option>
+                                <option value="thick matt">THICK MATT</option>
+                            </select>
+                            <span className="field-label-sm" style={{ marginLeft: '10px' }}>QTY:</span>
+                            <input
+                                type="text"
+                                className="field-input-box-sm-inline nav-input"
+                                placeholder="Qty"
+                                value={idCard.fusingQty || ''}
+                                onChange={(e) => updateIdCard({ fusingQty: e.target.value })}
+                            />
+                        </div>
+                    )}
+                </div>
+
+                {/* Holes Option */}
+                <div className="idcard-option-row" data-row-checked={idCard.holes}>
+                    <label className="checkbox-item-sm">
+                        <input
+                            type="checkbox"
+                            checked={idCard.holes}
+                            onChange={(e) => updateIdCard({ holes: e.target.checked })}
+                        />
+                        <span>HOLES</span>
+                    </label>
+                    {idCard.holes && (
+                        <div className="idcard-sub-fields">
+                            <span className="field-label-sm">TYPE:</span>
+                            <select
+                                className="field-input-inline nav-input"
+                                value={idCard.holesType || 'square'}
+                                onChange={(e) => updateIdCard({ holesType: e.target.value })}
+                            >
+                                <option value="square">SQUARE</option>
+                            </select>
+                        </div>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+
+const FOIL_TYPES = [
+    'Single Side UV',
+    'Single Side Gold Foil',
+    'Single Side UV & S/S Gold Foil',
+    'D/S print + S/S UV',
+    'D/S print + D/S UV',
+    'D/S print + S/S Gold Foil',
+    'D/S print + D/S Gold Foil',
+    'D/S print + S/S UV & S/S Gold Foil',
+    'D/S print + D/S UV & D/S Gold Foil',
+    'D/S print + D/S UV & S/S Gold Foil',
+    'D/S print + D/S Gold Foil & S/S UV',
+]
+
+export const FoilSection: React.FC<SectionProps> = ({ jobData, customerName, formData, setFormData }) => {
+    return (
+        <div className="card-section" data-checked={formData.processes.foil}>
+            <div className="section-header">FOIL</div>
+            <div className="section-identifiers">
+                <div className="identifier-fields-stack">
+                    <span className="identifier-field">JOB ID: {jobData.jobId}</span>
+                    <span className="identifier-field">JOB BY: {jobData.attBy || 'N/A'}</span>
+                    <span className="identifier-field only-print">C.NAME: {customerName}</span>
+                </div>
+                <div className="section-qr-code only-print">QR</div>
+            </div>
+
+            <div className="field-row" style={{ marginTop: '0.5rem', flexDirection: 'column', gap: '0.5rem' }}>
+                <select
+                    className="field-input-inline nav-input"
+                    value={formData.foil.type}
+                    onChange={(e) => setFormData(prev => ({
+                        ...prev,
+                        foil: { ...prev.foil, type: e.target.value },
+                        processes: { ...prev.processes, foil: true, lamination: true }
+                    }))}
+                    style={{ width: '100%' }}
+                >
+                    <option value="">— Select Foil Type —</option>
+                    {FOIL_TYPES.map(t => (
+                        <option key={t} value={t}>{t}</option>
+                    ))}
+                </select>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                    <span className="field-label-sm">QTY</span>
+                    <input
+                        type="text"
+                        className="field-input-inline nav-input"
+                        placeholder="Qty"
+                        value={formData.foil.qty}
+                        onChange={(e) => setFormData(prev => ({
+                            ...prev,
+                            foil: { ...prev.foil, qty: e.target.value },
+                            processes: { ...prev.processes, foil: true, lamination: true }
+                        }))}
+                        style={{ width: '80px' }}
+                    />
+                </div>
+            </div>
+        </div>
+    )
+}

@@ -23,35 +23,35 @@ export const BindingRow: React.FC<BaseRowProps> = ({
     onQtyChange,
     rowIndex
 }) => {
+    const hasQty = qty && qty.trim() !== '';
     return (
-        <div className="binding-type-row" data-row-checked={isChecked}>
+        <div className="binding-type-row creasing-item" data-row-checked={hasQty ? 'true' : isChecked}>
             <label className="checkbox-item-sm">
+                {/* Checkbox hidden — data saves via qty alone */}
                 <input
                     type="checkbox"
                     checked={isChecked}
                     onChange={(e) => onChange(e.target.checked)}
-                    data-grid-row={rowIndex}
-                    data-grid-col="0"
-                    className="nav-input"
+                    style={{ display: 'none' }}
                 />
                 <span>{label}</span>
             </label>
-            {isChecked && (
-                <div className="binding-details">
-                    <div className="field-row">
-                        {/* <span className="field-label-sm">NO OF BOOKS:</span> */}
-                        <input
-                            type="text"
-                            className="field-input-inline nav-input"
-                            placeholder="Qty"
-                            value={qty}
-                            onChange={(e) => onQtyChange(e.target.value)}
-                            data-grid-row={rowIndex}
-                            data-grid-col="1"
-                        />
-                    </div>
-                </div>
-            )}
+            <span className="field-label-sm" style={{ marginLeft: '4px', marginRight: '1px' }}>NO:</span>
+            <input
+                type="text"
+                className="field-input-box-sm-inline nav-input"
+                placeholder="-"
+                value={qty}
+                onChange={(e) => {
+                    const val = e.target.value;
+                    onQtyChange(val);
+                    // Keep checkbox in sync for visual state
+                    if (val.trim() !== '' && !isChecked) onChange(true);
+                    if (val.trim() === '' && isChecked) onChange(false);
+                }}
+                data-grid-row={rowIndex}
+                data-grid-col="1"
+            />
         </div>
     );
 };
@@ -94,7 +94,7 @@ export const LaminationRow: React.FC<LaminationRowProps> = ({
                     </div>
                     {onSideChange && (
                         <div className={`side-selection side-${side || 'none'}`}>
-                            <label className="radio-item-sm">
+                            <label className={`radio-item-sm ${side === 'single' ? 'is-selected' : ''}`}>
                                 <input
                                     type="radio"
                                     checked={side === 'single'}
@@ -105,7 +105,7 @@ export const LaminationRow: React.FC<LaminationRowProps> = ({
                                 />
                                 <span>Single Side</span>
                             </label>
-                            <label className="radio-item-sm">
+                            <label className={`radio-item-sm ${side === 'double' ? 'is-selected' : ''}`}>
                                 <input
                                     type="radio"
                                     checked={side === 'double'}

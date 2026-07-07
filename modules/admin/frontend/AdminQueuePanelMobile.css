@@ -1,0 +1,389 @@
+/* 
+   ADMIN QUEUE PANEL - MOBILE OVERRIDES
+   Only active when screen width <= 900px
+*/
+
+.mobile-stats-fab {
+  display: none;
+}
+
+@media (max-width: 1024px) {
+  /* --- Layout & Container --- */
+  .admin-queue-page {
+    padding: 0.5rem;
+    height: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .admin-main-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  /* --- Header --- */
+  .admin-queue-header {
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1rem;
+    align-items: stretch;
+  }
+
+  .header-left-hub, .header-right-hub {
+    justify-content: space-between;
+  }
+
+  .admin-queue-title {
+    font-size: 1.1rem;
+  }
+
+  /* --- Tabs & Filters --- */
+  .queue-controls-unified-bar {
+    flex-direction: column;
+    gap: 1rem;
+  }
+
+  .tabs-container-premium {
+    overflow-x: auto;
+    padding-bottom: 0.5rem;
+    justify-content: flex-start;
+  }
+
+  .aq-tab-premium {
+    white-space: nowrap;
+    padding: 0.5rem 1rem;
+  }
+
+  .filters-group-hub {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .search-input-wrapper {
+    width: 100% !important;
+  }
+
+  .aqt-filters-static-row {
+    flex-direction: column;
+    gap: 0.75rem;
+  }
+
+  .filter-date-hub, .filter-select-hub {
+    width: 100% !important;
+  }
+
+  /* --- Table (Responsive Horizontal Scroll) --- */
+  .aqt-table-wrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-radius: 0.75rem;
+    background: white;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  }
+
+  .aqt-table {
+    min-width: 900px; /* Force scroll */
+  }
+
+  /* Sticky First Column for Context */
+  .th-num, .tc-num, .th-customer, .aqt-cell:nth-child(2) {
+    position: sticky;
+    left: 0;
+    z-index: 5;
+    background: white;
+  }
+
+  .tc-num {
+    left: 0;
+  }
+
+  .aqt-cell:nth-child(2) {
+    left: 40px; /* Offset for checkbox column */
+    box-shadow: 2px 0 5px -2px rgba(0,0,0,0.1);
+  }
+
+  /* --- Floating Stats FAB (Classes to be added in JSX) --- */
+  .mobile-stats-fab {
+    position: fixed;
+    bottom: 2rem;
+    right: 1.5rem;
+    width: 60px;
+    height: 60px;
+    background: #2563eb;
+    color: white;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 10px 25px rgba(37, 99, 235, 0.4);
+    z-index: 1000;
+    border: none;
+    cursor: pointer;
+    transition: transform 0.2s;
+  }
+
+  .mobile-stats-fab:active {
+    transform: scale(0.9);
+  }
+
+  /* --- Sidebar (Sessions) --- */
+  .sessions-sidebar-deck {
+    width: 100% !important;
+    display: none; /* Hidden by default on mobile, can be shown via stats modal */
+  }
+
+  .sidebar-stats-grid {
+    display: none; /* Moved to modal */
+  }
+
+  /* --- Modal Adjustments --- */
+  .logs-modal {
+    width: 95vw !important;
+    margin: 0.5rem;
+    padding: 1rem;
+  }
+}
+
+/* --- Mobile Viewport (max-width: 768px) --- */
+@media (max-width: 768px) {
+  .admin-queue-header {
+    flex-direction: row !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 0.75rem 1rem !important;
+  }
+  
+  .header-left-hub {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  
+  .back-btn-luxury {
+    padding: 0.35rem 0.6rem !important;
+    font-size: 0.72rem !important;
+  }
+  
+  .admin-queue-title {
+    font-size: 1.15rem !important;
+    font-weight: 850 !important;
+    letter-spacing: -0.02em !important;
+  }
+  
+  /* Filter Container take full width */
+  .mobile-queue-filters-row {
+    margin: 0 !important;
+    box-sizing: border-box;
+  }
+  
+  .mobile-queue-job-cards-list,
+  .mobile-queue-other-cards-list {
+    padding: 0.75rem !important;
+  }
+  
+  /* Job card details styling */
+  .mobile-queue-job-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+    position: relative;
+    overflow: hidden;
+  }
+  
+  /* Left priority border color indicator */
+  .mobile-queue-job-card::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 5px;
+    background: #e2e8f0;
+  }
+  
+  .mobile-queue-job-card.priority-norm::before {
+    background: #3b82f6;
+  }
+  
+  .mobile-queue-job-card.priority-urg::before {
+    background: #f59e0b;
+  }
+  
+  .mobile-queue-job-card.priority-crit::before {
+    background: #ef4444;
+  }
+  
+  .mobile-queue-job-card.priority-imm::before {
+    background: #7c3aed;
+  }
+  
+  .mobile-queue-job-card:active {
+    transform: scale(0.985);
+  }
+  
+  /* Badges inside card */
+  .aqt-source-badge {
+    font-size: 0.62rem !important;
+    padding: 1px 5px !important;
+    font-weight: 800 !important;
+    border-radius: 4px !important;
+  }
+  
+  .aqt-source-badge.wa {
+    background: #25d366 !important;
+    color: white !important;
+  }
+  
+  .aqt-source-badge.walkin {
+    background: #6366f1 !important;
+    color: white !important;
+  }
+  
+  .aqt-flag-badge {
+    font-size: 0.62rem !important;
+    padding: 1px 5px !important;
+    font-weight: 800 !important;
+    border-radius: 4px !important;
+  }
+  
+  .aqt-flag-badge.revision {
+    background: #ffedd5 !important;
+    color: #ea580c !important;
+  }
+  
+  .aqt-flag-badge.prior {
+    background: #f1f5f9 !important;
+    color: #475569 !important;
+  }
+  
+  .aqt-flag-badge.pinned {
+    background: #dbeafe !important;
+    color: #2563eb !important;
+  }
+  
+  /* Dropdowns side-by-side */
+  .aqt-inline-select {
+    width: 100% !important;
+    font-family: inherit;
+    font-weight: 700;
+    color: #1e293b;
+    border: 1px solid #cbd5e1;
+    border-radius: 0.5rem;
+    outline: none;
+    box-shadow: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+    background-color: white;
+    cursor: pointer;
+  }
+  
+  .aqt-inline-select.priority-select.p-norm {
+    border-color: #3b82f6 !important;
+    color: #2563eb !important;
+  }
+  .aqt-inline-select.priority-select.p-urg {
+    border-color: #f59e0b !important;
+    color: #d97706 !important;
+  }
+  .aqt-inline-select.priority-select.p-crit {
+    border-color: #ef4444 !important;
+    color: #dc2626 !important;
+  }
+  .aqt-inline-select.priority-select.p-imm {
+    border-color: #7c3aed !important;
+    color: #6d28d9 !important;
+  }
+  
+  /* Fallback other card styling */
+  .mobile-queue-other-card {
+    transition: transform 0.15s ease, box-shadow 0.15s ease;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05), 0 2px 4px -1px rgba(0, 0, 0, 0.03);
+  }
+  
+  .mobile-queue-other-card:active {
+    transform: scale(0.985);
+  }
+  
+  /* Hide standard components */
+  .aqt-table-wrapper {
+    display: none !important;
+  }
+  
+  /* Selection sticky bar animations */
+  @keyframes slideUp {
+    from {
+      transform: translateY(100px);
+      opacity: 0;
+    }
+    to {
+      transform: translateY(0);
+      opacity: 1;
+    }
+  }
+
+  /* JobDetailModal mobile overrides */
+  .modal-overlay {
+    padding: 0.5rem !important;
+  }
+
+  .job-detail-modal-elite {
+    max-height: 96vh !important;
+    border-radius: 0.75rem !important;
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2) !important;
+  }
+
+  .modal-header-elite {
+    display: grid !important;
+    grid-template-areas: 
+      "info close"
+      "actions actions";
+    grid-template-columns: 1fr auto;
+    gap: 1rem !important;
+    padding: 1rem !important;
+  }
+
+  .header-info {
+    grid-area: info;
+  }
+
+  .modal-close-btn-elite {
+    grid-area: close;
+    align-self: flex-start;
+  }
+
+  .header-actions-premium {
+    grid-area: actions;
+    margin-left: 0 !important;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .header-actions-premium button {
+    flex: 1;
+    min-width: 80px;
+    justify-content: center;
+    padding: 0.5rem 1rem !important;
+    font-size: 0.72rem !important;
+  }
+
+  .modal-body-elite {
+    padding: 1rem !important;
+  }
+
+  /* Metadata row grid */
+  .modal-meta-bar {
+    display: grid !important;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem !important;
+    padding: 0.85rem !important;
+    background: #f8fafc;
+    border-radius: 0.75rem;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1.5rem;
+  }
+
+  .modal-meta-bar > div {
+    font-size: 0.78rem;
+  }
+}
+

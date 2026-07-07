@@ -385,12 +385,11 @@
     }
 
     .corner-box {
-        width: 15mm !important;
-        /* Reverting to slightly larger for clarity since label is now above */
-        height: 10mm !important;
-        border: 1px solid #000 !important;
+        width: 38mm !important;
+        height: 20mm !important;
+        border: 2px solid #000 !important;
         padding: 0 !important;
-        margin: 0 !important;
+        margin: 0 auto !important; /* Centered in card */
         display: flex !important;
         align-items: center !important;
         justify-content: center !important;
@@ -398,9 +397,9 @@
         position: relative !important;
     }
 
-    .print-corner-qty {
-        font-size: 10pt !important;
-        font-weight: bold !important;
+    .corner-qty-display {
+        font-size: 14pt !important;
+        font-weight: 900 !important;
     }
 
     /* 5. TABLES */

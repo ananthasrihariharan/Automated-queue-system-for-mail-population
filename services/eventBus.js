@@ -6,3 +6,4 @@ class QueueEventBus extends EventEmitter {}
 const eventBus = new QueueEventBus()
 
 module.exports = eventBus
+

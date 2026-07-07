@@ -16,5 +16,10 @@ export function useAuth() {
     setUser(null)
   }
 
-  return { user, login, logout }
+  const updateUser = (userData: any) => {
+    localStorage.setItem('user', JSON.stringify(userData))
+    setUser(userData)
+  }
+
+  return { user, login, logout, updateUser }
 }

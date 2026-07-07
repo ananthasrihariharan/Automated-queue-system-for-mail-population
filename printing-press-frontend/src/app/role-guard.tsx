@@ -1,5 +1,6 @@
 import { Navigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { normalizeRoles } from '../utils/finishingRoles'
 
 type RoleGuardProps = {
     allowed: string[]
@@ -13,7 +14,7 @@ export const RoleGuard = ({ allowed, children }: RoleGuardProps) => {
         return <Navigate to="/login" replace />
     }
 
-    const userRoles = user.roles || []
+    const userRoles = normalizeRoles(user.roles || [])
 
     // Admin override
     if (userRoles.includes('ADMIN')) {

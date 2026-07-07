@@ -1,8 +1,10 @@
 const express = require('express')
 const router = express.Router()
 const bcrypt = require('bcryptjs')
-const User = require('../models/User')
-const Customer = require('../models/Customer')
+const { User } = require('../repositories')
+const { Customer } = require('../repositories')
+const { invalidateUserCache } = require('../middleware/auth')
+const { invalidateCustomerCache } = require('../middleware/customerAuth')
 
 // Initial Auth Middleware
 // We need a unified middleware or check which user type it is
@@ -14,6 +16,7 @@ const Customer = require('../models/Customer')
 // The difference is essentially which Model they verify against.
 
 const jwt = require('jsonwebtoken')
+const { normalizeUserRoles } = require('../utils/normalizeUserRoles')
 
 const unifiedAuth = async (req, res, next) => {
     const token = req.header('x-auth-token')
@@ -65,7 +68,7 @@ router.get('/', unifiedAuth, async (req, res) => {
             _id: user._id,
             name: user.name,
             phone: user.phone,
-            roles: roles,
+            roles: normalizeUserRoles(roles),
             type: req.userType,
             joinedAt: user.createdAt
         })
@@ -158,6 +161,10 @@ router.patch('/password', unifiedAuth, async (req, res) => {
 
         await userWithPass.save()
 
+        // Evict cache so the next request re-fetches the updated password hash
+        if (req.userType === 'STAFF') invalidateUserCache(req.user._id)
+        else if (req.userType === 'CUSTOMER') invalidateCustomerCache(req.user._id)
+
         res.json({ message: 'Password changed successfully' })
     } catch (err) {
         console.error(err)
@@ -166,3 +173,4 @@ router.patch('/password', unifiedAuth, async (req, res) => {
 })
 
 module.exports = router
+

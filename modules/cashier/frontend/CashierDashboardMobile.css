@@ -1,0 +1,291 @@
+/* Mobile Styles for Cashier Dashboard */
+@media (max-width: 768px) {
+  /* Hide desktop table container */
+  .cashier-page .dispatch-table-container {
+    display: none !important;
+  }
+
+  .cashier-page main {
+    padding: 0.75rem 0.375rem !important; /* Wider cards on mobile screen widths */
+    padding-bottom: 140px !important; /* Space for floating capsule + bottom nav */
+  }
+
+  /* Filters styling */
+  .cashier-filters-bar {
+    display: none !important;
+    background: white !important;
+    padding: 0.75rem !important;
+    border-radius: 0.75rem !important;
+    margin-bottom: 1rem !important;
+    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05) !important;
+    border: 1px solid #e2e8f0 !important;
+  }
+
+  .cashier-filters-bar.mobile-visible {
+    display: block !important;
+  }
+
+  .cashier-filters-bar .filter-group {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.75rem !important;
+    align-items: stretch !important;
+  }
+
+  .cashier-filters-bar .filter-select,
+  .cashier-filters-bar .filter-input {
+    width: 100% !important;
+  }
+
+  /* Mobile Card List */
+  .cashier-mobile-cards {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.5rem !important;
+    margin-top: 0.5rem !important;
+  }
+
+  .cashier-job-card {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    min-height: 52px !important;
+    padding: 0.6rem 0.75rem !important;
+    border-radius: 0.75rem !important;
+    border: 1px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06) !important;
+    transition: transform 0.15s ease, background-color 0.15s ease !important;
+  }
+
+  /* Light green color if paid */
+  .cashier-job-card.paid-card {
+    background-color: #f0fdf4 !important; /* Light green tint */
+    border-color: #bbf7d0 !important;
+  }
+
+  .cashier-job-card.unpaid-card {
+    background-color: #ffffff !important;
+  }
+
+  .cashier-job-card:active {
+    transform: scale(0.985) !important;
+  }
+
+  .card-left-section {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.5rem !important;
+    min-width: 0 !important;
+    flex: 1 !important;
+  }
+
+  .card-sno {
+    font-size: 0.65rem !important;
+    font-weight: 700 !important;
+    color: #94a3b8 !important;
+    min-width: 20px !important;
+    text-align: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .card-job-id {
+    font-size: 0.78rem !important;
+    font-weight: 800 !important;
+    color: #1e293b !important;
+    flex-shrink: 0 !important;
+  }
+
+  .card-customer-info {
+    display: flex !important;
+    align-items: center !important;
+    gap: 0.375rem !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
+  }
+
+  .card-customer-name {
+    font-size: 0.75rem !important;
+    font-weight: 600 !important;
+    color: #475569 !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+  }
+
+  .card-credit-badge {
+    font-size: 0.625rem !important;
+    padding: 0.125rem 0.375rem !important;
+    background: #d1fae5 !important;
+    color: #047857 !important;
+    border-radius: 4px !important;
+    font-weight: 700 !important;
+    flex-shrink: 0 !important;
+  }
+
+  .card-right-section {
+    display: flex !important;
+    align-items: center !important;
+    flex-shrink: 0 !important;
+  }
+
+  .card-paid-label {
+    color: #10b981 !important;
+    font-weight: 800 !important;
+    font-size: 0.75rem !important;
+    letter-spacing: 0.05em !important;
+    padding: 0.25rem 0.5rem !important;
+  }
+
+  .card-pay-btn {
+    height: 30px !important;
+    padding: 0 0.75rem !important;
+    background: #0f172a !important;
+    color: #ffffff !important;
+    border: none !important;
+    border-radius: 6px !important;
+    font-size: 0.75rem !important;
+    font-weight: 700 !important;
+    cursor: pointer !important;
+    transition: background-color 0.15s ease !important;
+    outline: none !important;
+  }
+
+  .card-pay-btn:active {
+    background: #1e293b !important;
+  }
+
+  /* Zoom Modal Styling */
+  .cashier-zoom-modal-overlay {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    right: 0 !important;
+    bottom: 0 !important;
+    background-color: rgba(15, 23, 42, 0.6) !important; /* Premium dark backdrop */
+    backdrop-filter: blur(4px) !important;
+    display: flex !important;
+    justify-content: center !important;
+    align-items: center !important;
+    z-index: 2000 !important; /* Float above everything */
+    padding: 1rem !important;
+  }
+
+  .cashier-zoom-modal-content {
+    background: #ffffff !important;
+    width: 100% !important;
+    max-width: 400px !important;
+    border-radius: 1rem !important;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04) !important;
+    border: 1px solid #e2e8f0 !important;
+    overflow: hidden !important;
+    animation: zoomInModal 0.2s cubic-bezier(0.16, 1, 0.3, 1) !important;
+  }
+
+  @keyframes zoomInModal {
+    from {
+      opacity: 0;
+      transform: scale(0.95) translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1) translateY(0);
+    }
+  }
+
+  .zoom-modal-header {
+    display: flex !important;
+    justify-content: space-between !important;
+    align-items: center !important;
+    padding: 1rem 1.25rem !important;
+    border-bottom: 1px solid #f1f5f9 !important;
+    background: #f8fafc !important;
+  }
+
+  .zoom-modal-header h3 {
+    margin: 0 !important;
+    font-size: 0.95rem !important;
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .zoom-close-btn {
+    background: none !important;
+    border: none !important;
+    font-size: 1.5rem !important;
+    font-weight: 500 !important;
+    color: #94a3b8 !important;
+    cursor: pointer !important;
+    padding: 0.25rem !important;
+    line-height: 1 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+  }
+
+  .zoom-close-btn:active {
+    color: #0f172a !important;
+  }
+
+  .zoom-modal-body {
+    padding: 1.25rem !important;
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 1rem !important;
+  }
+
+  .zoom-detail-item {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 0.25rem !important;
+  }
+
+  .zoom-detail-label {
+    font-size: 0.6875rem !important;
+    font-weight: 700 !important;
+    color: #94a3b8 !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+  }
+
+  .zoom-detail-value {
+    font-size: 0.875rem !important;
+    font-weight: 600 !important;
+    color: #334155 !important;
+    word-break: break-word !important;
+  }
+
+  .zoom-detail-value.font-bold {
+    font-weight: 800 !important;
+    color: #0f172a !important;
+    font-size: 1.125rem !important;
+  }
+
+  .zoom-customer-name {
+    font-size: 1rem !important;
+    color: #0f172a !important;
+    font-weight: 700 !important;
+    line-height: 1.4 !important;
+  }
+
+  .zoom-modal-footer {
+    display: flex !important;
+    justify-content: flex-end !important;
+    gap: 0.5rem !important;
+    padding: 0.875rem 1.25rem !important;
+    border-top: 1px solid #f1f5f9 !important;
+    background: #f8fafc !important;
+  }
+}
+
+/* Hide mobile-specific cards on desktop viewports */
+@media (min-width: 769px) {
+  .cashier-mobile-cards {
+    display: none !important;
+  }
+  .cashier-zoom-modal-overlay {
+    display: none !important;
+  }
+}

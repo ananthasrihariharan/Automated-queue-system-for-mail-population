@@ -44,12 +44,14 @@
 
 /* Isolated Premium Filter System for Dispatch */
 .dispatch-filters-bar {
-    background: white;
+    background: var(--surface-color);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
     padding: 0.75rem 1rem;
     border-radius: 1rem;
-    box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+    box-shadow: var(--shadow-md);
     margin-bottom: 2rem;
-    border: 1px solid #f1f5f9;
+    border: 1px solid var(--border-color);
 }
 
 .dispatch-header-actions {
@@ -81,7 +83,7 @@
     font-weight: 600;
     color: #1e293b;
     background: #ffffff;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     appearance: none;
 }
 
@@ -131,7 +133,7 @@
     border-radius: 0.75rem;
     padding: 0 1rem;
     height: 40px;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .dispatch-sort-wrapper:hover {
@@ -171,7 +173,7 @@
     border-radius: 0.75rem;
     padding: 0 1rem;
     height: 40px;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .date-filter-group:hover {
@@ -231,7 +233,7 @@
     color: #64748b;
     padding: 0.5rem 1rem;
     border-radius: 0.5rem;
-    transition: all 0.2s ease;
+    transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease, transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
 }
 
 .dashboard-tab:hover {
@@ -303,7 +305,7 @@
     font-size: 1.25rem;
     cursor: pointer;
     color: #475569;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .close-btn:hover {
@@ -316,11 +318,12 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    background: #f8fafc;
+    background: rgba(248, 250, 252, 0.6);
+    backdrop-filter: blur(4px);
     padding: 1rem;
     border-radius: 0.75rem;
     margin-bottom: 1.5rem;
-    border: 1px solid #f1f5f9;
+    border: 1px solid var(--border-color);
 }
 
 .dispatch-compact-info .info-item label {
@@ -364,13 +367,20 @@
 
 /* ===== Parcel Management ===== */
 .parcel-card {
-    border: 1px solid #e5e7eb;
+    border: 1px solid var(--border-color);
     border-radius: 0.75rem;
     padding: 1rem;
-    background: #fff;
-    transition: border-color 0.2s;
+    background: var(--surface-color);
+    box-shadow: var(--shadow-sm);
+    transition: background-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.2s cubic-bezier(0.4, 0, 0.2, 1), color 0.2s cubic-bezier(0.4, 0, 0.2, 1), transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1);
     content-visibility: auto;
     contain-intrinsic-size: 0 150px;
+}
+
+.parcel-card:hover {
+    border-color: #cbd5e1;
+    box-shadow: var(--shadow-md);
+    transform: translateY(-2px);
 }
 
 .parcel-card-header {
@@ -392,7 +402,7 @@
     overflow: hidden;
     background: #f8fafc;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .item-thumb:hover {
@@ -507,7 +517,7 @@
     font-weight: 700;
     color: #1e293b;
     cursor: pointer;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
     appearance: none;
     background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 24 24' stroke='%2364748b'%3E%3Cpath stroke-linecap='round' stroke-linejoin='round' stroke-width='2' d='M19 9l-7 7-7-7'%3E%3C/path%3E%3C/svg%3E");
     background-repeat: no-repeat;
@@ -767,4 +777,42 @@
             width: 100%;
         }
     }
+
+    /* Hide desktop navbar on mobile */
+    .dispatch-page .desktop-navbar-only {
+        display: none !important;
+    }
+
+    /* Make other filters collapsible */
+    .dispatch-page .dispatch-filters-bar {
+        display: none !important;
+    }
+
+    .dispatch-page .dispatch-filters-bar.mobile-visible {
+        display: block !important;
+        padding: 0.75rem 1rem !important;
+        margin-bottom: 1rem !important;
+        border: 1px solid #e2e8f0 !important;
+        background: #ffffff !important;
+        border-radius: 1rem !important;
+    }
 }
+
+/* Desktop & General Defaults */
+@media (min-width: 769px) {
+    .dispatch-page .mobile-header-row {
+        display: none !important;
+    }
+    .dispatch-page .desktop-navbar-only {
+        display: flex !important;
+    }
+}
+
+@media (max-width: 768px) {
+    .dispatch-page .mobile-header-row {
+        display: flex !important;
+    }
+    .dispatch-page .desktop-search-only {
+        display: none !important;
+    }
+}

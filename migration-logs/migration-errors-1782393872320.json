@@ -1,0 +1,230 @@
+[
+  {
+    "entity": "QueueUnread",
+    "mongoId": "69eae61fc761bf6a5a16e35c",
+    "message": "User not found: 699d5cd4d4daf4cd072e9c5e",
+    "stack": "Error: User not found: 699d5cd4d4daf4cd072e9c5e\n    at migrateQueueUnreads (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:673:40)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1484:5)"
+  },
+  {
+    "entity": "QueueJob",
+    "mongoId": "69f83315fd59b3c68a35ff5a",
+    "message": "invalid byte sequence for encoding \"UTF8\": 0x00",
+    "stack": "DriverAdapterError: invalid byte sequence for encoding \"UTF8\": 0x00\n    at PgTransaction.onError (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\adapter-pg\\dist\\index.js:678:11)\n    at PgTransaction.performIO (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\adapter-pg\\dist\\index.js:673:12)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async PgTransaction.queryRaw (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\adapter-pg\\dist\\index.js:604:30)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:44621)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:45065)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:43744)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:46661)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:43744)\n    at async e.interpretNode (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\node_modules\\@prisma\\client\\runtime\\client.js:11:46285)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a01730e2c0d047d8a78c5c6",
+    "message": "Customer not found: 698316895262f5206d0a1074",
+    "stack": "Error: Customer not found: 698316895262f5206d0a1074\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a01dcc839a124d830d387f7",
+    "message": "Customer not found: 69620b6f26233f59b59682d8",
+    "stack": "Error: Customer not found: 69620b6f26233f59b59682d8\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a02a77e9d0f20271ffcb56f",
+    "message": "Customer not found: 698183d70b467bc18e7c4bb2",
+    "stack": "Error: Customer not found: 698183d70b467bc18e7c4bb2\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a02d400853c8a8e92a20984",
+    "message": "Customer not found: 697499489fa37128a106fe7c",
+    "stack": "Error: Customer not found: 697499489fa37128a106fe7c\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a02d43a853c8a8e92a2113c",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a042669d555df461d59bce5",
+    "message": "Customer not found: 69708e37c5af6d6e501969ee",
+    "stack": "Error: Customer not found: 69708e37c5af6d6e501969ee\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a046c4fd555df461d68d822",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a047e25d555df461d724e7d",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a055703bcac5efd9e7b83f5",
+    "message": "Customer not found: 698183d70b467bc18e7c4bb2",
+    "stack": "Error: Customer not found: 698183d70b467bc18e7c4bb2\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05656ebcac5efd9e7e8abe",
+    "message": "Customer not found: 695f496f616f49660c9fd520",
+    "stack": "Error: Customer not found: 695f496f616f49660c9fd520\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a058391425e53261d404116",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05966dbcac5efd9e8814e9",
+    "message": "Customer not found: 6999a4bed4daf4cd072e2c8b",
+    "stack": "Error: Customer not found: 6999a4bed4daf4cd072e2c8b\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05a59c5a86f33fef84f1c4",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05a682ba326a7dfc84c445",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05aabdd4bede8f83139e66",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a05b5d632795cccb0f9b06e",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a06c5d08c71af7afa44b700",
+    "message": "Customer not found: 6999a4bed4daf4cd072e2c8b",
+    "stack": "Error: Customer not found: 6999a4bed4daf4cd072e2c8b\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a06db0c5208d6606d488d26",
+    "message": "Customer not found: 69723f06c5af6d6e501a8bce",
+    "stack": "Error: Customer not found: 69723f06c5af6d6e501a8bce\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0703ba5208d6606d52c10d",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a07071d9bb67ac53eeae72c",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a08364271336eb5eb011c45",
+    "message": "Customer not found: 6981c5fe0b467bc18e7cc0b4",
+    "stack": "Error: Customer not found: 6981c5fe0b467bc18e7cc0b4\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0a90c227ab5745ed5e8fba",
+    "message": "Customer not found: 6a0a90c227ab5745ed5e8fb8",
+    "stack": "Error: Customer not found: 6a0a90c227ab5745ed5e8fb8\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0ae7b927ab5745ed737cc9",
+    "message": "Customer not found: 69e719ce61f8a7917dba0e66",
+    "stack": "Error: Customer not found: 69e719ce61f8a7917dba0e66\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0aeb6927ab5745ed756863",
+    "message": "Customer not found: 6960daf2ca8167513bd1ae40",
+    "stack": "Error: Customer not found: 6960daf2ca8167513bd1ae40\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0c2c01381d3c2a4b877e38",
+    "message": "Customer not found: 6972367fc5af6d6e501a88e4",
+    "stack": "Error: Customer not found: 6972367fc5af6d6e501a88e4\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0d7f95381d3c2a4bd26932",
+    "message": "Customer not found: 6960daf2ca8167513bd1ae40",
+    "stack": "Error: Customer not found: 6960daf2ca8167513bd1ae40\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0d8b9faa9d9d64b395effb",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0d8fdaaa9d9d64b395effd",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0e8e02381d3c2a4bf95f89",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a0edf38ccd177402985b00d",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a1002963beba9ff3aa9d4e2",
+    "message": "Customer not found: 69708e37c5af6d6e501969ee",
+    "stack": "Error: Customer not found: 69708e37c5af6d6e501969ee\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a1059953beba9ff3abb8be4",
+    "message": "Customer not found: 6960daf2ca8167513bd1ae40",
+    "stack": "Error: Customer not found: 6960daf2ca8167513bd1ae40\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a112e48ccd177402985b0d5",
+    "message": "Customer not found: null",
+    "stack": "Error: Customer not found: null\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a114d9c3beba9ff3ac7d33d",
+    "message": "Customer not found: 6972367fc5af6d6e501a88e4",
+    "stack": "Error: Customer not found: 6972367fc5af6d6e501a88e4\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a143c497073baabe575fb08",
+    "message": "Customer not found: 695f5499616f49660c9fe95e",
+    "stack": "Error: Customer not found: 695f5499616f49660c9fe95e\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  },
+  {
+    "entity": "Job",
+    "mongoId": "6a16dcafb5e204620b46e828",
+    "message": "Customer not found: 696498332a8a92624b5210aa",
+    "stack": "Error: Customer not found: 696498332a8a92624b5210aa\n    at migrateJobs (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1008:32)\n    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)\n    at async main (C:\\Users\\anand\\Downloads\\despatch system (4) - Copy\\despatch system\\scripts\\migrateMongoToPg.js:1492:5)"
+  }
+]

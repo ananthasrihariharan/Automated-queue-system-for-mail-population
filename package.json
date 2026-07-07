@@ -5,25 +5,36 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "concurrently \"nodemon server.js\" \"cd printing-press-frontend && npm run dev\""
+    "dev": "concurrently \"nodemon server.js\" \"cd printing-press-frontend && npm run dev\"",
+    "pm2:start": "pm2 start ecosystem.config.js --env production",
+    "pm2:stop": "pm2 stop despatch-backend",
+    "pm2:restart": "pm2 restart despatch-backend",
+    "pm2:logs": "pm2 logs despatch-backend",
+    "pm2:status": "pm2 status",
+    "pm2:save": "pm2 save"
   },
   "dependencies": {
+    "@prisma/adapter-pg": "^7.8.0",
+    "@prisma/client": "^7.8.0",
     "archiver": "^7.0.1",
     "axios": "^1.15.2",
     "bcryptjs": "^2.4.3",
     "chokidar": "^3.6.0",
+    "compression": "^1.8.1",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "express": "^4.19.2",
+    "express-rate-limit": "^8.5.2",
     "jsonwebtoken": "^9.0.2",
-    "mongoose": "^8.23.0",
+    "mongodb": "^7.3.0",
     "multer": "^2.0.2",
+    "pg": "^8.21.0",
     "socket.io": "^4.7.5",
     "socket.io-client": "^4.8.3"
   },
   "devDependencies": {
-    "@types/socket.io-client": "^1.4.36",
     "concurrently": "^9.2.1",
-    "nodemon": "^3.1.0"
+    "nodemon": "^3.1.0",
+    "prisma": "^7.8.0"
   }
 }

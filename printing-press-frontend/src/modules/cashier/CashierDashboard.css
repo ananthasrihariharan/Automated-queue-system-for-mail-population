@@ -33,7 +33,7 @@
     font-weight: 600;
     color: #1e293b;
     background: #ffffff;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
     appearance: none;
 }
 
@@ -59,7 +59,7 @@
     border-radius: 0.75rem;
     padding: 0 1rem;
     height: 40px;
-    transition: all 0.2s;
+    transition: background-color 0.2s, border-color 0.2s, color 0.2s, transform 0.2s, box-shadow 0.2s, opacity 0.2s;
 }
 
 .date-filter-icon {
@@ -110,7 +110,7 @@
     height: 20px;
     background: #e2e8f0;
     border-radius: 999px;
-    transition: all 0.3s;
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s, transform 0.3s, box-shadow 0.3s, opacity 0.3s;
 }
 
 .toggle-switch::after {
@@ -122,7 +122,7 @@
     height: 16px;
     background: white;
     border-radius: 50%;
-    transition: all 0.3s;
+    transition: background-color 0.3s, border-color 0.3s, color 0.3s, transform 0.3s, box-shadow 0.3s, opacity 0.3s;
 }
 
 .toggle-label input:checked+.toggle-switch {

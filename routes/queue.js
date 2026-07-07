@@ -1,5 +1,5 @@
 /**
- * Queue Routes — Staff-facing queue endpoints
+ * Queue Routes â€” Staff-facing queue endpoints
  * Role: PREPRESS
  */
 
@@ -11,17 +11,19 @@ const fs = require('fs')
 const auth = require('../middleware/auth')
 const authorize = require('../middleware/authorize')
 const queueEngine = require('../services/queueEngine')
-const QueueRequest = require('../models/QueueRequest')
-const QueueJob = require('../models/QueueJob')
-const QueueSession = require('../models/QueueSession')
+const { QueueRequest } = require('../repositories')
+const { QueueJob } = require('../repositories')
+const { QueueSession } = require('../repositories')
 
 /**
- * POST /start-session — Staff enters queue mode
+ * POST /start-session â€” Staff enters queue mode
  */
 router.post('/start-session', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const { session, job } = await queueEngine.onStaffLogin(req.user._id)
-    // eventHandlers now handles the eventBus signal
+    console.log('[Queue API] /start-session called â€” staff:', req.user.name, '(', req.user._id, ') body:', req.body)
+    const { autoAssign } = req.body
+    const { session, job } = await queueEngine.onStaffLogin(req.user._id, { autoAssign })
+    console.log('[Queue API] /start-session result â€” session:', session._id, '| job:', job ? job._id + ' [' + job.status + ']' : 'null')
 
     res.json({
       message: 'Queue session started',
@@ -29,7 +31,7 @@ router.post('/start-session', auth, authorize('PREPRESS'), async (req, res) => {
         id: session._id,
         loginAt: session.loginAt
       },
-      currentJob: job || null
+      currentJob: job ? JSON.parse(JSON.stringify(job)) : null
     })
   } catch (err) {
     console.error('START SESSION ERROR:', err)
@@ -38,7 +40,7 @@ router.post('/start-session', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * POST /end-session — Staff leaves queue mode
+ * POST /end-session â€” Staff leaves queue mode
  */
 router.post('/end-session', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -55,14 +57,14 @@ router.post('/end-session', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * GET /my-jobs-today — All jobs assigned to me today (active + paused + completed)
+ * GET /my-jobs-today â€” All jobs assigned to me today (active + paused + completed)
  */
 router.get('/my-jobs-today', auth, authorize('PREPRESS'), async (req, res) => {
   try {
     const now = new Date()
     const startOfToday = new Date(now.setHours(0, 0, 0, 0))
 
-    // Return everything assigned to this staff today — completed, active, paused
+    // Return everything assigned to this staff today â€” completed, active, paused
     const jobs = await QueueJob.find({
       assignedTo: req.user._id,
       $or: [
@@ -80,9 +82,43 @@ router.get('/my-jobs-today', auth, authorize('PREPRESS'), async (req, res) => {
   }
 })
 
+/**
+ * GET /history-older â€” Get completed jobs from the last 5 days (including today) regardless of staff
+ */
+router.get('/history-older', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const { search = '' } = req.query
+    if (!search.trim()) {
+      return res.json([])
+    }
+
+    const now = new Date()
+    const fiveDaysAgo = new Date()
+    fiveDaysAgo.setDate(now.getDate() - 5)
+    fiveDaysAgo.setHours(0, 0, 0, 0)
+
+    const regex = { $regex: search.trim(), $options: 'i' }
+
+    // Find completed jobs in the last 5 days (including today), regardless of who was assigned
+    const jobs = await QueueJob.find({
+      status: 'COMPLETED',
+      completedAt: { $gte: fiveDaysAgo, $lte: now },
+      customerName: regex
+    })
+      .sort({ completedAt: -1 })
+      .limit(50)
+      .populate('assignedTo', 'name')
+      .populate('reassignedFrom', 'name')
+
+    res.json(jobs)
+  } catch (err) {
+    res.status(500).json({ message: err.message })
+  }
+})
+
 
 /**
- * GET /pool-size — How many jobs are waiting in the pool (PREPRESS-accessible)
+ * GET /pool-size â€” How many jobs are waiting in the pool (PREPRESS-accessible)
  */
 router.get('/pool-size', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -95,58 +131,87 @@ router.get('/pool-size', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * GET /general-pool — Search the waiting pool for specific jobs
+ * GET /general-pool â€” Search the waiting pool for specific jobs.
+ * When a search term is provided, also includes COMPLETED jobs from today
+ * so staff can verify who finished a job.
  */
 router.get('/general-pool', auth, authorize('PREPRESS'), async (req, res) => {
   try {
     const { search = '' } = req.query;
-    
-    const filter = { 
-      status: { $in: ['QUEUED', 'PAUSED', 'ASSIGNED', 'IN_PROGRESS'] },
+
+    const activeFilter = {
+      status: { $in: ['QUEUED', 'PAUSED', 'ASSIGNED', 'IN_PROGRESS', 'ADMIN_REVIEW'] },
       isSuperseded: { $ne: true },
       type: { $ne: 'WALKIN' }
     };
 
     if (search) {
       const regex = { $regex: search.trim(), $options: 'i' };
-      filter.$or = [
+      activeFilter.$or = [
         { customerName: regex },
         { customerEmail: regex },
         { emailSubject: regex }
       ];
     }
 
-    const jobs = await QueueJob.find(filter)
+    const activeJobs = await QueueJob.find(activeFilter)
       .sort({ priorityScore: -1, createdAt: 1 })
-      .limit(50) 
+      .limit(50)
       .populate('pinnedToStaff', 'name')
       .populate('assignedTo', 'name');
 
-    // Add batch counts to each result for UI visibility
-    const jobsWithCounts = await Promise.all(jobs.map(async (job) => {
-      const batchFilter = { 
-        status: 'QUEUED', 
+    // Also search today's completed jobs when a search term is provided
+    let completedJobs = [];
+    if (search.trim()) {
+      const startOfToday = new Date();
+      startOfToday.setHours(0, 0, 0, 0);
+
+      const regex = { $regex: search.trim(), $options: 'i' };
+      completedJobs = await QueueJob.find({
+        status: 'COMPLETED',
+        completedAt: { $gte: startOfToday },
+        type: { $ne: 'WALKIN' },
+        $or: [
+          { customerName: regex },
+          { customerEmail: regex },
+          { emailSubject: regex }
+        ]
+      })
+        .sort({ completedAt: -1 })
+        .limit(20)
+        .populate('assignedTo', 'name');
+    }
+
+    // Add batch counts to active job results for UI visibility
+    const activeJobsWithCounts = await Promise.all(activeJobs.map(async (job) => {
+      const batchFilter = {
+        status: { $in: ['QUEUED', 'PAUSED', 'ASSIGNED', 'IN_PROGRESS'] },
         isSuperseded: { $ne: true }
       };
-      
+
       if (job.customerEmail) batchFilter.customerEmail = job.customerEmail;
       else if (job.customerPhone) batchFilter.customerPhone = job.customerPhone;
-      else {
-        return { ...job.toObject(), batchCount: 1 };
-      }
+      else return { ...job.toObject(), batchCount: 1 };
 
       const count = await QueueJob.countDocuments(batchFilter);
       return { ...job.toObject(), batchCount: count };
     }));
 
-    res.json(jobsWithCounts);
+    // Completed jobs don't have batch counts â€” just normalise them
+    const completedJobsNormalised = completedJobs.map(job => ({
+      ...job.toObject(),
+      batchCount: 1
+    }));
+
+    // Active jobs first, then completed ones at the bottom
+    res.json([...activeJobsWithCounts, ...completedJobsNormalised]);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 })
 
 /**
- * GET /current-job — Get currently assigned job (fallback if WebSocket missed)
+ * GET /current-job â€” Get currently assigned job (fallback if WebSocket missed)
  */
 router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -154,31 +219,37 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
       staffId: req.user._id,
       isActive: true
     })
-      .populate({
-        path: 'currentQueueJob',
-        populate: { path: 'reassignedFrom', select: 'name' }
-      })
-      .populate('currentWalkinJob')
 
     if (!session) {
       return res.json({ active: false, queueJob: null, walkinJob: null })
     }
 
+    // Explicitly fetch current jobs by ID — PG stores these as legacy string fields
+    // so .populate() on the session cannot do a DB lookup for them.
+    const [queueJob, walkinJob] = await Promise.all([
+      session.currentQueueJob
+        ? QueueJob.findById(session.currentQueueJob).populate('reassignedFrom', 'name')
+        : Promise.resolve(null),
+      session.currentWalkinJob
+        ? QueueJob.findById(session.currentWalkinJob)
+        : Promise.resolve(null)
+    ])
+
     const pausedJobs = await QueueJob.find({ assignedTo: req.user._id, status: 'PAUSED' })
     const pendingPinnedJobs = await QueueJob.find({ pinnedToStaff: req.user._id, status: 'QUEUED' })
-    
+
     // The "Tray": Assigned to me, but not currently the "active" slot job
-    const pendingTray = await QueueJob.find({ 
-      assignedTo: req.user._id, 
+    const pendingTray = await QueueJob.find({
+      assignedTo: req.user._id,
       status: 'ASSIGNED',
-      _id: { $ne: session.currentQueueJob?._id || session.currentQueueJob } 
+      _id: { $ne: queueJob?._id || queueJob?.id }
     }).sort({ priorityScore: -1, createdAt: 1 })
 
-    // 1.5 BATCH STREAM: Find all other jobs for this customer that are pinned/assigned to me
+    // BATCH STREAM: Find all other jobs for this customer that are pinned/assigned to me
     let activeBatch = []
-    if (session.currentQueueJob && session.currentQueueJob.customerEmail) {
+    if (queueJob && queueJob.customerEmail) {
       activeBatch = await QueueJob.find({
-        customerEmail: session.currentQueueJob.customerEmail,
+        customerEmail: queueJob.customerEmail,
         status: { $in: ['ASSIGNED', 'IN_PROGRESS', 'QUEUED'] },
         $or: [
           { assignedTo: req.user._id },
@@ -190,13 +261,14 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
     res.json({
       active: true,
       sessionId: session._id,
-      queueJob: session.currentQueueJob || null,
-      walkinJob: session.currentWalkinJob || null,
+      queueJob: queueJob || null,
+      walkinJob: walkinJob || null,
       activeBatch: activeBatch,
       pausedJobs: pausedJobs || [],
       pendingPinnedJobs: pendingPinnedJobs || [],
       pendingTray: pendingTray || []
     })
+    console.log(`[CurrentJob] Staff: ${req.user._id} | queueJob: ${queueJob?._id || 'null'} | walkinJob: ${walkinJob?._id || 'null'}`)
   } catch (err) {
     console.error('CURRENT JOB ERROR:', err)
     res.status(500).json({ message: err.message })
@@ -204,26 +276,43 @@ router.get('/current-job', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * POST /take-job — Staff manually picks a job from the pool or their queue
+ * POST /take-job â€” Staff manually picks a job from the pool or their queue
  */
 router.post('/take-job', auth, authorize('PREPRESS'), async (req, res) => {
   try {
     const { jobId, takeAll = false } = req.body;
     if (!jobId) return res.status(400).json({ message: 'Job ID required' });
 
-    const job = await queueEngine.takeJob(req.user._id, jobId, takeAll);
+    console.log(`[TakeJob] Staff: ${req.user._id} (${req.user.name}) | jobId: ${jobId} | takeAll: ${takeAll}`);
+
+    let session = await QueueSession.findOne({ staffId: req.user._id, isActive: true });
+    if (!session) {
+      console.log(`[TakeJob] No active session â€” auto-creating for ${req.user._id}`);
+      await queueEngine.onStaffLogin(req.user._id, { autoAssign: false });
+    } else {
+      console.log(`[TakeJob] Session found: ${session._id} | currentQueueJob: ${session.currentQueueJob || 'null'}`);
+    }
+
+    const result = await queueEngine.takeJob(req.user._id, jobId, takeAll);
+    console.log(`[TakeJob] Engine result: ${result ? JSON.stringify({ jobId: result.job?._id, status: result.job?.status, prevOwner: result.previousOwnerName }) : 'NULL'}`);
+
+    if (!result || !result.job) {
+      return res.status(409).json({ message: 'Job could not be assigned. Please try again.' });
+    }
     res.json({
       message: 'Job successfully taken',
-      job
+      job: result.job,
+      previousOwnerName: result.previousOwnerName || null
     });
   } catch (err) {
     console.error('TAKE JOB ERROR:', err);
-    res.status(500).json({ message: err.message });
+    const isConflict = err.message && err.message.startsWith('LOCK_CONFLICT');
+    res.status(isConflict ? 409 : 500).json({ message: err.message });
   }
 });
 
 /**
- * POST /complete-job/:id — Mark queue job done, triggers next assignment
+ * POST /complete-job/:id â€” Mark queue job done, triggers next assignment
  */
 router.post('/complete-job/:id', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -240,7 +329,7 @@ router.post('/complete-job/:id', auth, authorize('PREPRESS'), async (req, res) =
 })
 
 /**
- * POST /bulk-complete — Mark multiple jobs as done
+ * POST /bulk-complete â€” Mark multiple jobs as done
  */
 router.post('/bulk-complete', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -270,14 +359,14 @@ router.post('/bulk-complete', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * POST /walkin-request — Staff requests walk-in approval from admin
+ * POST /walkin-request â€” Staff requests walk-in approval from admin
  */
 router.post('/walkin-request', auth, authorize('PREPRESS'), async (req, res) => {
   try {
     const { description } = req.body
     if (!description) return res.status(400).json({ message: 'description is required' })
 
-    const QueueRequest = require('../models/QueueRequest')
+    const { QueueRequest } = require('../repositories')
     const request = await QueueRequest.create({
       type: 'WALKIN',
       description,
@@ -301,12 +390,12 @@ router.post('/walkin-request', auth, authorize('PREPRESS'), async (req, res) => 
 
 
 /**
- * GET /staff-list — Get all staff members for messaging contact list
+ * GET /staff-list â€” Get all staff members for messaging contact list
  * Available to any authenticated user (staff and admin)
  */
 router.get('/staff-list', auth, async (req, res) => {
   try {
-    const User = require('../models/User')
+    const { User } = require('../repositories')
     const staff = await User.find({ isActive: true }).select('name role roles')
     res.json(staff)
   } catch (err) {
@@ -315,7 +404,7 @@ router.get('/staff-list', auth, async (req, res) => {
 })
 
 /**
- * GET /session-status — Check if staff has active session
+ * GET /session-status â€” Check if staff has active session
  */
 router.get('/session-status', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -338,7 +427,7 @@ router.get('/session-status', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * POST /session/toggle-pause — Toggle active staff job auto-assignment stream
+ * POST /session/toggle-pause â€” Toggle active staff job auto-assignment stream
  */
 router.post('/session/toggle-pause', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -351,7 +440,7 @@ router.post('/session/toggle-pause', auth, authorize('PREPRESS'), async (req, re
 })
 
 /**
- * POST /heartbeat — Maintain active session status
+ * POST /heartbeat â€” Maintain active session status
  */
 router.post('/heartbeat', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -367,7 +456,7 @@ router.post('/heartbeat', auth, authorize('PREPRESS'), async (req, res) => {
 })
 
 /**
- * POST /reassign-request — Staff requests job move with reason
+ * POST /reassign-request â€” Staff requests job move with reason
  */
 router.post('/reassign-request', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -387,14 +476,14 @@ router.post('/reassign-request', auth, authorize('PREPRESS'), async (req, res) =
 })
 
 /**
- * POST /jobs/:id/pause — Manually hold/pause the current job
+ * POST /jobs/:id/pause â€” Manually hold/pause the current job
  */
 router.post('/jobs/:id/pause', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const { fetchNext = true } = req.body;
+    const { fetchNext = true, isHardPin = false, reason = '' } = req.body;
     // If fetchNext is false, it means they clicked "Pause for Walk-in". 
     // We pass true to pauseQueue to block auto-assignment and stay idle.
-    const job = await queueEngine.pauseJob(req.user._id, req.params.id, !fetchNext)
+    const job = await queueEngine.pauseJob(req.user._id, req.params.id, !fetchNext, isHardPin, reason)
     
     // Engine already emits job:paused, we just handle the next assignment here if requested
     if (fetchNext) {
@@ -404,12 +493,20 @@ router.post('/jobs/:id/pause', auth, authorize('PREPRESS'), async (req, res) => 
     res.json({ message: 'Job paused successfully', job })
   } catch (err) {
     console.error('PAUSE ERROR:', err)
-    res.status(500).json({ message: err.message })
+    // Return 400 for known validation errors so the client gets a meaningful message
+    // rather than a generic 500 that looks like a server crash.
+    const isValidationError = [
+      'Not authorized for this job',
+      'Job is not in an active state',
+      'No active session found',
+      'Job not found'
+    ].some(msg => err.message && err.message.includes(msg))
+    res.status(isValidationError ? 400 : 500).json({ message: err.message })
   }
 })
 
 /**
- * POST /jobs/:id/resume — Manually resume a paused job
+ * POST /jobs/:id/resume â€” Manually resume a paused job
  */
 router.post('/jobs/:id/resume', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -417,36 +514,60 @@ router.post('/jobs/:id/resume', auth, authorize('PREPRESS'), async (req, res) =>
     res.json({ message: 'Job resumed successfully', job })
   } catch (err) {
     console.error('RESUME ERROR:', err)
-    res.status(500).json({ message: err.message })
+    const isValidationError = [
+      'Not authorized for this job',
+      'No active session',
+      'Job not found'
+    ].some(msg => err.message && err.message.includes(msg))
+    res.status(isValidationError ? 400 : 500).json({ message: err.message })
   }
 })
 
 /**
- * POST /jobs/:id/take — Explicitly start/take any job (pinned or walkin)
+ * POST /jobs/:id/take â€” Explicitly start/take any job (pinned or walkin)
  */
 router.post('/jobs/:id/take', auth, authorize('PREPRESS'), async (req, res) => {
   try {
     const { takeAll = false } = req.body;
-    const job = await queueEngine.takeJob(req.user._id, req.params.id, takeAll)
-    res.json({ message: 'Job taken successfully', job })
+
+    let session = await QueueSession.findOne({ staffId: req.user._id, isActive: true });
+    if (!session) {
+      await queueEngine.onStaffLogin(req.user._id, { autoAssign: false });
+    }
+
+    const result = await queueEngine.takeJob(req.user._id, req.params.id, takeAll);
+    if (!result || !result.job) {
+      return res.status(409).json({ message: 'Job could not be assigned. Please try again.' });
+    }
+    res.json({ message: 'Job taken successfully', job: result.job, previousOwnerName: result.previousOwnerName || null })
   } catch (err) {
     console.error('TAKE JOB ERROR:', err)
-    res.status(500).json({ message: err.message })
+    const isConflict = err.message && err.message.startsWith('LOCK_CONFLICT');
+    res.status(isConflict ? 409 : 500).json({ message: err.message })
   }
 })
 
 // Keep old route for backward compatibility if needed, pointing to same logic
 router.post('/walkin/:id/start', auth, authorize('PREPRESS'), async (req, res) => {
   try {
-    const job = await queueEngine.takeJob(req.user._id, req.params.id)
-    res.json({ message: 'Job started successfully', job })
+    let session = await QueueSession.findOne({ staffId: req.user._id, isActive: true });
+    if (!session) {
+      await queueEngine.onStaffLogin(req.user._id, { autoAssign: false });
+    }
+
+    const result = await queueEngine.takeJob(req.user._id, req.params.id);
+    if (!result || !result.job) {
+      return res.status(409).json({ message: 'Job could not be assigned. Please try again.' });
+    }
+    res.json({ message: 'Job started successfully', job: result.job, previousOwnerName: result.previousOwnerName || null })
   } catch (err) {
-    res.status(500).json({ message: err.message })
+    const isConflict = err.message && err.message.startsWith('LOCK_CONFLICT');
+    res.status(isConflict ? 409 : 500).json({ message: err.message })
   }
 })
 
 /**
- * PATCH /jobs/:id/complexity — Staff tags complexity after completing
+ * PATCH /jobs/:id/complexity â€” Staff tags complexity after completing
  */
 router.patch('/jobs/:id/complexity', auth, authorize('PREPRESS'), async (req, res) => {
   try {
@@ -469,7 +590,7 @@ router.patch('/jobs/:id/complexity', auth, authorize('PREPRESS'), async (req, re
 })
 
 /**
- * GET /files/:jobId/* — Securely serve job assets from N8N watch path
+ * GET /files/:jobId/* â€” Securely serve job assets from N8N watch path
  * Role: ADMIN or ASSIGNED PREPRESS staff
  */
 router.get('/files/:jobId/*', auth, async (req, res) => {
@@ -490,7 +611,7 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
     const isPinned = String(job.pinnedToStaff) === String(req.user._id)
     const isQueued = job.status === 'QUEUED'
 
-    // 🛡️ SECURITY CHECK: Broad access for staff/admins; restricted for others
+    // ðŸ›¡ï¸ SECURITY CHECK: Broad access for staff/admins; restricted for others
     if (!isAdmin && !isStaff && !isAssigned && !isPinned) {
       console.warn(`[Security] Unauthorized file access attempt on Job ${jobId} by User ${req.user._id}`)
       return res.status(403).json({ message: 'Access denied. You are not authorized to view these files.' })
@@ -531,6 +652,20 @@ router.get('/files/:jobId/*', auth, async (req, res) => {
   }
 })
 
+/**
+ * GET /jobs/:id â€” Get details of a single queue job by its Mongo ID
+ */
+router.get('/jobs/:id', auth, authorize('PREPRESS'), async (req, res) => {
+  try {
+    const job = await QueueJob.findById(req.params.id)
+    if (!job) return res.status(404).json({ message: 'Job not found' })
+    res.json(job)
+  } catch (err) {
+    console.error('GET JOB BY ID ERROR:', err)
+    res.status(500).json({ message: err.message })
+  }
+})
 
 module.exports = router
+
 

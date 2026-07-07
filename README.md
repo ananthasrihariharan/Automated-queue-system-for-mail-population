@@ -7,6 +7,10 @@
 
 ---
 
+> [!IMPORTANT]
+> **Active Module Documentation Rule**: Whenever you make changes to any code in a module (inside the `modules/` directory), you **MUST** update the respective `feature.md` file in that module's root directory (e.g., `modules/prepress/feature.md`) to reflect the changes in features, backend API endpoints, frontend interfaces, microservices, or database models. Keep the documentation in sync at all times.
+
+---
 ## Table of Contents
 
 1. [System Overview](#1-system-overview)

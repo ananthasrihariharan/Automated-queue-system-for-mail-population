@@ -2,9 +2,9 @@ const fs = require('fs')
 const fsp = require('fs').promises
 const path = require('path')
 const crypto = require('crypto')
-const IngestionTask = require('../models/IngestionTask')
-const QueueJob = require('../models/QueueJob')
-const CustomerPreference = require('../models/CustomerPreference')
+const { IngestionTask } = require('../repositories')
+const { QueueJob } = require('../repositories')
+const { CustomerPreference } = require('../repositories')
 const eventBus = require('./eventBus')
 
 /**
@@ -164,11 +164,11 @@ class ProcessingWorker {
       // Otherwise, it gets skipped by supersede AND block the staff member's next job auto-assignment
       if (activeJobForCustomer && activeJobForCustomer.status === 'PAUSED') {
         activeJobForCustomer.status = 'QUEUED';
-        activeJobForCustomer.returnReason = 'Superseded by incoming revision — returned to pool';
+        activeJobForCustomer.returnReason = 'Superseded by incoming revision â€” returned to pool';
         await activeJobForCustomer.save();
 
         // Also clear the session so the staff member isn't blocked resuming stale work
-        const QueueSession = require('../models/QueueSession');
+        const { QueueSession } = require('../repositories');
         await QueueSession.updateMany(
           { currentQueueJob: activeJobForCustomer._id },
           { $set: { currentQueueJob: null } }
@@ -263,7 +263,7 @@ class ProcessingWorker {
       let activeSession = null;
 
       if (preferredStaff) {
-        const QueueSession = require('../models/QueueSession');
+        const { QueueSession } = require('../repositories');
         // 1. Check for Active Session (Strictly Online)
         const ninetyMinsAgo = new Date(Date.now() - 90 * 60 * 1000);
         activeSession = await QueueSession.findOne({
@@ -316,7 +316,7 @@ class ProcessingWorker {
         }
       }
 
-      // 🚨 CRITICAL SAFETY: If the worker found ZERO attachments after its stability checks, 
+      // ðŸš¨ CRITICAL SAFETY: If the worker found ZERO attachments after its stability checks, 
       // it means the files are having significant trouble landing. We abort and let it retry 
       // rather than creating an empty, broken job.
       if (attachments.length === 0 && !isTrueDuplicate && task.attempts < 3) {
@@ -664,4 +664,5 @@ class ProcessingWorker {
 }
 
 module.exports = new ProcessingWorker()
+
 

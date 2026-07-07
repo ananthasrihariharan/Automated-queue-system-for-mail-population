@@ -1,8 +1,8 @@
 const eventBus = require('./eventBus')
-const JobEvent = require('../models/JobEvent')
-const QueueJob = require('../models/QueueJob')
-const QueueSession = require('../models/QueueSession')
-const User = require('../models/User')
+const { jobEventRepo } = require('../repositories')
+const { queueJobRepo } = require('../repositories')
+const { queueSessionRepo } = require('../repositories')
+const { userRepo } = require('../repositories')
 const statsService = require('./statsService')
 
 /**
@@ -30,10 +30,11 @@ class EventHandlers {
   }
 
   setupListeners() {
-    // ─── Job Life Cycle ───
+    // â”€â”€â”€ Job Life Cycle â”€â”€â”€
     
     eventBus.on('job:created', async ({ job }) => {
-      await this.logEvent(job._id, 'CREATED', { status: job.status })
+      const jobId = job.id || job._id;
+      await this.logEvent(jobId, 'CREATED', { status: job.status })
       
       // Update Stats
       if (job.status === 'QUEUED') await statsService.increment('queued')
@@ -48,8 +49,9 @@ class EventHandlers {
     })
 
     eventBus.on('job:assigned', async ({ job, staffId, details = {} }) => {
-      const staff = await User.findById(staffId).select('name').lean()
-      await this.logEvent(job._id, 'ASSIGNED', { 
+      const jobId = job.id || job._id;
+      const staff = await userRepo.findById(staffId).select('name').lean()
+      await this.logEvent(jobId, 'ASSIGNED', { 
         staffId, 
         staffName: staff?.name || 'Unknown',
         ...details
@@ -67,7 +69,7 @@ class EventHandlers {
     })
 
     eventBus.on('job:completed', async ({ jobId, staffId }) => {
-      const staff = await User.findById(staffId).select('name').lean()
+      const staff = await userRepo.findById(staffId).select('name').lean()
       await this.logEvent(jobId, 'COMPLETED', { staffId, staffName: staff?.name || 'Unknown' }, staffId)
       
       // Update Stats
@@ -76,7 +78,7 @@ class EventHandlers {
     })
 
     eventBus.on('job:pinned', async ({ jobId, staffId }) => {
-      const job = await QueueJob.findById(jobId).lean();
+      const job = await queueJobRepo.findById(jobId).lean();
       await this.logEvent(jobId, 'CREATED', { pinnedTo: staffId, action: 'PIN' })
 
       // Real-time notification for the staff member (Continuity / Manual Pin)
@@ -108,8 +110,8 @@ class EventHandlers {
 
     eventBus.on('job:reassigned', async ({ jobId, fromStaffId, toStaffId, notes, options }) => {
       const [fromStaff, toStaff] = await Promise.all([
-        fromStaffId ? User.findById(fromStaffId).select('name').lean() : null,
-        toStaffId ? User.findById(toStaffId).select('name').lean() : null
+        fromStaffId ? userRepo.findById(fromStaffId).select('name').lean() : null,
+        toStaffId ? userRepo.findById(toStaffId).select('name').lean() : null
       ])
       await this.logEvent(jobId, 'REASSIGNED', { 
         fromStaffId, 
@@ -131,7 +133,7 @@ class EventHandlers {
 
       if (this.io && toStaffId) {
         try {
-          const job = await QueueJob.findById(jobId).populate('assignedTo', 'name').populate('lastPausedBy', 'name');
+          const job = await queueJobRepo.findById(jobId).populate('assignedTo', 'name').populate('lastPausedBy', 'name');
           if (job) {
              this.io.to(`staff:${String(toStaffId).toLowerCase()}`).emit('job:assigned', { job, slot: 'queue' });
           }
@@ -148,7 +150,7 @@ class EventHandlers {
       // Use status from payload since job is already deleted from DB!
       if (!status) {
          // Fallback if emitted without status (legacy)
-         const job = await QueueJob.findById(jobId).select('status')
+         const job = await queueJobRepo.findById(jobId).select('status')
          if (job) status = job.status
       }
 
@@ -177,11 +179,11 @@ class EventHandlers {
       // So recalculating every now and then is good. For now, let's assume restoring always comes from a state we need to decrement.
       // But actually routes/admin-queue.js handles the status change before emitting job:restored.
       // Better to recalculate after restore to be safe.
-      await statsService.recalculate()
+      statsService.schedule()
     })
 
 
-    // ─── Session Life Cycle ───
+    // â”€â”€â”€ Session Life Cycle â”€â”€â”€
     eventBus.on('session:started', async ({ staffId }) => {
       console.log(`[Events] Staff login: ${staffId}`)
       await statsService.increment('activeSessions')
@@ -190,21 +192,25 @@ class EventHandlers {
     eventBus.on('session:ended', async ({ staffId, reason }) => {
       console.log(`[Events] Staff logout: ${staffId} (${reason})`)
       await statsService.decrement('activeSessions')
-      // Full recalculate required because queueEngine silently pushes active/paused jobs back to the waiting pool during logout
-      await statsService.recalculate()
-      this.triggerSweep()
+      // Schedule a recalculate — queueEngine pushes active/paused jobs back to pool on logout
+      statsService.schedule()
+      if (reason !== 'Session Terminated by New Login (Refresh)') {
+        this.triggerSweep()
+      }
     })
 
-    // ─── Missing Listeners (Audit Fix) ───
+    // â”€â”€â”€ Missing Listeners (Audit Fix) â”€â”€â”€
     eventBus.on('job:resumed', async ({ job, staffId }) => {
-      const staff = await User.findById(staffId).select('name').lean()
-      await this.logEvent(job._id, 'RESUMED', { staffId, staffName: staff?.name || 'Unknown' }, staffId)
+      const jobId = job.id || job._id;
+      const staff = await userRepo.findById(staffId).select('name').lean()
+      await this.logEvent(jobId, 'RESUMED', { staffId, staffName: staff?.name || 'Unknown' }, staffId)
       await statsService.move('paused', 'assigned')
     })
 
     eventBus.on('job:paused', async ({ job, staffId, details = {} }) => {
-      const staff = await User.findById(staffId).select('name').lean()
-      await this.logEvent(job._id, 'PAUSED', { 
+      const jobId = job.id || job._id;
+      const staff = await userRepo.findById(staffId).select('name').lean()
+      await this.logEvent(jobId, 'PAUSED', { 
           staffId, 
           staffName: staff?.name || 'Unknown',
           reason: job.returnReason || '',
@@ -213,10 +219,45 @@ class EventHandlers {
       await statsService.move('assigned', 'paused')
     })
 
-    eventBus.on('queue:reordered', async ({ jobId, reason }) => {
+    eventBus.on('queue:reordered', async ({ jobId, reason, affectedStaffIds }) => {
       if (jobId) await this.logEvent(jobId, 'CREATED', { action: 'REORDER' })
-      if (reason) await statsService.recalculate() // Run sync for batch/recovery triggers
+      if (reason) statsService.schedule() // Debounced — batch/recovery triggers may fire many times in quick succession
       this.triggerSweep()
+
+      // â”€â”€ Hold Timer Expiry: notify affected staff immediately â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+      // When RETURN_TO_POOL fires the hold timer recovery, the formerly-holding
+      // staff member's screen would stay stale for up to 60 s (frontend poll).
+      // Emit a targeted job:removed so their workspace clears instantly.
+      if (reason === 'Hold Timer Expired Recovery' && this.io) {
+        try {
+          // affectedStaffIds may be passed in by future callers; fall back to
+          // scanning the DB for recently-returned jobs (last 2 minutes)
+          let staffIds = Array.isArray(affectedStaffIds) ? affectedStaffIds : []
+
+          if (!staffIds.length) {
+            const twoMinsAgo = new Date(Date.now() - 2 * 60 * 1000)
+            const returnedJobs = await queueJobRepo.find({
+              status: 'QUEUED',
+              returnReason: /^Hold Expired/i,
+              updatedAt: { $gte: twoMinsAgo }
+            }).select('lastPausedBy').lean()
+
+            staffIds = [...new Set(
+              returnedJobs
+                .map(j => j.lastPausedBy?.toString())
+                .filter(Boolean)
+            )]
+          }
+
+          for (const sid of staffIds) {
+            this.io
+              .to(`staff:${sid.toLowerCase()}`)
+              .emit('job:removed', { reason: 'hold_expired', message: 'A held job was returned to the pool (hold timer expired).' })
+          }
+        } catch (err) {
+          console.error('[Events] Hold-expiry notification failed:', err.message)
+        }
+      }
     })
  
     eventBus.on('job:unpinned', async ({ jobId }) => {
@@ -228,8 +269,8 @@ class EventHandlers {
     eventBus.on('job:taken-by-other', async ({ jobId, newStaffId, oldStaffId }) => {
       try {
         const [newStaff, oldStaff] = await Promise.all([
-          User.findById(newStaffId).select('name').lean(),
-          User.findById(oldStaffId).select('name').lean()
+          userRepo.findById(newStaffId).select('name').lean(),
+          userRepo.findById(oldStaffId).select('name').lean()
         ])
 
         await this.logEvent(jobId, 'REASSIGNED', {
@@ -242,11 +283,11 @@ class EventHandlers {
         }, newStaffId)
 
         if (this.io) {
-          // Notify old staff: their held job was taken — clear it from their screen
+          // Notify old staff: their held job was taken â€” clear it from their screen
           this.io.to(`staff:${String(oldStaffId).toLowerCase()}`).emit('job:removed', {
             jobId,
             reason: 'taken_by_other_staff',
-            message: `⚠️ Job #${jobId.toString().substring(18).toUpperCase()} was taken by ${newStaff?.name || 'another staff member'}.`
+            message: `âš ï¸ Job #${jobId.toString().substring(18).toUpperCase()} was taken by ${newStaff?.name || 'another staff member'}.`
           })
         }
 
@@ -260,14 +301,16 @@ class EventHandlers {
     eventBus.on('job:batch-reserved', async ({ customerEmail, staffId }) => {
       // Find all affected jobs to log them individually or log a summary
       // Logging individually is better for the Activity Journal
-      const jobs = await QueueJob.find({ customerEmail, pinnedToStaff: staffId, status: 'QUEUED' })
+      const jobs = await queueJobRepo.find({ customerEmail, pinnedToStaff: staffId, status: 'QUEUED' })
       for (const job of jobs) {
-        await this.logEvent(job._id, 'CREATED', { action: 'BATCH_RESERVED', staffId }, staffId)
+        const jobId = job.id || job._id;
+        await this.logEvent(jobId, 'CREATED', { action: 'BATCH_RESERVED', staffId }, staffId)
       }
     })
 
     eventBus.on('walkin:approved', async ({ requestId, job }) => {
-      await this.logEvent(job._id, 'ASSIGNED', { action: 'WALKIN_APPROVED', requestId }, job.assignedTo)
+      const jobId = job.id || job._id;
+      await this.logEvent(jobId, 'ASSIGNED', { action: 'WALKIN_APPROVED', requestId }, job.assignedTo)
       // Walkin creation implicitly increments a job count. 
       // But walkins are created directly with status ASSIGNED or QUEUED.
       // Since job:created is NOT emitted for manual walkin creation in queueEngine.js (it should be!),
@@ -288,10 +331,10 @@ class EventHandlers {
 
     eventBus.on('reassign:requested', async ({ request, fromStaffId }) => {
       try {
-        const jobId = String(request.jobId._id || request.jobId)
+        const jobId = String(request.jobId?.id || request.jobId?._id || request.jobId)
         console.log(`[Events] Processing reassign:requested for Job ${jobId} from Staff ${fromStaffId}`)
         
-        const requester = await User.findById(fromStaffId).select('name').lean()
+        const requester = await userRepo.findById(fromStaffId).select('name').lean()
         await this.logEvent(jobId, 'REASSIGN_REQUESTED', { 
             requestId: request._id, 
             reason: request.description,
@@ -330,7 +373,7 @@ class EventHandlers {
   /**
    * Centralized Engine 'Crank':
    * Scans for all idle staff and attempts to assign available jobs.
-   * Debounced to 150ms — multiple rapid events coalesce into a single sweep,
+   * Debounced to 150ms â€” multiple rapid events coalesce into a single sweep,
    * preventing concurrent assignIdleStaff() calls that cause job over-assignment.
    */
   triggerSweep() {
@@ -349,10 +392,10 @@ class EventHandlers {
   async logEvent(jobId, actionType, details = {}, userId = null) {
 
     try {
-      await JobEvent.create({ jobId, actionType, details, userId })
+      await jobEventRepo.create({ jobId, actionType, details, userId })
       
       // Update the inline auditLog in QueueJob for quick retrieval
-      await QueueJob.findByIdAndUpdate(jobId, {
+      await queueJobRepo.findByIdAndUpdate(jobId, {
         $push: {
           auditLog: {
             action: actionType,
@@ -378,13 +421,13 @@ class EventHandlers {
 
       try {
         // Fix #14: Limit active jobs to prevent unbounded payload in sync
-        const activeJobs = await QueueJob.find({ 
+        const activeJobs = await queueJobRepo.find({ 
           status: { $in: ['QUEUED', 'ASSIGNED', 'IN_PROGRESS', 'PAUSED', 'ADMIN_REVIEW'] } 
         }).select('customerName emailSubject status priorityScore queuePosition assignedTo pinnedToStaff type createdAt')
           .sort({ queuePosition: 1 }).limit(150)
 
-        const sessions = await QueueSession.find({ isActive: true })
-          .populate('staffId', 'name role')
+        const sessions = await queueSessionRepo.find({ isActive: true })
+          .populate('staffId', 'name role isDeleted')
           .populate({
             path: 'currentQueueJob',
             select: 'status customerName emailSubject assignedAt'
@@ -394,8 +437,11 @@ class EventHandlers {
             select: 'status customerName description assignedAt'
           })
 
+        // Filter out sessions of deleted/soft-deleted users
+        const validSessions = sessions.filter(s => s.staffId && s.staffId.isDeleted !== true)
+
         // Enrich for frontend compatibility
-        const enrichedSessions = sessions.map(s => {
+        const enrichedSessions = validSessions.map(s => {
           const sess = s.toObject()
           sess.staffName = s.staffId?.name || 'Unknown Staff'
           
@@ -424,3 +470,4 @@ class EventHandlers {
 }
 
 module.exports = new EventHandlers()
+

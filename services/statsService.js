@@ -1,9 +1,9 @@
-const QueueStats = require('../models/QueueStats')
-const QueueJob = require('../models/QueueJob')
-const QueueSession = require('../models/QueueSession')
+const { QueueStats } = require('../repositories')
+const { QueueJob } = require('../repositories')
+const { QueueSession } = require('../repositories')
 
 /**
- * StatsService — Manages pre-calculated queue metrics
+ * StatsService â€” Manages pre-calculated queue metrics
  * Ensures atomic updates and provides a safety recalculate method.
  */
 class StatsService {
@@ -119,7 +119,7 @@ class StatsService {
         QueueJob.countDocuments({ status: 'COMPLETED', completedAt: { $gte: startOfDay } }),
         QueueJob.countDocuments({ status: 'ADMIN_REVIEW', isSuperseded: { $ne: true } }),
         QueueJob.countDocuments({ status: 'JUNK', isSuperseded: { $ne: true } }),
-        QueueSession.countDocuments({ isActive: true })
+        QueueSession.countActiveNonDeleted()
       ])
 
       await QueueStats.findOneAndUpdate(
@@ -142,6 +142,23 @@ class StatsService {
       console.error('[StatsService] Recalculation failed:', err.message)
     }
   }
+
+  /**
+   * Debounced recalculate: collapses rapid-fire calls into one DB round-trip.
+   * Any caller that fires within 5 s of the previous one shares the same batch.
+   * Use for event-driven triggers (job assigned, completed, reordered, etc.).
+   * Use recalculate() directly only when you need an immediate awaitable result.
+   */
+  schedule() {
+    if (this._scheduleTimer) clearTimeout(this._scheduleTimer);
+    this._scheduleTimer = setTimeout(() => {
+      this._scheduleTimer = null;
+      this.recalculate().catch(err =>
+        console.error('[StatsService] Scheduled recalc failed:', err.message)
+      );
+    }, 5000);
+  }
 }
 
 module.exports = new StatsService()
+

@@ -1,0 +1,1127 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id                 Int            @id @default(autoincrement())
+  legacyMongoId      String         @unique
+  name               String
+  email              String?        @unique  // optional — admin creates users by phone+roles only
+  phone              String?        @unique
+  password           String
+  role               String         @default("OPERATOR")
+  rawRoles           Json?
+  isActive           Boolean        @default(true)
+  lastLoginAt        DateTime?
+  lastJobCompletedAt DateTime?
+  syncTimestamp      BigInt         @default(0)
+  isDeleted          Boolean        @default(false)
+  deletedAt          DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  userRoles              UserRole[]
+  createdJobs            Job[]                @relation("CreatedBy")
+  printedJobs            Job[]                @relation("PrintedBy")
+  sessions               QueueSession[]
+  sentMessages           QueueMessage[]       @relation("MessageSender")
+  receivedMessages       QueueMessage[]       @relation("MessageRecipient")
+  workflowSteps          JobItemWorkflowStep[]
+  walkinRequestsBy       WalkinRequest[]      @relation("WalkinRequestedBy")
+  walkinRequestsTo       WalkinRequest[]      @relation("WalkinAssignedTo")
+  queueRequests          QueueRequest[]       @relation("QueueRequestedBy")
+  assignedQueueJobs      QueueJob[]           @relation("QueueJobAssignedTo")
+  pinnedQueueJobs        QueueJob[]           @relation("QueueJobPinnedTo")
+  pausedQueueJobs        QueueJob[]           @relation("QueueJobLastPausedBy")
+  reassignedQueueJobs    QueueJob[]           @relation("QueueJobReassignedFrom")
+  jobEvents              JobEvent[]           @relation("JobEventUser")
+
+  @@index([legacyMongoId])
+}
+
+model SystemConfig {
+  id          Int      @id @default(autoincrement())
+  key         String   @unique
+  value       Json
+  description String?
+  updatedAt   DateTime @updatedAt
+
+  @@index([key])
+}
+
+enum MigrationEntity {
+  USER
+  CUSTOMER
+  WALKINREQUEST
+  JOB
+  JOBEVENT
+  QUEUEJOB
+  QUEUEMESSAGE
+  QUEUEREQUEST
+  QUEUESESSION
+  QUEUEUNREAD
+  PARCEL
+  JOBCARD
+}
+
+enum JobEventActionType {
+  CREATED
+  ASSIGNED
+  IN_PROGRESS
+  PAUSED
+  RESUMED
+  COMPLETED
+  REASSIGNED
+  MERGED
+  DUPLICATE_FLAGGED
+  JUNK_FLAGGED
+}
+
+enum JobPackingPreference {
+  SINGLE
+  MULTIPLE
+  MIXED
+}
+
+enum JobDeliveryType {
+  COURIER
+  WALK_IN
+}
+
+enum JobPaymentStatus {
+  UNPAID
+  PAID
+  ADMIN_APPROVED
+}
+
+enum PaymentMode {
+  CASH
+  UPI
+  CARD
+  ONLINE
+  CREDIT
+}
+
+enum JobStatus {
+  PENDING
+  CREATED
+  PRINTED
+  PACKED
+  DISPATCHED
+  PARTIAL_DISPATCH
+}
+
+enum WalkinRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum IngestionTaskStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model MigrationMap {
+  id          Int             @id @default(autoincrement())
+  entityType  MigrationEntity
+  mongoId     String
+  postgresId  Int
+  createdAt   DateTime        @default(now())
+
+  @@unique([entityType, mongoId])
+  @@unique([entityType, postgresId])
+  @@index([mongoId])
+  @@index([entityType])
+}
+
+model CustomerPreference {
+  id                          Int      @id @default(autoincrement())
+  customerEmail               String
+  customerName                String?
+  preferredStaffId            Int
+  legacyPreferredStaffMongoId String?
+  confirmedCount              Int      @default(1)
+  createdAt                   DateTime @default(now())
+  updatedAt                   DateTime @updatedAt
+
+  @@unique([customerEmail, preferredStaffId])
+  @@index([customerEmail])
+  @@index([preferredStaffId])
+}
+
+model Customer {
+  id               Int       @id @default(autoincrement())
+  legacyMongoId    String?   @unique
+  name             String
+  phone            String    @unique
+  alternatePhones  String[]  @default([])
+  password         String
+  isCreditCustomer Boolean   @default(false)
+  isPremium        Boolean   @default(false)
+  emails           String[]  @default([])
+  syncTimestamp    BigInt    @default(0)
+  isDeleted        Boolean   @default(false)
+  deletedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+  jobs             Job[]
+
+  @@index([phone])
+  @@index([legacyMongoId])
+}
+
+model WalkinRequest {
+  id                    Int                 @id @default(autoincrement())
+  legacyMongoId         String?             @unique
+  description           String
+  requestedById         Int
+  assignedToId          Int?
+  status                WalkinRequestStatus @default(PENDING)
+  adminAction           String?
+  legacyQueueJobMongoId String?
+  createdAt             DateTime            @default(now())
+  updatedAt             DateTime            @updatedAt
+  requestedBy           User                @relation("WalkinRequestedBy", fields: [requestedById], references: [id])
+  assignedTo            User?               @relation("WalkinAssignedTo", fields: [assignedToId], references: [id])
+
+  @@index([requestedById])
+  @@index([assignedToId])
+  @@index([status])
+  @@index([legacyMongoId])
+}
+
+model IngestionTask {
+  id          Int                 @id @default(autoincrement())
+  folderPath  String              @unique
+  status      IngestionTaskStatus @default(PENDING)
+  attempts    Int                 @default(0)
+  error       String?
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime            @default(now())
+  updatedAt   DateTime            @updatedAt
+
+  @@index([folderPath])
+  @@index([status])
+}
+
+model QueueSession {
+  id                            Int       @id @default(autoincrement())
+  legacyMongoId                 String?   @unique
+  staffId                       Int
+  loginAt                       DateTime  @default(now())
+  logoutAt                      DateTime?
+  isActive                      Boolean   @default(true)
+  isQueuePaused                 Boolean   @default(false)
+  legacyCurrentQueueJobMongoId  String?
+  legacyCurrentWalkinJobMongoId String?
+  pinnedJobs                    Json?
+  pausedJobs                    Json?
+  serverVersion                 String    @default("1.0.6-trojan")
+  lastSeenAt                    DateTime?
+  syncTimestamp                 BigInt    @default(0)
+  isDeleted                     Boolean   @default(false)
+  deletedAt                     DateTime?
+  createdAt                     DateTime  @default(now())
+  updatedAt                     DateTime  @updatedAt
+  staff                         User      @relation(fields: [staffId], references: [id])
+
+  @@index([staffId])
+  @@index([isActive])
+  @@index([staffId, isActive])
+  @@index([legacyMongoId])
+}
+
+model QueueUnread {
+  id            Int      @id @default(autoincrement())
+  legacyMongoId String?  @unique
+  userId        Int
+  threadId      String
+  count         Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@unique([userId, threadId])
+  @@index([userId])
+  @@index([threadId])
+  @@index([legacyMongoId])
+}
+
+enum QueueMessageType {
+  DIRECT
+  BROADCAST
+}
+
+model QueueMessage {
+  id               Int              @id @default(autoincrement())
+  legacyMongoId    String?          @unique
+  senderId         Int
+  senderName       String
+  recipientId      Int
+  body             String
+  type             QueueMessageType
+  legacyJobMongoId String?
+  timestamp        DateTime         @default(now())
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+  sender           User             @relation("MessageSender", fields: [senderId], references: [id])
+  recipient        User             @relation("MessageRecipient", fields: [recipientId], references: [id])
+  queueJob         QueueJob?        @relation(fields: [legacyJobMongoId], references: [legacyMongoId])
+
+  @@index([senderId])
+  @@index([recipientId])
+  @@index([timestamp])
+  @@index([recipientId, timestamp])
+  @@index([legacyMongoId])
+}
+
+enum QueueRequestType {
+  WALKIN
+  REASSIGN
+}
+
+enum QueueRequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+model QueueRequest {
+  id                     Int                @id @default(autoincrement())
+  legacyMongoId          String?            @unique
+  type                   QueueRequestType
+  description            String
+  requestedById          Int
+  legacyJobMongoId       String?
+  status                 QueueRequestStatus @default(PENDING)
+  adminAction            String?
+  legacyResultJobMongoId String?
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+  requestedBy            User               @relation("QueueRequestedBy", fields: [requestedById], references: [id])
+
+  @@index([requestedById])
+  @@index([status])
+  @@index([legacyMongoId])
+}
+
+model QueueStats {
+  id              Int      @id @default(autoincrement())
+  snapshotAt      DateTime @default(now())
+  queued          Int      @default(0)
+  assigned        Int      @default(0)
+  paused          Int      @default(0)
+  completedToday  Int      @default(0)
+  adminReview     Int      @default(0)
+  junk            Int      @default(0)
+  totalInProgress Int      @default(0)
+  activeSessions  Int      @default(0)
+  breachRisk15    Int      @default(0)
+  breachRisk5     Int      @default(0)
+  staleJobs       Int      @default(0)
+  lastUpdated     DateTime @default(now())
+
+  @@index([snapshotAt])
+}
+
+enum QueueJobStatus {
+  QUEUED
+  ASSIGNED
+  IN_PROGRESS
+  PAUSED
+  COMPLETED
+  DUPLICATE
+  JUNK
+  ADMIN_REVIEW
+}
+
+enum QueueJobType {
+  EMAIL
+  WALKIN
+  WHATSAPP
+}
+
+enum QueueComplexityTag {
+  easy
+  medium
+  complex
+}
+
+enum QueueHoldBehavior {
+  RETURN_TO_POOL
+  STAY_HOLD
+}
+
+model QueueJob {
+  id                       Int                 @id @default(autoincrement())
+  legacyMongoId            String?             @unique
+  emailSubject             String?
+  customerName             String?
+  customerEmail            String?
+  customerPhone            String?
+  mailBody                 String?
+  folderPath               String
+  relativeFolderPath       String?
+  attachments              String[]            @default([])
+  attachmentMeta           Json?
+  externalLinks            Json?
+  status                   QueueJobStatus
+  priorityScore            Int                 @default(0)
+  queuePosition            BigInt              @default(0)
+  pinnedToStaffId          Int?
+  isHardPinned             Boolean             @default(false)
+  assignedToId             Int?
+  assignedAt               DateTime?
+  completedAt              DateTime?
+  dueBy                    DateTime?
+  complexityTag            QueueComplexityTag?
+  lastPausedById           Int?
+  type                     QueueJobType
+  handoffNotes             String?
+  staffHandoffReason       String?
+  adminHandoffNotes        String?
+  reassignedFromId         Int?
+  returnReason             String?
+  pauseReason              String?
+  holdUntil                DateTime?
+  holdBehavior             QueueHoldBehavior   @default(STAY_HOLD)
+  fingerprint              String?
+  threadId                 String?
+  version                  Int                 @default(1)
+  isAutoAssigned           Boolean             @default(false)
+  continuityContext        String?
+  parentJobId              Int?
+  legacyParentJobMongoId   String?
+  parentJob                QueueJob?           @relation("QueueJobHierarchy", fields: [parentJobId], references: [id])
+  childJobs                QueueJob[]          @relation("QueueJobHierarchy")
+  assignedTo               User?               @relation("QueueJobAssignedTo", fields: [assignedToId], references: [id])
+  pinnedToStaff            User?               @relation("QueueJobPinnedTo", fields: [pinnedToStaffId], references: [id])
+  lastPausedBy             User?               @relation("QueueJobLastPausedBy", fields: [lastPausedById], references: [id])
+  reassignedFrom           User?               @relation("QueueJobReassignedFrom", fields: [reassignedFromId], references: [id])
+  isSuperseded             Boolean             @default(false)
+  auditLog                 Json?
+  syncTimestamp            BigInt              @default(0)
+  isDeleted                Boolean             @default(false)
+  deletedAt                DateTime?
+  createdAt                DateTime
+  updatedAt                DateTime
+  messages                 QueueMessage[]
+
+  @@index([legacyMongoId])
+  @@index([customerEmail])
+  @@index([status])
+  @@index([assignedToId])
+  @@index([pinnedToStaffId])
+  @@index([fingerprint])
+  @@index([threadId])
+  @@index([parentJobId])
+  @@index([status, queuePosition])
+  @@index([status, assignedToId])
+  @@index([status, createdAt])
+  @@index([status, type])
+  @@index([dueBy])
+  @@index([holdUntil])
+}
+
+model JobCard {
+  id                  Int       @id @default(autoincrement())
+  legacyMongoId       String?   @unique
+  jobId               String    @unique
+  customerName        String
+  totalItems          Int
+  attBy               String?
+  date                DateTime?
+  
+  // Spec & Processes
+  hasCutting          Boolean   @default(false)
+  hasDieCutting       Boolean   @default(false)
+  hasLamination       Boolean   @default(false)
+  hasPerforation      Boolean   @default(false)
+  hasNcBox            Boolean   @default(false)
+  hasCreasing         Boolean   @default(false)
+  hasCornerCut        Boolean   @default(false)
+  hasBinding          Boolean   @default(false)
+  hasFoil             Boolean   @default(false)
+  hasIdCard           Boolean   @default(false)
+  
+  vcBoxCount          String?
+  foilType            String?
+  foilQty             String?
+  idFusing            Boolean   @default(false)
+  idFusingType        String?
+  idFusingQty         String?
+  idHoles             Boolean   @default(false)
+  idHolesType         String?
+  
+  cornerNoOfCards     String?
+  cornerDate          String?
+  cornerTl            Boolean   @default(false)
+  cornerTr            Boolean   @default(false)
+  cornerBl            Boolean   @default(false)
+  cornerBr            Boolean   @default(false)
+  
+  cuttingNoOfCutting  String?
+  cuttingDate         String?
+  cuttingSizes        String[]  @default([])
+  
+  // Binding
+  bindingNoOfBooks    String?
+  bindingCenterPin    Boolean   @default(false)
+  bindingCenterPinQty String?
+  bindingPerfect      Boolean   @default(false)
+  bindingPerfectQty   String?
+  bindingCase         Boolean   @default(false)
+  bindingCaseQty      String?
+  bindingWiro         Boolean   @default(false)
+  bindingWiroQty      String?
+  bindingPouchLam     Boolean   @default(false)
+  bindingPouchLamQty  String?
+  bindingSpecial      Boolean   @default(false)
+  bindingSpecialQty   String?
+  bindingSpecialDesc  String?
+  bindingDate         String?
+
+  // Lamination
+  lamDate             String?
+  lamGlossy           Boolean   @default(false)
+  lamGlossyQty        String?
+  lamGlossySide       String?
+  lamMatt             Boolean   @default(false)
+  lamMattQty          String?
+  lamMattSide         String?
+  lamVelvet           Boolean   @default(false)
+  lamVelvetQty        String?
+  lamVelvetSide       String?
+  lamSingleSide       Boolean   @default(false)
+  lamDoubleSide       Boolean   @default(false)
+  lamOther            Boolean   @default(false)
+  lamOtherType        String?
+  lamOtherQty         String?
+  lamOtherSide        String?
+
+  // Creasing/Perforation
+  cpNoOfSheets        String?
+  cpNoOfStock         String?
+  cpDate              String?
+  cpCreasing          Boolean   @default(false)
+  cpCreasingNo        String?
+  cpPerforation       Boolean   @default(false)
+  cpPerforationNo     String?
+  cpWheelPerforation  Boolean   @default(false)
+  cpWheelPerforationNo String?
+  
+  syncTimestamp       BigInt    @default(0)
+  isDeleted           Boolean   @default(false)
+  deletedAt           DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  dieCuttingNoOfSheets String?
+  dieCuttingDate      String?
+  dieCuttingRows      JobCardDieCuttingRow[]
+
+  @@index([legacyMongoId])
+  @@index([jobId])
+}
+
+model JobCardDieCuttingRow {
+  id         Int      @id @default(autoincrement())
+  jobCardId  Int
+  sheets     String?
+  halfCut    String?
+  throughCut String?
+  timing     String?
+  sortOrder  Int      @default(0)
+  jobCard    JobCard  @relation(fields: [jobCardId], references: [id], onDelete: Cascade)
+
+  @@index([jobCardId])
+}
+
+model JobEvent {
+  id                    Int                @id @default(autoincrement())
+  legacyMongoId         String?            @unique
+  queueJobId            Int?
+  legacyQueueJobMongoId String?
+  userId                Int?
+  actionType            JobEventActionType
+  details               Json?
+  timestamp             DateTime
+  user                  User?              @relation("JobEventUser", fields: [userId], references: [id])
+
+  @@index([legacyMongoId])
+  @@index([queueJobId])
+  @@index([legacyQueueJobMongoId])
+  @@index([userId])
+  @@index([actionType])
+  @@index([timestamp])
+  @@index([actionType, timestamp, userId])
+}
+
+model Job {
+  id                              Int                   @id @default(autoincrement())
+  legacyMongoId                   String?               @unique
+  jobId                           String                @unique
+  customerName                    String
+  totalItems                      Int
+  filesArchived                   Boolean               @default(false)
+  packingPreference               JobPackingPreference  @default(SINGLE)
+  packingMode                     JobPackingPreference?
+  defaultDeliveryType             JobDeliveryType       @default(COURIER)
+  contactMe                       Boolean               @default(false)
+  paymentStatus                   JobPaymentStatus      @default(UNPAID)
+  jobStatus                       JobStatus             @default(PENDING)
+  dispatchedAt                    DateTime?
+  rackLocation                    String?
+  createdById                     Int?                  // nullable — Mongo ObjectId stored in legacyCreatedByMongoId
+  legacyCreatedByMongoId          String?
+  printedById                     Int?
+  legacyPrintedByMongoId          String?
+  ppsCompletedById                Int?
+  legacyPpsCompletedByMongoId     String?
+  ppsCompletedAt                  DateTime?
+  finishingCompletedById          Int?
+  legacyFinishingCompletedByMongoId String?
+  finishingCompletedAt            DateTime?
+  adminApprovalNote               String?
+  adminApprovedAt                 DateTime?
+  paymentHandledById              Int?
+  legacyPaymentHandledByMongoId   String?
+  dispatchedById                  Int?
+  legacyDispatchedByMongoId       String?
+  packedById                      Int?
+  legacyPackedByMongoId           String?
+  customerId                      Int
+  customerPhone                   String
+  customerConfirmedAt             DateTime?
+  approvalRequested               Boolean               @default(false)
+  paymentMode                     PaymentMode?
+  syncTimestamp                   BigInt                @default(0)
+  isDeleted                       Boolean               @default(false)
+  deletedAt                       DateTime?
+  createdAt                       DateTime              @default(now())
+  updatedAt                       DateTime              @updatedAt
+  jobItems                        JobItem[]
+  jobParcels                      JobParcel[]
+  taskLogs                        JobTaskLog[]
+  packingOverride                 PackingOverride?
+  screenshots                     JobItemScreenshot[]
+  customer                        Customer              @relation(fields: [customerId], references: [id])
+  createdBy                       User?                 @relation("CreatedBy", fields: [createdById], references: [id])
+  printedBy                       User?                 @relation("PrintedBy", fields: [printedById], references: [id])
+
+  @@index([legacyMongoId])
+  @@index([jobId])
+  @@index([customerId])
+  @@index([jobStatus])
+  @@index([paymentStatus])
+  @@index([packingPreference])
+  @@index([createdById])
+  @@index([customerName])
+  @@index([createdAt])
+  @@index([jobStatus, paymentStatus])
+  @@index([jobStatus, createdAt])
+  @@index([customerId, jobStatus])
+  @@index([dispatchedAt])
+}
+
+// ── Process Types ─────────────────────────────────────
+enum ProcessType {
+  LAMINATION
+  CREASING
+  BINDING
+  CUTTING
+  DIE_CUTTING
+  CORNER_CUTTING
+  FOIL
+  FUSING
+  HOLES
+  ID_CARD
+  CUTTING2
+  POUCH_LAMINATION
+  PERFORATION
+  WHEEL_PERFORATION
+}
+
+// ── Process Variants ──────────────────────────────────
+enum ProcessVariant {
+  NONE
+  GLOSSY
+  MATTE
+  VELVET
+  SINGLE_SIDE
+  DOUBLE_SIDE
+  CENTRE_PIN
+  PERFECT
+  CASE_BINDING
+  WIRO_BINDING
+  POUCH_LAMINATION
+  SPECIAL
+}
+
+// ── Lamination Side ───────────────────────────────────
+enum LaminationSide {
+  SINGLE
+  DOUBLE
+}
+
+// ── Corner Positions ──────────────────────────────────
+enum CornerPosition {
+  TL
+  TR
+  BL
+  BR
+}
+
+// ── Workflow Status ───────────────────────────────────
+enum WorkflowStatus {
+  NONE
+  PENDING
+  IN_PROGRESS
+  COMPLETED
+}
+
+// ── Active Stage ──────────────────────────────────────
+enum ActiveStage {
+  press
+  lamination
+  foil
+  binding
+  fusing
+  holes
+  cutting
+  creasing
+  dieCutting
+  cornerCutting
+  cutting2
+  done
+}
+
+// ── Task Module ───────────────────────────────────────
+enum TaskModule {
+  press
+  post_press
+  finishing
+}
+
+// ── Parcel Status ─────────────────────────────────────
+enum ParcelStatus {
+  PENDING
+  PACKED
+  DISPATCHED
+}
+
+// ── Delivery Type ─────────────────────────────────────
+enum DeliveryType {
+  COURIER
+  WALK_IN
+}
+
+// ── Receiver Type ─────────────────────────────────────
+enum ReceiverType {
+  SELF
+  OTHER
+}
+
+// ── Sync Statuses ─────────────────────────────────────
+enum SyncFailureStatus {
+  PENDING
+  RETRYING
+  FAILED
+  COMPLETED
+}
+
+enum WriteSyncStatus {
+  SUCCESS
+  FAILED
+  RETRY_PENDING
+  SYNCED
+}
+
+enum SyncOperationType {
+  CREATE
+  UPDATE
+  DELETE
+}
+
+// ── Role Relationships ───────────────────────────────
+model Role {
+  id        Int        @id @default(autoincrement())
+  roleName  String     @unique
+  createdAt DateTime   @default(now())
+  userRoles UserRole[]
+}
+
+model UserRole {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  roleId Int
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role   Role @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, roleId])
+  @@index([userId])
+  @@index([roleId])
+}
+
+// ── Migration & Sync Tracking ─────────────────────────
+model SyncFailureQueue {
+  id            Int               @id @default(autoincrement())
+  entityType    String
+  mongoRecordId String
+  operationType SyncOperationType
+  failedTable   String
+  referenceId   String?
+  errorMessage  String?
+  errorStack    String?
+  errorMetadata Json?
+  retryCount    Int               @default(0)
+  maxRetries    Int               @default(5)
+  status        SyncFailureStatus @default(PENDING)
+  syncTimestamp BigInt
+  createdAt     DateTime          @default(now())
+  lastAttemptAt DateTime?
+
+  @@index([status])
+  @@index([entityType])
+  @@index([createdAt])
+  @@index([status, createdAt])
+}
+
+model WriteSyncLog {
+  id            Int             @id @default(autoincrement())
+  entityType    String
+  mongoId       String
+  postgresId    Int?
+  syncStatus    WriteSyncStatus
+  syncTimestamp BigInt
+  sourceHash    String?
+  createdAt     DateTime        @default(now())
+
+  @@index([entityType, mongoId])
+  @@index([syncStatus])
+}
+
+// ── Relational Job Items ────────────────
+model JobItem {
+  id               Int                   @id @default(autoincrement())
+  jobId            Int
+  itemIndex        Int
+  orderDescription String?
+  media            String?
+  type             String?
+  printType        String?
+  sizeDefault      String?               @default("Custom")
+  sizeH            String?
+  sizeW            String?
+  qty              String?               @default("1")
+  sheetSize        String?               // Selected sheet/cut size from Board Master
+  pages            String?
+  sheets           String?
+  mc               String?
+  fc               String?
+  ac               String?
+  screenshot       String?
+  printConfirmed   Boolean               @default(false)
+  pressStatus      WorkflowStatus        @default(PENDING)
+  activeStage      ActiveStage           @default(press)
+  printedById      Int?
+  pouchLamination  Boolean               @default(false)
+  idCard           Boolean               @default(false)
+  syncTimestamp    BigInt                @default(0)
+  createdAt        DateTime              @default(now())
+  updatedAt        DateTime              @updatedAt
+  job              Job                   @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  
+  // Normalized relations
+  laminationSpec    LaminationSpec?
+  bindingSpec       BindingSpec?
+  creasingSpec      CreasingSpec?
+  cuttingSpec       CuttingSpec?
+  dieCuttingSpec    DieCuttingSpec?
+  cornerCuttingSpec CornerCuttingSpec?
+  idCardSpec        IdCardSpec?
+  foilSpec          FoilSpec?
+
+  workflowSteps     JobItemWorkflowStep[]
+  parcelItems       JobParcelItem[]
+
+  @@unique([jobId, itemIndex])
+  @@index([jobId])
+  @@index([activeStage])
+  @@index([jobId, activeStage])
+  @@index([pressStatus])
+}
+
+model JobItemWorkflowStep {
+  id          Int            @id @default(autoincrement())
+  jobItemId   Int
+  stepName    ActiveStage
+  status      WorkflowStatus @default(NONE)
+  operatorId  Int?
+  startedAt   DateTime?
+  completedAt DateTime?
+  updatedAt   DateTime       @updatedAt
+  jobItem     JobItem        @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+  operator    User?          @relation(fields: [operatorId], references: [id], onDelete: SetNull)
+
+  @@unique([jobItemId, stepName])
+  @@index([jobItemId])
+}
+
+model LaminationSpec {
+  jobItemId         Int            @id
+  variant           String
+  quantity          Int            @default(0)
+  side              LaminationSide @default(SINGLE)
+  laminationProduct String?
+  jobItem           JobItem        @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model BindingSpec {
+  jobItemId Int     @id
+  variant   String
+  quantity  Int     @default(0)
+  bindingNo String?
+  jobItem   JobItem @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model CuttingSpec {
+  jobItemId Int      @id
+  variant   String
+  value     String?
+  sizes     String[] @default([])
+  jobItem   JobItem  @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model DieCuttingSpec {
+  jobItemId Int             @id
+  variant   String
+  quantity  Int             @default(0)
+  rows      DieCuttingRow[]
+  jobItem   JobItem         @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model DieCuttingRow {
+  id               Int            @id @default(autoincrement())
+  dieCuttingSpecId Int
+  sheets           Int?
+  halfCut          Int?
+  throughCut       Int?
+  timing           String?
+  sortOrder        Int            @default(0)
+  spec             DieCuttingSpec @relation(fields: [dieCuttingSpecId], references: [jobItemId], onDelete: Cascade)
+
+  @@index([dieCuttingSpecId])
+}
+
+model CornerCuttingSpec {
+  jobItemId Int              @id
+  variant   String
+  quantity  Int              @default(0)
+  corners   CornerPosition[] @default([])
+  jobItem   JobItem          @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model FoilSpec {
+  jobItemId Int     @id
+  variant   String
+  quantity  Int     @default(0)
+  jobItem   JobItem @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model IdCardSpec {
+  jobItemId Int     @id
+  fusing    Boolean @default(false)
+  holes     Boolean @default(false)
+  cutting2  Boolean @default(false)
+  qty       Int     @default(0)
+  jobItem   JobItem @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+model JobParcel {
+  id            Int             @id @default(autoincrement())
+  jobId         Int
+  parcelNo      Int
+  receiverType  ReceiverType    @default(SELF)
+  deliveryType  DeliveryType    @default(COURIER)
+  receiverName  String?
+  receiverPhone String?
+  qrCode        String?
+  status        ParcelStatus    @default(PENDING)
+  packedAt      DateTime?
+  dispatchedAt  DateTime?
+  dispatchedBy  String?         // 'ADMIN' | 'DISPATCH' — mirrors Mongo parcel.dispatchedBy
+  rack          String?
+  rackLocation  String?
+  syncTimestamp BigInt          @default(0)
+  job           Job             @relation(fields: [jobId], references: [id], onDelete: Cascade)
+  parcelItems   JobParcelItem[]
+
+  @@unique([jobId, parcelNo])
+  @@index([jobId])
+}
+
+model JobParcelItem {
+  id           Int          @id @default(autoincrement())
+  jobParcelId  Int
+  jobItemId    Int
+  itemIndex    Int          // 1-based item index — mirrors Mongo parcel.itemIndexes[]
+  status       ParcelStatus @default(PENDING)
+  dispatchedAt DateTime?
+  rackName     String?
+  parcel       JobParcel    @relation(fields: [jobParcelId], references: [id], onDelete: Cascade)
+  jobItem      JobItem      @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+
+  @@unique([jobParcelId, jobItemId])
+  @@index([jobParcelId])
+  @@index([jobItemId])
+}
+
+model JobTaskLog {
+  id          Int         @id @default(autoincrement())
+  jobId       Int
+  task        String
+  itemIndex   Int
+  startedAt   DateTime?
+  completedAt DateTime?
+  durationMs  Int?
+  staffName   String?
+  staffId     Int?
+  module      TaskModule?
+  job         Job         @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+  @@index([completedAt])
+  @@index([staffId, module, completedAt])
+}
+
+model PackingOverride {
+  id             Int       @id @default(autoincrement())
+  jobId          Int       @unique
+  overridden     Boolean   @default(false)
+  reason         String?
+  overriddenById Int?
+  overriddenAt   DateTime?
+  job            Job       @relation(fields: [jobId], references: [id], onDelete: Cascade)
+}
+
+model JobItemScreenshot {
+  id             Int     @id @default(autoincrement())
+  jobId          Int
+  screenshotPath String
+  sortOrder      Int     @default(0)
+  job            Job     @relation(fields: [jobId], references: [id], onDelete: Cascade)
+
+  @@index([jobId])
+}
+
+model CreasingSpec {
+  jobItemId  Int     @id
+  variant    String
+  quantity   Int     @default(0)
+  creasingNo String?
+  jobItem    JobItem @relation(fields: [jobItemId], references: [id], onDelete: Cascade)
+}
+
+enum ParcelReceiverType {
+  SELF
+  OTHER
+}
+
+model Parcel {
+  id            Int                @id @default(autoincrement())
+  legacyMongoId String?            @unique
+  parcelId      String             @unique
+  jobId         String
+  itemCount     Int
+  receiverType  ParcelReceiverType
+  receiverName  String
+  receiverPhone String
+  qrPayload     Json?
+  createdAt     DateTime           @default(now())
+  updatedAt     DateTime           @updatedAt
+
+  @@index([legacyMongoId])
+  @@index([parcelId])
+  @@index([jobId])
+}
+
+// ── Email Ingestion Accounts ──────────────────────────────────────────────────
+// Migrated from MongoDB `onlinejobs` collection.
+// Tracks Gmail accounts used by the email ingestion pipeline.
+model EmailAccount {
+  id        Int      @id @default(autoincrement())
+  email     String   @unique
+  isActive  Boolean  @default(true)
+  isBusy    Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([email])
+  @@index([isActive])
+}
+
+model LaminationProduct {
+  id             Int      @id @default(autoincrement())
+  productName    String   @unique
+  laminationType String   // GLOSS, MATT, VELVET, OTHER
+  type           String   // Roll size/type e.g. "12", "13"
+  count          Int
+  month          String
+  year           String
+  isAvailable    Boolean  @default(true)
+  deleted        Boolean  @default(false)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([productName])
+  @@index([laminationType])
+}
+
+// ── Board Master ──────────────────────────────────────────────────────────────
+// A board/media type (e.g. "Art 300") owns several sheet sizes/cut sizes. Used
+// by the UPS calculator in job creation to pick the printing sheet.
+model Board {
+  id            Int          @id @default(autoincrement())
+  productId     String?      // e.g. "P001"
+  originalName  String?      // e.g. "art 300 13X19"
+  name          String       @unique // media_name: e.g. "art 300"
+  masterSize    String?      // e.g. "635*910"
+  storingSize   String?      // e.g. "315*453"
+  mediaBehavior String       @default("DIRECT") // MULTI_STORAGE, DIRECT, CONVERSION
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+  sheets        BoardSheet[]
+}
+
+model BoardSheet {
+  id        Int      @id @default(autoincrement())
+  boardId   Int
+  name      String   // size: e.g. "315*453" or size name
+  width     Float    // mm
+  height    Float    // mm
+  qty       Int      @default(1) // cut quantity (from cut_sizes qty)
+  createdAt DateTime @default(now())
+  board     Board    @relation(fields: [boardId], references: [id], onDelete: Cascade)
+
+  @@index([boardId])
+}
+
+// ── Machine Master ───────────────────────────────────────────────────────────
+// A printing machine (e.g. "Konica C1060"). Each machine has its own printable
+// margin (mm per side) used by the UPS calculator when computing the printable
+// area of a sheet.
+model Machine {
+  id              Int      @id @default(autoincrement())
+  name            String   @unique       // e.g. "Konica C1060", "Xerox Versant 180"
+  printableMargin Float    @default(5)   // mm per side for UPS calculator
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+}
+

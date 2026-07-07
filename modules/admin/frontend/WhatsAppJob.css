@@ -1,0 +1,83 @@
+/* ============================================================
+   WhatsAppJob.css — Input size overrides scoped to .whatsapp-intake
+   Overrides the compact CreateJob.css defaults for this standalone form.
+   ============================================================ */
+
+/* ── Labels ─────────────────────────────────────────────── */
+.whatsapp-intake .form-group label {
+    font-size: 11px !important;
+    font-weight: 700 !important;
+    color: #475569 !important;
+    margin-bottom: 0.35rem !important;
+    letter-spacing: 0.06em !important;
+    text-transform: uppercase !important;
+}
+
+/* ── Text inputs & selects ───────────────────────────────── */
+.whatsapp-intake .form-input {
+    height: 44px !important;
+    font-size: 14px !important;
+    font-weight: 500 !important;
+    padding: 0 0.875rem !important;
+    border-radius: 8px !important;
+    border: 1.5px solid #e2e8f0 !important;
+    background: #ffffff !important;
+    color: #1e293b !important;
+    transition: border-color 0.2s ease, box-shadow 0.2s ease !important;
+}
+
+.whatsapp-intake .form-input::placeholder {
+    color: #94a3b8 !important;
+    font-size: 13px !important;
+}
+
+.whatsapp-intake .form-input:focus {
+    border-color: #2563eb !important;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.12) !important;
+    outline: none !important;
+}
+
+/* ── Textarea override (rows prop sets height naturally) ─── */
+.whatsapp-intake textarea.form-input {
+    height: auto !important;
+    padding: 0.75rem 0.875rem !important;
+    resize: vertical !important;
+    line-height: 1.6 !important;
+    min-height: 100px !important;
+}
+
+/* ── Select specific fix (remove odd height clipping) ────── */
+.whatsapp-intake select.form-input {
+    appearance: auto !important;
+    cursor: pointer !important;
+}
+
+/* ── Form group spacing ──────────────────────────────────── */
+.whatsapp-intake .form-group {
+    gap: 0 !important;
+    margin-bottom: 0 !important;
+}
+
+/* ── space-y-6 emulation (since Tailwind may not be purged) */
+.whatsapp-intake .space-y-6>*+* {
+    margin-top: 1.25rem !important;
+}
+
+/* ── Customer dropdown item text ─────────────────────────── */
+.whatsapp-intake .customer-name {
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+
+.whatsapp-intake .customer-phone {
+    font-size: 12px !important;
+}
+
+.whatsapp-intake .dropdown-item {
+    padding: 0.5rem 0.75rem !important;
+}
+
+/* ── Submit button ───────────────────────────────────────── */
+.whatsapp-intake .submit-section {
+    margin-top: 2rem !important;
+}

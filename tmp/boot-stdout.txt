@@ -1,0 +1,16 @@
+
+🚀 Server is running!
+🏠 Local:   http://localhost:28
+🌐 Network: http://192.168.1.42:28
+🌍 Public:  http://115.97.253.208:28
+
+Ready to accept connections on all interfaces (0.0.0.0)
+
+MongoDB connected successfully
+[FileWatcher] Watching paths: [ 'E:\\InboundJobs', 'E:\\WhatsappJobs', 'E:\\Despatch walkins' ]
+[FileWatcher] Starting startup scan...
+[FileWatcher] Startup scan complete. Ingested 0 new jobs.
+[Worker] Starting Ingestion Worker...
+[StatsService] Recalculating all metrics...
+[Server] All subsystems started.
+[StatsService] Recalculation complete.

@@ -1,5 +1,5 @@
 /**
- * File Watcher — Bridges n8n email output to the queue system
+ * File Watcher â€” Bridges n8n email output to the queue system
  * 
  * Watches the InboundJobs folder for new email subfolders.
  * Structure: InboundJobs / sender@email.com / timestamp_subject / files
@@ -8,6 +8,8 @@
 const chokidar = require('chokidar')
 const path = require('path')
 const fs = require('fs')
+const { ingestionTaskRepo } = require('../repositories')
+const { queueJobRepo } = require('../repositories')
 
 // Track already-processed folders to avoid duplicates
 const processedFolders = new Set()
@@ -16,7 +18,7 @@ let ioInstance = null
 /**
  * Parse the sender email from the parent folder name.
  * Strips the " (N)" suffix from duplicates.
- * e.g. "msivasivam4@gmail.com (2)" → "msivasivam4@gmail.com"
+ * e.g. "msivasivam4@gmail.com (2)" â†’ "msivasivam4@gmail.com"
  */
 function parseSenderEmail(folderName) {
   return folderName.replace(/\s*\(\d+\)$/, '').trim()
@@ -24,7 +26,7 @@ function parseSenderEmail(folderName) {
 
 /**
  * Parse the email subject and timestamp from subfolder name.
- * e.g. "2026-03-09T14-25-08_Print_file" → { timestamp: "2026-03-09T14:25:08", subject: "Print file" }
+ * e.g. "2026-03-09T14-25-08_Print_file" â†’ { timestamp: "2026-03-09T14:25:08", subject: "Print file" }
  */
 function parseSubfolderName(folderName) {
   // Match: YYYY-MM-DDTHH-MM-SS or YYYY-MM-DDTHH-MM-SS-mmm followed by _subject
@@ -51,8 +53,6 @@ async function processEmailFolder(emailFolderPath) {
   if (processedFolders.has(normalizedPath)) return null
 
   try {
-    const IngestionTask = require('../models/IngestionTask')
-    const QueueJob = require('../models/QueueJob')
     const eventBus = require('./eventBus')
 
     // Verify it's a directory
@@ -91,7 +91,7 @@ async function processEmailFolder(emailFolderPath) {
     const parentName = path.basename(path.dirname(normalizedPath));
     const relativePath = `${parentName}/${folderName}`.replace(/\\/g, '/');
 
-    const existingJob = await QueueJob.findOne({
+    const existingJob = await queueJobRepo.findOne({
       $or: [
         { folderPath: normalizedPath },
         { relativeFolderPath: relativePath }
@@ -103,7 +103,7 @@ async function processEmailFolder(emailFolderPath) {
     }
 
     // Anti-Duplication check for in-flight tasks
-    const existingTask = await IngestionTask.findOne({ 
+    const existingTask = await ingestionTaskRepo.findOne({ 
       folderPath: normalizedPath,
       status: { $in: ['PENDING', 'PROCESSING'] }
     })
@@ -112,14 +112,14 @@ async function processEmailFolder(emailFolderPath) {
     }
 
     // Create or RESET IngestionTask to PENDING
-    const task = await IngestionTask.findOneAndUpdate(
+    const task = await ingestionTaskRepo.findOneAndUpdate(
       { folderPath: normalizedPath },
       { $set: { folderPath: normalizedPath, status: 'PENDING', error: null, attempts: 0, createdAt: new Date() } },
       { upsert: true, new: true }
     )
 
     processedFolders.add(normalizedPath)
-    console.log(`\n✅ [FileWatcher] Ingested job: "${path.basename(normalizedPath)}"`)
+    console.log(`\nâœ… [FileWatcher] Ingested job: "${path.basename(normalizedPath)}"`)
     
     // Notify worker
     eventBus.emit('task:new', task)
@@ -174,7 +174,7 @@ function startWatcher(io) {
   if (process.env.WALKIN_UPLOAD_PATH) rootsToWatch.push(process.env.WALKIN_UPLOAD_PATH)
 
   if (rootsToWatch.length === 0) {
-    console.warn('[FileWatcher] No watch paths set — file watcher disabled')
+    console.warn('[FileWatcher] No watch paths set â€” file watcher disabled')
     return null
   }
 
@@ -210,3 +210,4 @@ function startWatcher(io) {
 }
 
 module.exports = { startWatcher, processEmailFolder, parseSenderEmail, parseSubfolderName, processedFolders }
+

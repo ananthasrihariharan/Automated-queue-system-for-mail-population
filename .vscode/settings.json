@@ -1,0 +1,11 @@
+{
+  "typescript.tsserver.watchOptions": {},
+  "files.exclude": {},
+  "typescript.preferences.includePackageJsonAutoImports": "off",
+  "search.exclude": {
+    "**/workflow-modules/**/*.tsx": true,
+    "**/workflow-modules/**/*.ts": true
+  },
+  "typescript.tsdk": "printing-press-frontend/node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true
+}
